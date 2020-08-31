@@ -18,8 +18,8 @@ KIWID_ARGS="-bg"
 
 [ -x $KIWID_EXEC ] || exit 1
 
-RPI=$(echo true)
-BBAI=$(cat /dev/null)
+RPI=$(cat /proc/device-tree/model | grep -q -s "Raspberry Pi 3" && echo true)
+BBAI=$(cat /proc/device-tree/model | grep -q -s "BeagleBone AI" && echo true)
 if [ "x${BBAI}" = "xtrue" ] ; then
 	echo "BBAI USE_SPIDEV"
 	DEBIAN=9
@@ -91,19 +91,21 @@ case "$1" in
     elif [ "x${RPI}" = "xtrue" ] ; then
         modprobe i2c-dev
         modprobe at24
+	cat "1200000" > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
         # Original version of kiwisdr
         echo "24c32 0x54" > /sys/class/i2c-adapter/i2c-1/new_device
         # RaspSDR version
         echo "24c32 0x50" > /sys/class/i2c-adapter/i2c-1/new_device
         sleep 1
-        if test "/sys/bus/i2c/devices/1-0050/eeprom"; then
-            echo "RaspSDR Detected"
-        else
+        if test -e "/sys/bus/i2c/devices/1-0054/eeprom"; then
             echo "KiwiSDR Detected"
+	else
+            echo "RaspSDR Detected"
+	    KIWID_ARGS="${KIWID_ARGS} -raspsdr"
+	    # start fan
+	    gpio mode 26 pwm
+	    gpio pwm 26 1024
 	fi
-	# start fan
-	gpio mode 26 pwm
-	gpio pwm 26 500
     else
         if test \( ! -f /lib/firmware/${CAPE}.dtbo \) -o \( /lib/firmware/${CAPE}.dts -nt /lib/firmware/${CAPE}.dtbo \) ; then
             echo compile ${DEV} device tree;

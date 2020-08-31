@@ -530,7 +530,7 @@ function time_display_setup(ext_name_or_id)
 		) +
 		w3_div('id-time-display-logo-inner',
 			w3_div('id-time-display-logo-text', 'Powered by'),
-			'<a href="http://openwebrx.org/" target="_blank"><img id="id-time-display-logo" src="gfx/openwebrx-top-logo.png" /></a>'
+			'<a href="https://github.com/ha7ilm/openwebrx" target="_blank"><img id="id-time-display-logo" src="gfx/openwebrx-top-logo.png" /></a>'
 		);
 
 	time_display(time_display_current);
@@ -1149,6 +1149,12 @@ function kiwi_24hr_ip_limit(mins, ip)
 	kiwi_show_error_ask_exemption(s);
 }
 
+function kiwi_password_entry_timeout()
+{
+   var s = 'Timeout. Please reload page to continue.';
+	kiwi_show_msg(s);
+}
+
 function kiwi_up(up)
 {
 	if (!seriousError) {
@@ -1342,7 +1348,7 @@ function config_cb(rx_chans, gps_chans, serno, pub, port_ext, pvt, port_int, nm,
 	}
 }
 
-function update_cb(pending, in_progress, rx_chans, gps_chans, vmaj, vmin, pmaj, pmin, build_date, build_time)
+function update_cb(fs_full, pending, in_progress, rx_chans, gps_chans, vmaj, vmin, pmaj, pmin, build_date, build_time)
 {
 	config_str_update(rx_chans, gps_chans, vmaj, vmin);
 
@@ -1351,6 +1357,9 @@ function update_cb(pending, in_progress, rx_chans, gps_chans, vmaj, vmin, pmaj, 
 	if (msg_update) {
 		var s;
 		s = 'Installed version: v'+ vmaj +'.'+ vmin +', built '+ build_date +' '+ build_time;
+		if (fs_full) {
+			s += '<br>Cannot build, filesystem is FULL!';
+		} else
 		if (in_progress) {
 			s += '<br>Update to version v'+ + pmaj +'.'+ pmin +' in progress';
 		} else
@@ -1660,7 +1669,7 @@ function kiwi_msg(param, ws)
 		case "update_cb":
 			//console.log('update_cb='+ param[1]);
 			var o = JSON.parse(param[1]);
-			update_cb(o.p, o.i, o.r, o.g, o.v1, o.v2, o.p1, o.p2,
+			update_cb(o.f, o.p, o.i, o.r, o.g, o.v1, o.v2, o.p1, o.p2,
 				decodeURIComponent(o.d), decodeURIComponent(o.t));
 			break;					
 
@@ -1747,6 +1756,10 @@ function kiwi_msg(param, ws)
 		case "ip_limit":
 		   var p = decodeURIComponent(param[1]).split(',');
 			kiwi_24hr_ip_limit(parseInt(p[0]), p[1]);
+			break;
+
+		case "password_timeout":
+			kiwi_password_entry_timeout();
 			break;
 
 		case "comp_ctr":

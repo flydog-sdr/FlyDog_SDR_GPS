@@ -124,9 +124,9 @@ int S_meter_cal;
 double ui_srate, freq_offset;
 int sdr_hu_lo_kHz, sdr_hu_hi_kHz;
 
-#define DC_OFFSET_DEFAULT -0.02
-#define DC_OFFSET_DEFAULT_PREV 0.05
-#define DC_OFFSET_DEFAULT_20kHz -0.034
+#define DC_OFFSET_DEFAULT -0.02F
+#define DC_OFFSET_DEFAULT_PREV 0.05F
+#define DC_OFFSET_DEFAULT_20kHz -0.034F
 TYPEREAL DC_offset_I, DC_offset_Q;
 
 #define WATERFALL_CALIBRATION_DEFAULT -13
@@ -547,7 +547,7 @@ void webserver_collect_print_stats(int print)
 		
 		// SND and/or WF connections that have failed to follow API
 		#define NO_API_TIME 20
-		if (!c->snd_cmd_recv_ok && !c->wf_cmd_recv_ok && (now - c->arrival) >= NO_API_TIME) {
+		if (c->auth && (!c->snd_cmd_recv_ok && !c->wf_cmd_recv_ok && (now - c->arrival) >= NO_API_TIME)) {
             clprintf(c, "\"%s\"%s%s%s%s incomplete connection kicked\n",
                 c->user? c->user : "(no identity)", c->isUserIP? "":" ", c->isUserIP? "":c->remote_ip,
                 c->geo? " ":"", c->geo? c->geo:"");

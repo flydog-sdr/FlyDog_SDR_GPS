@@ -76,6 +76,8 @@ bool create_eeprom, need_hardware, test_flag, sdr_hu_debug, have_ant_switch_ext,
 char **main_argv;
 char *fpga_file;
 
+bool raspsdr = false;
+
 int main(int argc, char *argv[])
 {
 	int i;
@@ -203,6 +205,9 @@ int main(int argc, char *argv[])
 		if (strcmp(argv[i], "-p1")==0) { i++; p1 = strtol(argv[i], 0, 0); }
 		if (strcmp(argv[i], "-p2")==0) { i++; p2 = strtol(argv[i], 0, 0); }
 
+#ifdef PLATFORM_raspberrypi
+		if (strcmp(argv[i], "-raspsdr")==0) raspsdr = true;
+#endif
 		i++;
 		while (i<argc && ((argv[i][0] != '+') && (argv[i][0] != '-'))) {
 			i++;
@@ -299,7 +304,9 @@ int main(int argc, char *argv[])
         lprintf("firmware: GPS_ONLY\n");
     } else
         panic("fw_sel");
-    
+
+    if (raspsdr) rx_decim *= 2;
+
     asprintf(&fpga_file, "rx%d.wf%d", rx_chans, wf_chans);
     
     bool no_wf = cfg_bool("no_wf", &err, CFG_OPTIONAL);

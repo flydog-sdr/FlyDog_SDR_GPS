@@ -30,7 +30,7 @@ fi
 
 RPI=0
 #echo "not RPI = ${RPI}"
-BBAI=$(cat /proc/device-tree/model | grep -q -s "BeagleBone AI"; echo $?)
+BBAI=1
 #echo "not BBAI = ${BBAI}"
 
 if [ "x${BBAI}" = "x0" ] ; then

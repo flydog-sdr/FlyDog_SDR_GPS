@@ -153,8 +153,6 @@ typedef struct {
 extern spi_t spi;
 
 #define DMA_ALIGNMENT __attribute__ ((aligned(256)))
-#define	PAD_FRONT u4_t pad_front[256/4]
-#define	PAD_BACK u4_t pad_back[256/4]
 
 #ifdef SPI_8
 	#define SPI_T		char
@@ -191,18 +189,15 @@ typedef struct {
 } spi_mosi_data_t;
 
 typedef struct {
-	PAD_FRONT;
 	union {
 		SPI_T msg[1];
 		u1_t bytes[SPIBUF_B];		// because tx/rx DMA sizes equal
         u2_t words[SPIBUF_W];
 		spi_mosi_data_t data;
 	};
-	PAD_BACK;
 } DMA_ALIGNMENT SPI_MOSI;
 
 typedef struct {
-	PAD_FRONT;
 #ifdef SPI_8
     u1_t _align_;
 #endif
@@ -217,7 +212,6 @@ typedef struct {
 			};
 		} __attribute__((packed));
 	};
-	PAD_BACK;
 	u2_t len_xfers, len_bytes;
 	uint16_t cmd;
 	u2_t tid;
