@@ -12,9 +12,6 @@ RUN git clone https://github.com/bclswl0827/FlyDog_SDR_GPS /root/Beagle_SDR_GPS 
   && make \
   && make install
 
-RUN apt-get remove --purge -y \
-  && apt-get --purge -y autoremove
-
 ADD entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["sh", "-c", "/entrypoint.sh"]
