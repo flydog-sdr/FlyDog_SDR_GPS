@@ -149,24 +149,8 @@ void update_vars_from_config()
     inactivity_timeout_mins = cfg_default_int("inactivity_timeout_mins", 0, &update_cfg);
     ip_limit_mins = cfg_default_int("ip_limit_mins", 0, &update_cfg);
 
-    int srate_idx = cfg_default_int("max_freq", -1, &update_cfg);
-    switch(srate_idx) {
-        case 0:
-            ui_srate = 30*MHz;
-            break;
-        case 1:
-            ui_srate = 32*MHz;
-            break;
-        case 2:
-            ui_srate = 54*MHz;
-            break;
-        case 3:
-            ui_srate = 62*MHz;
-            break;
-        default:
-            ui_srate = raspsdr ? 54*MHz : 30*MHz;
-            break;
-    }
+    int srate_idx = cfg_default_int("max_freq", 0, &update_cfg);
+	ui_srate = srate_idx? 32*MHz : 30*MHz;
 
     // force DC offsets to the default value if not configured
     // also if set to the previous default value
