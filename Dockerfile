@@ -15,4 +15,6 @@ RUN git clone https://github.com/bclswl0827/FlyDog_SDR_GPS /root/Beagle_SDR_GPS 
 RUN apt-get remove --purge -y git make rsync systemd \
   && apt-get --purge -y autoremove
 
-CMD [ "/usr/local/bin/kiwid", "-debian", "10", "-use_spidev", "1", "-bg" ]
+ADD entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["sh", "-c", "/entrypoint.sh"]
