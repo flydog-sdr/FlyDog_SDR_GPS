@@ -67,4 +67,4 @@ cat << EOF > /root/kiwi.config/admin.json
 }
 EOF
 
-/usr/local/bin/kiwid -debian 10 -use_spidev 1 -bg
+/usr/local/bin/kiwid -debian 10 -use_spidev 1 -bg -raspsdr
