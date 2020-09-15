@@ -2630,18 +2630,18 @@ function admin_draw(sdr_mode)
       w3_nav(admin_colors[ci++], 'Connect', 'connect', 'admin_nav');
 	if (sdr_mode)
 	   s +=
-         //w3_nav(admin_colors[ci++], 'Channels', 'channels', 'admin_nav') +
+         w3_nav(admin_colors[ci++], 'Channels', 'channels', 'admin_nav') +
          w3_nav(admin_colors[ci++], 'Config', 'config', 'admin_nav') +
          w3_nav(admin_colors[ci++], 'Webpage', 'webpage', 'admin_nav') +
          w3_nav(admin_colors[ci++], 'Public', 'sdr_hu', 'admin_nav') +
          w3_nav(admin_colors[ci++], 'DX', 'dx', 'admin_nav');
    s += 
-      w3_nav(admin_colors[ci++], 'Update', 'update', 'admin_nav') +
-      w3_nav(admin_colors[ci++], 'Backup', 'backup', 'admin_nav') +
+      // w3_nav(admin_colors[ci++], 'Update', 'update', 'admin_nav') +
+      // w3_nav(admin_colors[ci++], 'Backup', 'backup', 'admin_nav') +
       w3_nav(admin_colors[ci++], 'Network', 'network', 'admin_nav') +
       (sdr_mode? w3_nav(admin_colors[ci++], 'GPS', 'gps', 'admin_nav') : '') +
       w3_nav(admin_colors[ci++], 'Log', 'log', 'admin_nav') +
-      w3_nav(admin_colors[ci++], 'Console', 'console', 'admin_nav') +
+      // w3_nav(admin_colors[ci++], 'Console', 'console', 'admin_nav') +
       (sdr_mode? w3_nav(admin_colors[ci++], 'Extensions', 'extensions', 'admin_nav') : '') +
       w3_nav(admin_colors[ci++], 'Security', 'security', 'admin_nav');
 
