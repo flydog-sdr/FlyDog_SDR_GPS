@@ -2630,7 +2630,7 @@ function admin_draw(sdr_mode)
       w3_nav(admin_colors[ci++], 'Connect', 'connect', 'admin_nav');
 	if (sdr_mode)
 	   s +=
-         w3_nav(admin_colors[ci++], 'Channels', 'channels', 'admin_nav') +
+         // w3_nav(admin_colors[ci++], 'Channels', 'channels', 'admin_nav') +
          w3_nav(admin_colors[ci++], 'Config', 'config', 'admin_nav') +
          w3_nav(admin_colors[ci++], 'Webpage', 'webpage', 'admin_nav') +
          w3_nav(admin_colors[ci++], 'Public', 'sdr_hu', 'admin_nav') +

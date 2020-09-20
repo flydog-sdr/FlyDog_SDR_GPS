@@ -47,10 +47,10 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
         HAS_PROC = $(shell test -d $(KIWI_XC_REMOTE_FS)/proc/device-tree && echo true)
         ifeq ($(HAS_PROC),true)
             BBAI = $(shell cat $(KIWI_XC_REMOTE_FS)/proc/device-tree/model | grep -q -s "BeagleBone AI" && echo true)
-            RPI = $(shell echo true)
+            RPI = $(shell cat $(KIWI_XC_REMOTE_FS)/proc/device-tree/model | grep -q -s "Raspberry Pi 3" && echo true)
         else
             BBAI = $(shell cat $(KIWI_XC_REMOTE_FS)/etc/debian_version | grep -q -s "9\." && echo true)
-            RPI = $(shell echo true)
+            RPI = $(shell cat $(KIWI_XC_REMOTE_FS)/etc/os-release | grep -q -s "raspbian" && echo true)
         endif
         DEBIAN_7 = $(shell cat $(KIWI_XC_REMOTE_FS)/etc/debian_version | grep -q -s "7\." && echo true)
         CC = clang

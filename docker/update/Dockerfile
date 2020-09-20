@@ -1,4 +1,4 @@
-FROM docker:stable
+FROM alpine:3.5
 
 LABEL maintainer "Yuki Kikuchi <bclswl0827@yahoo.co.jp>"
 
