@@ -8,7 +8,7 @@ ADD update.sh /update.sh
 RUN sed -i "s/deb.debian.org/mirrors.bfsu.edu.cn/g" /etc/apt/sources.list \
   && sed -i "s/security.debian.org/mirrors.bfsu.edu.cn/g" /etc/apt/sources.list \
   && apt-get update \
-  && apt-get install -y cron curl \
+  && apt-get install -y cron curl jq \
   && chmod +x /update.sh \
   && echo "0 4 * * * /update.sh" | crontab -
 
