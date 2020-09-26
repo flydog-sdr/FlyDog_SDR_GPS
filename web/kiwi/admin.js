@@ -402,7 +402,7 @@ function connect_html()
 			'<header class="w3-container w3-yellow"><h5>' +
 			'If you are not able to make an incoming connection from the Internet to your Kiwi because ' +
 			'of problems <br> with your router or Internet Service Provider (ISP) then please consider using the KiwiSDR ' +
-			'<a href="http://proxy.kiwisdr.com" target="_blank">reverse proxy service</a>.' +
+			'<a href="http://p.sdrotg.com" target="_blank">reverse proxy service</a>.' +
 			'</h5></header>'
 		) +
 		
@@ -515,13 +515,13 @@ function connect_html()
          w3_div('w3-container w3-valign',
             '<header class="w3-container w3-yellow"><h6>' +
             'Please read these instructions before use: ' +
-            '<a href="http://proxy.kiwisdr.com" target="_blank">reverse proxy service</a>' +
+            '<a href="http://p.sdrotg.com" target="_blank">reverse proxy service</a>' +
             '</h6></header>'
          ),
 
 			w3_col_percent('w3-text-teal/w3-container',
 			   w3_div('w3-text-teal w3-bold', 'Reverse proxy configuration'), 50,
-				w3_div('id-proxy-hdr w3-text-teal w3-bold w3-center w3-light-grey', 'Proxy information for proxy.kiwisdr.com'), 50
+				w3_div('id-proxy-hdr w3-text-teal w3-bold w3-center w3-light-grey', 'Proxy information for p.sdrotg.com'), 50
 			),
 			
 			w3_col_percent('w3-text-teal/w3-container',
@@ -1150,7 +1150,7 @@ function network_html()
             w3_input_get('id-proxy-server', 'Proxy server hostname', 'adm.proxy_server', 'network_proxy_server_cb'),
             w3_div('w3-text-black',
                'Change <b>only</b> if you have implemented a private proxy server. <br>' +
-               'Set to "proxy.kiwisdr.com" for the default proxy service.'
+               'Set to "p.sdrotg.com" for the default proxy service.'
             )
         ),
         w3_div()
@@ -1170,7 +1170,7 @@ function network_proxy_server_cb(path, val)
 {
    val = val.trim();
    if (val == '') {
-      val = 'proxy.kiwisdr.com';
+      val = 'p.sdrotg.com';
       w3_set_value('id-proxy-server', val);
    }
 	w3_string_set_cfg_cb(path, val);
