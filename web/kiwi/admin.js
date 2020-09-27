@@ -2641,7 +2641,7 @@ function admin_draw(sdr_mode)
       w3_nav(admin_colors[ci++], 'Network', 'network', 'admin_nav') +
       (sdr_mode? w3_nav(admin_colors[ci++], 'GPS', 'gps', 'admin_nav') : '') +
       w3_nav(admin_colors[ci++], 'Log', 'log', 'admin_nav') +
-      // w3_nav(admin_colors[ci++], 'Console', 'console', 'admin_nav') +
+      w3_nav(admin_colors[ci++], 'Console', 'console', 'admin_nav') +
       (sdr_mode? w3_nav(admin_colors[ci++], 'Extensions', 'extensions', 'admin_nav') : '') +
       w3_nav(admin_colors[ci++], 'Security', 'security', 'admin_nav');
 
