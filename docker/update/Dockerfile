@@ -2,6 +2,7 @@
 
 FROM debian:buster-slim
 LABEL maintainer "Yuki Kikuchi <bclswl0827@yahoo.co.jp>"
+ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Tokyo
 
 RUN sed -i "s/deb.debian.org/mirrors.bfsu.edu.cn/g" /etc/apt/sources.list \

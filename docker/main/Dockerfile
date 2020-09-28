@@ -13,6 +13,4 @@ RUN cd /root/Beagle_SDR_GPS \
   && make \
   && make install
 
-ADD entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["sh", "-c", "/entrypoint.sh"]
+CMD ["/usr/local/bin/kiwid", "-debian", "10", "-use_spidev", "1", "-bg", "-raspsdr"]
