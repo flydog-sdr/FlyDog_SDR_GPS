@@ -11,6 +11,7 @@ RUN echo "1.0.0.1 p.sdrotg.com" >> /etc/hosts \
 
 RUN cd /root/Beagle_SDR_GPS \
   && make \
-  && make install
+  && make install \
+  && rm -rf /root/Beagle_SDR_GPS/.git*
 
 CMD ["/usr/local/bin/kiwid", "-debian", "10", "-use_spidev", "1", "-bg", "-raspsdr"]
