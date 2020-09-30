@@ -948,7 +948,7 @@ else
 	install -D -o root -g root RaspSDR.rx14.wf0.bit /usr/local/bin/RaspSDR.rx14.wf0.bit
 #
 	install -o root -g root unix_env/kiwid /etc/init.d
-	install -o root -g root -m 0644 unix_env/kiwid.service /etc/systemd/system
+	#install -o root -g root -m 0644 unix_env/kiwid.service /etc/systemd/system
 ifneq ($(RPI), true)
 	install -D -o root -g root -m 0644 unix_env/$(CAPE).dts /lib/firmware/$(CAPE).dts
 	install -D -o root -g root -m 0644 unix_env/$(SPI).dts /lib/firmware/$(SPI).dts
@@ -1013,7 +1013,7 @@ ifneq ($(ETC_HOSTS_HAS_KIWI),true)
 	@echo '127.0.0.1       kiwisdr' >>/etc/hosts
 endif
 
-	systemctl enable kiwid.service
+	#systemctl status kiwid.service
 	@echo $(C_CTR_DONE) >$(COMP_CTR)
 
 # remove public keys leftover from development
