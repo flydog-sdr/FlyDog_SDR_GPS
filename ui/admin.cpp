@@ -1133,7 +1133,7 @@ void c2s_admin(void *param)
 			        if (no_console == false && conn->isLocal) {
 			            CreateTask(console, conn, ADMIN_PRIORITY);
 			        } else
-			        (no_console) {
+			        if (no_console) {
                         send_msg_encoded(conn, "ADM", "console_c2w", "CONSOLE: disabled by kiwi.config/opt.no_console\n");
 			        } else {
                         send_msg_encoded(conn, "ADM", "console_c2w", "CONSOLE: only available to local admin connections\n");
