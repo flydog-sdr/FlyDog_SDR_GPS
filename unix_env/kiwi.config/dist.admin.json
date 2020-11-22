@@ -2,7 +2,7 @@
 	"cfg": "pwd",
 	"user_password": "",
 	"user_auto_login": true,
-	"admin_password": "flydog",
+	"admin_password": "flydog-sdr",
 	"admin_auto_login": true,
 	"port": 8073,
 	"enable_gps": true,
