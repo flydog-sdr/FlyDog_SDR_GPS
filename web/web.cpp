@@ -47,7 +47,7 @@ Boston, MA  02110-1301, USA.
 // Once with EDATA_DEVEL defined when compiled into the build directory during development 
 
 user_iface_t user_iface[] = {
-	{ "openwebrx", 1 },
+	{ "openwebrx" },
 	{0}
 };
 
@@ -682,7 +682,7 @@ int web_request(struct mg_connection *mc, enum mg_event evt) {
         o_uri = (char *) "index.html";
 
         // Kiwi URL redirection
-        if (rx_count_server_conns(INCLUDE_INTERNAL) == rx_chans || down) {
+        if (rx_count_server_conns(INCLUDE_INTERNAL) == rx_chans || down || update_in_progress || backup_in_progress) {
             char *url_redirect = (char *) admcfg_string("url_redirect", NULL, CFG_REQUIRED);
             if (url_redirect != NULL && *url_redirect != '\0') {
             

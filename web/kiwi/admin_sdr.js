@@ -5,6 +5,9 @@
 //		NTP status?
 
 
+var admin_sdr = {
+};
+
 ////////////////////////////////
 // config
 ////////////////////////////////
@@ -27,6 +30,8 @@ function config_html()
 	kiwi_get_init_settings();		// make sure defaults exist
 	
 	var init_mode = ext_get_cfg_param('init.mode', 0);
+	var init_colormap = ext_get_cfg_param('init.colormap', 0);
+	var init_aperture = ext_get_cfg_param('init.aperture', 1);
 	var init_AM_BCB_chan = ext_get_cfg_param('init.AM_BCB_chan', 0);
 	var init_ITU_region = ext_get_cfg_param('init.ITU_region', 0);
 	var max_freq = ext_get_cfg_param('max_freq', 0);
@@ -34,32 +39,39 @@ function config_html()
 	
 	var s1 =
 		'<hr>' +
-		w3_third('w3-margin-bottom w3-text-teal w3-restart', 'w3-container',
-			w3_input_get('', 'Initial frequency (kHz)', 'init.freq', 'admin_float_cb'),
-			w3_div('w3-center',
-				w3_select('', 'Initial mode', '', 'init.mode', init_mode, kiwi.modes_u, 'admin_select_cb')
+		w3_text('w3-margin-B-8 w3-text-teal w3-bold', 'Initial values for:') +
+		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
+			w3_input_get('', 'Frequency (kHz)', 'init.freq', 'admin_float_cb'),
+			w3_inline('/w3-halign-space-around/w3-center',
+				w3_select('', 'Mode', '', 'init.mode', init_mode, kiwi.modes_u, 'admin_select_cb'),
+				w3_select('', 'Colormap', '', 'init.colormap', init_colormap, kiwi.cmap_s, 'admin_select_cb'),
+				w3_select('', 'Aperture', '', 'init.aperture', init_aperture, kiwi.aper_s, 'admin_select_cb')
 			),
-			w3_input_get('', 'Initial CW offset (Hz)', 'init.cw_offset', 'admin_int_cb')
+			w3_input_get('', 'CW offset (Hz)', 'init.cw_offset', 'admin_int_cb')
 		) +
 
-		w3_third('w3-margin-bottom w3-text-teal w3-restart', 'w3-container',
-			w3_input_get('', 'Initial waterfall min (dBFS, fully zoomed-out)', 'init.min_dB', 'admin_int_cb'),
-			w3_input_get('', 'Initial waterfall max (dBFS)', 'init.max_dB', 'admin_int_cb'),
-			w3_input_get('', 'Initial zoom (0-13)', 'init.zoom', 'admin_int_cb')
+		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
+			w3_input_get('', 'Waterfall min (dBFS, fully zoomed-out)', 'init.min_dB', 'admin_int_cb'),
+			w3_input_get('', 'Waterfall max (dBFS)', 'init.max_dB', 'admin_int_cb'),
+			w3_input_get('', 'Zoom (0-13)', 'init.zoom', 'admin_int_cb')
 		);
 
    var s2 =
+		'<hr>' +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
 			w3_div('w3-restart',
 				w3_input_get('', 'Frequency scale offset (kHz)', 'freq_offset', 'admin_int_cb'),
 				w3_div('w3-text-black',
-					'Adds offset to frequency scale. <br> Useful when using a transverter, e.g. set to <br>' +
+					'Adds offset to frequency scale. <br> Useful when using a downconverter, e.g. set to <br>' +
 					'116000 kHz when 144-148 maps to 28-32 MHz.'
 				)
 			),
 			w3_divs('w3-restart/w3-center w3-tspace-8',
 				w3_select('', 'Max receiver frequency', '', 'max_freq', max_freq, max_freq_i, 'admin_select_cb'),
-				w3_div('w3-text-black')
+				w3_div('w3-text-black',
+				   '32 MHz necessary for some downconverters. But note <br>' +
+				   'there will be more spurs in the 30-32 MHz range.'
+				)
 			),
 			w3_divs('w3-restart/w3-center w3-tspace-8',
 				w3_select_get_param('', 'SPI clock', '', 'SPI_clock', SPI_clock_i, 'admin_select_cb', 0),
@@ -70,7 +82,12 @@ function config_html()
 		) +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
 			w3_input_get('', 'S-meter calibration (dB)', 'S_meter_cal', 'admin_int_cb'),
-         w3_slider('id-S_meter_OV_counts//', 'S-meter OV', 'cfg.S_meter_OV_counts', cfg.S_meter_OV_counts, 0, 15, 1, 'config_OV_counts_cb'),
+			w3_divs('/w3-center',
+            w3_slider('id-S_meter_OV_counts//', 'S-meter OV', 'cfg.S_meter_OV_counts', cfg.S_meter_OV_counts, 0, 15, 1, 'config_OV_counts_cb'),
+            w3_text('w3-text-black',
+               'Increase if S-meter OV is flashing excessively.'
+            )
+         ),
 			w3_input_get('', 'Waterfall calibration (dB)', 'waterfall_cal', 'admin_int_cb')
 		) +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
@@ -691,8 +708,17 @@ function kiwisdr_com_register_cb(path, idx)
    //console.log('kiwisdr_com_register_cb idx='+ idx);
    
    var text, color;
-   if (idx == w3_SWITCH_YES_IDX && cfg.server_url == '') {
-      text = 'Error, you must first setup a valid Kiwi connection URL on the admin "connect" tab';
+   var no_url = (cfg.server_url == '');
+   var no_passwordless_channels = (adm.user_password != '' && cfg.chan_no_pwd == 0);
+   //console.log('kiwisdr_com_register_cb has_u_pwd='+ (adm.user_password != '') +' chan_no_pwd='+ cfg.chan_no_pwd +' no_passwordless_channels='+ no_passwordless_channels);
+
+   if (idx == w3_SWITCH_YES_IDX && (no_url || no_passwordless_channels)) {
+      if (no_url)
+         text = 'Error, you must first setup a valid Kiwi connection URL on the admin "connect" tab';
+      else
+      if (no_passwordless_channels)
+         text = 'Error, must have at least one user channel that doesn\'t require a password (see admin "security" tab)';
+
       color = '#ffeb3b';
       w3_switch_set_value(path, w3_SWITCH_NO_IDX);    // force back to 'no'
       idx = w3_SWITCH_NO_IDX;
@@ -731,8 +757,10 @@ function sdr_hu_register_cb(path, idx)
       color = 'hsl(180, 100%, 95%)';
    }
    
+   /*
    w3_innerHTML('id-sdr_hu-reg-status', text);
    w3_color('id-sdr_hu-reg-status', null, color);
+   */
    admin_radio_YN_cb(path, idx);
    //console.log('sdr_hu_register_cb adm.sdr_hu_register='+ adm.sdr_hu_register);
 }
@@ -845,9 +873,11 @@ function public_update(p)
 	}
 	
 	// sdr.hu registration status
+	/*
 	if (adm.sdr_hu_register && admin.reg_status.sdr_hu != undefined && admin.reg_status.sdr_hu != '') {
 	   w3_innerHTML('id-sdr_hu-reg-status', admin.reg_status.sdr_hu);
 	}
+	*/
 	
 	// GPS has had a solution, show buttons
 	if (admin.reg_status.lat != undefined) {
@@ -990,9 +1020,9 @@ function dx_json2(dx)
                   (i == -1)? '' : w3_button('w3-font-fixed w3-padding-tiny w3-selection-green', '+', 'dx_add_cb', i), 1,
                   (i == -1)? '' : w3_button('w3-font-fixed w3-padding-tiny w3-red', '-', 'dx_rem_cb', i), 1,
                   w3_input(h('w3-padding-small||size=8'), l('Freq'), 'dxo.f_'+i, fr, 'dx_num_cb'), 19,
-                  w3_select(h(''), l('Mode'), '', 'dxo.m_'+i, mo, kiwi.modes_u, 'dx_sel_cb'), 19,
+                  w3_select(h('|color:red'), l('Mode'), '', 'dxo.m_'+i, mo, kiwi.modes_u, 'dx_sel_cb'), 19,
                   w3_input(h('w3-padding-small||size=4'), l('Passband'), 'dxo.pb_'+i, pb, 'dx_passband_cb'), 19,
-                  w3_select(h(''), l('Type'), '', 'dxo.y_'+i, ty, types, 'dx_sel_cb'), 19,
+                  w3_select(h('|color:red'), l('Type'), '', 'dxo.y_'+i, ty, types, 'dx_sel_cb'), 19,
                   w3_input(h('w3-padding-small||size=2'), l('Offset'), 'dxo.o_'+i, os, 'dx_num_cb'), 19
                ), 45,
                w3_col_percent('w3-valign/w3-margin-left',
