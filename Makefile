@@ -1013,7 +1013,7 @@ ifneq ($(ETC_HOSTS_HAS_KIWI),true)
 	@echo '127.0.0.1       kiwisdr' >>/etc/hosts
 endif
 
-	systemctl enable kiwid.service
+	#systemctl enable kiwid.service
 	@echo $(C_CTR_DONE) >$(COMP_CTR)
 
 # remove public keys leftover from development
