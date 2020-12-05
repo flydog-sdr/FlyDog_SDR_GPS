@@ -120,7 +120,7 @@ void cfg_adm_transition()
 }
 
 int inactivity_timeout_mins, ip_limit_mins;
-int S_meter_cal;
+int S_meter_cal, waterfall_cal;
 double ui_srate, freq_offset;
 int sdr_hu_lo_kHz, sdr_hu_hi_kHz;
 
@@ -220,7 +220,7 @@ void update_vars_from_config()
     if (err) drm_nreg_chans = DRM_NREG_CHANS_DEFAULT;
 
     S_meter_cal = cfg_default_int("S_meter_cal", SMETER_CALIBRATION_DEFAULT, &update_cfg);
-    cfg_default_int("waterfall_cal", WATERFALL_CALIBRATION_DEFAULT, &update_cfg);
+    waterfall_cal = cfg_default_int("waterfall_cal", WATERFALL_CALIBRATION_DEFAULT, &update_cfg);
     cfg_default_bool("contact_admin", true, &update_cfg);
     cfg_default_int("chan_no_pwd", 0, &update_cfg);
     cfg_default_string("owner_info", "", &update_cfg);
@@ -241,6 +241,8 @@ void update_vars_from_config()
     cfg_default_bool("test_deadline_update", false, &update_cfg);
     cfg_default_bool("disable_recent_changes", false, &update_cfg);
     cfg_default_int("init.cw_offset", 500, &update_cfg);
+    cfg_default_int("init.colormap", 0, &update_cfg);
+    cfg_default_int("init.aperture", 1, &update_cfg);
     cfg_default_int("S_meter_OV_counts", 10, &update_cfg);
     cfg_default_bool("webserver_caching", true, &update_cfg);
 
@@ -299,6 +301,18 @@ void update_vars_from_config()
         admcfg_default_string("tlimit_exempt_pwd", "", &update_admcfg);
     }
     
+    // sdr.hu => rx.kiwisdr.com in status msg
+    char *status_msg = (char *) cfg_string("status_msg", NULL, CFG_REQUIRED);
+    bool caller_must_free;
+	char *nsm = kiwi_str_replace(status_msg, "sdr.hu", "rx.kiwisdr.com", &caller_must_free);
+	if (nsm) {
+	    nsm = kiwi_str_replace(nsm, "/?top=kiwi", "");  // shrinking, so nsm same memory space
+	    cfg_set_string("status_msg", nsm);
+	    if (caller_must_free) free(nsm);
+	    update_cfg = true;
+    }
+    cfg_string_free(status_msg); status_msg = NULL;
+
 	if (update_cfg)
 		cfg_save_json(cfg_cfg.json);
 
@@ -387,12 +401,12 @@ void update_vars_from_config()
     }
 }
 
-// pass result json back to main process via shmem->status_str
+// pass result json back to main process via shmem->status_str_large
 static int _geo_task(void *param)
 {
 	nbcmd_args_t *args = (nbcmd_args_t *) param;
 	char *sp = kstr_sp(args->kstr);
-    kiwi_strncpy(shmem->status_str, sp, N_SHMEM_STATUS_STR);
+    kiwi_strncpy(shmem->status_str_large, sp, N_SHMEM_STATUS_STR_LARGE);
     return 0;
 }
 
@@ -411,10 +425,10 @@ static bool geoloc_json(conn_t *conn, const char *geo_host_ip_s, const char *cou
         clprintf(conn, "GEOLOC: failed for %s\n", geo_host_ip_s);
         return false;
     }
-    //cprintf(conn, "GEOLOC: returned <%s>\n", shmem->status_str);
+    //cprintf(conn, "GEOLOC: returned <%s>\n", shmem->status_str_large);
 
 	cfg_t cfg_geo;
-    if (json_init(&cfg_geo, shmem->status_str) == false) {
+    if (json_init(&cfg_geo, shmem->status_str_large) == false) {
         clprintf(conn, "GEOLOC: JSON parse failed for %s\n", geo_host_ip_s);
         return false;
     }

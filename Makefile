@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 402
+VERSION_MIN = 414
 
 REPO_NAME = Beagle_SDR_GPS
 DEBIAN_VER = 8.11
@@ -947,7 +947,7 @@ else
 	install -D -o root -g root RaspSDR.rx3.wf3.bit /usr/local/bin/RaspSDR.rx3.wf3.bit
 	install -D -o root -g root RaspSDR.rx14.wf0.bit /usr/local/bin/RaspSDR.rx14.wf0.bit
 #
-	install -o root -g root unix_env/kiwid /etc/init.d
+	#install -o root -g root unix_env/kiwid /etc/init.d
 	#install -o root -g root -m 0644 unix_env/kiwid.service /etc/systemd/system
 ifneq ($(RPI), true)
 	install -D -o root -g root -m 0644 unix_env/$(CAPE).dts /lib/firmware/$(CAPE).dts
@@ -1013,7 +1013,7 @@ ifneq ($(ETC_HOSTS_HAS_KIWI),true)
 	@echo '127.0.0.1       kiwisdr' >>/etc/hosts
 endif
 
-	#systemctl status kiwid.service
+	systemctl enable kiwid.service
 	@echo $(C_CTR_DONE) >$(COMP_CTR)
 
 # remove public keys leftover from development
@@ -1039,6 +1039,11 @@ enable disable start stop restart status:
 reload dump:
 	-killall -q -s USR1 kiwid
 	-killall -q -s USR1 kiwi.bin
+
+# to generate kiwi.config/info.json
+hup:
+	-killall -q -s HUP kiwid
+	-killall -q -s HUP kiwi.bin
 
 log2:
 	grep kiwid /var/log/syslog
@@ -1105,6 +1110,13 @@ git:
 	git checkout .
 	git pull -v $(GIT_PROTO)://github.com/RaspSDR/Beagle_SDR_GPS.git
 
+GITHUB_COM_IP = "52.64.108.95"
+git_using_ip:
+	@# remove local changes from development activities before the pull
+	git clean -fd
+	git checkout .
+	git pull -v $(GIT_PROTO)://$(GITHUB_COM_IP)/jks-prv/Beagle_SDR_GPS.git
+
 update_check:
 	git fetch origin
 	git show origin:Makefile > Makefile.1
@@ -1121,21 +1133,21 @@ force_update:
 dump_eeprom:
 	@echo KiwiSDR cape EEPROM:
 ifeq ($(DEBIAN_7),true)
-	hexdump -C /sys/bus/i2c/devices/1-0054/eeprom
+	-hexdump -C /sys/bus/i2c/devices/1-0054/eeprom
 else
-	ifeq ($(BBAI),true)
-		hexdump -C /sys/bus/i2c/devices/3-0054/eeprom
-	else
-		ifeq ($(RPI),true)
-			hexdump -C /sys/bus/i2c/devices/1-0054/eeprom
-		else
-			hexdump -C /sys/bus/i2c/devices/3-0054/eeprom
-		endif
-	endif
+ifeq ($(BBAI),true)
+	-hexdump -C /sys/bus/i2c/devices/3-0054/eeprom
+else
+ifeq ($(RPI),true)
+	-hexdump -C /sys/bus/i2c/devices/1-0050/eeprom
+else
+	-hexdump -C /sys/bus/i2c/devices/2-0054/eeprom
+endif
+endif
 endif
 	@echo
 	@echo BeagleBone EEPROM:
-	hexdump -C /sys/bus/i2c/devices/0-0050/eeprom
+	-hexdump -C /sys/bus/i2c/devices/0-0050/eeprom
 
 REPO = https://github.com/RaspSDR/$(REPO_NAME).git
 
@@ -1143,19 +1155,18 @@ REPO = https://github.com/RaspSDR/$(REPO_NAME).git
 EXCLUDE_RSYNC = ".DS_Store" ".git" "/obj" "/obj_O3" "/obj_keep" "*.dSYM" "*.bin" "*.aout" "e_cpu/a" "*.aout.h" "kiwi.gen.h" \
 	"verilog/kiwi.gen.vh" "web/edata*" "node_modules" "morse-pro-compiled.js"
 RSYNC_ARGS = -av --delete $(addprefix --exclude , $(EXCLUDE_RSYNC)) . root@$(HOST):~root/$(REPO_NAME)
-RSYNC = rsync $(RSYNC_ARGS)
-RSYNC_PORT = rsync -e "ssh -p $(PORT) -l root" $(RSYNC_ARGS)
+PORT ?= 22
+ifeq ($(PORT),22)
+	RSYNC = rsync
+else
+	RSYNC = rsync -e "ssh -p $(PORT) -l root"
+endif
 
 rsync_su:
-	sudo $(RSYNC)
-rsync_port:
-	sudo $(RSYNC_PORT)
+	sudo $(RSYNC) $(RSYNC_ARGS)
 rsync_bit:
 	rsync -av $(V_DIR)/KiwiSDR.rx4.wf4.bit $(V_DIR)/KiwiSDR.rx8.wf2.bit $(V_DIR)/KiwiSDR.rx3.wf3.bit $(V_DIR)/KiwiSDR.rx14.wf0.bit .
-	sudo $(RSYNC)
-rsync_bit_port:
-	rsync -av $(V_DIR)/KiwiSDR.rx4.wf4.bit $(V_DIR)/KiwiSDR.rx8.wf2.bit $(V_DIR)/KiwiSDR.rx3.wf3.bit $(V_DIR)/KiwiSDR.rx14.wf0.bit .
-	sudo $(RSYNC_PORT)
+	sudo $(RSYNC) $(RSYNC_ARGS)
 
 ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
 

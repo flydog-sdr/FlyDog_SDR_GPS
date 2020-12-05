@@ -44,6 +44,7 @@ void kiwi_get_chars(char *field, char *value, size_t size);
 #define SET_CHARS(field, value, fill) kiwi_set_chars(field, value, fill, sizeof(field));
 void kiwi_set_chars(char *field, const char *value, const char fill, size_t size);
 int kiwi_split(char *ocp, char **mbuf, const char *delims, char *argv[], int nargs);
+char *kiwi_str_replace(char *s, const char *from, const char *to, bool *caller_must_free=NULL);
 void kiwi_str_unescape_quotes(char *str);
 char *kiwi_str_escape_HTML(char *str);
 char *kiwi_str_encode(char *s);
@@ -61,3 +62,23 @@ char *kiwi_overlap_strcpy(char *dst, const char *src);
 char *kiwi_strncpy(char *dst, const char *src, size_t n);
 char *kiwi_strncat(char *dst, const char *src, size_t n);
 bool kiwi_sha256_strcmp(char *str, const char *key);
+
+
+#define STR_HASH_MISS 0
+
+struct str_hashes_t {
+    const char *name;
+    u2_t key, hash;
+};
+
+struct str_hash_t {
+    bool init;
+    const char *id;
+    str_hashes_t *hashes;
+    int hash_len, max_hash_len;
+    int lookup_table_size;
+    u2_t cur_hash, *keys;
+};
+
+void str_hash_init(const char *id, str_hash_t *hashp, str_hashes_t *hashes, bool debug=false);
+u2_t str_hash_lookup(str_hash_t *hashp, char *str, bool debug=false);
