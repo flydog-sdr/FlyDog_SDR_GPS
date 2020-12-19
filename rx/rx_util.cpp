@@ -167,6 +167,7 @@ void update_vars_from_config()
             ui_srate = flydogsdr ? 54*MHz : 30*MHz;
             break;
     }
+
     // force DC offsets to the default value if not configured
     // also if set to the previous default value
     int firmware_sel = admcfg_default_int("firmware_sel", 0, &update_admcfg);   // needed below

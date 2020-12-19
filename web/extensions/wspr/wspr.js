@@ -747,12 +747,12 @@ function wspr_draw_pie() {
 
 // order matches menu instantiation order
 // see: wsprnet.org/drupal/node/7352
-var wspr_center_freqs = [ 137.5, 475.7, 1838.1, 3570.1, 3594.1, 5288.7, 5366.2, 7040.1, 10140.2, 14097.1, 18106.1, 21096.1, 24926.1, 28126.1 ];
-var wspr_freqs_s = { 'lf':0, 'mf':1, '160m':2, '80m_ja':3, '80m':4, '60m':5, '60m_eu':6, '40m':7, '30m':8, '20m':9, '17m':10, '15m':11, '12m':12, '10m':13 };
-var wspr_freqs_m = [ 'LF', 'MF', '160m', '80m_JA', '80m', '60m', '60m_EU', '40m', '30m', '20m', '17m', '15m', '12m', '10m' ];
+var wspr_center_freqs = [ 137.5, 475.7, 1838.1, 3570.1, 3594.1, 5288.7, 5366.2, 7040.1, 10140.2, 14097.1, 18106.1, 21096.1, 24926.1, 28126.1, 50294.5 ];
+var wspr_freqs_s = { 'lf':0, 'mf':1, '160m':2, '80m_ja':3, '80m':4, '60m':5, '60m_eu':6, '40m':7, '30m':8, '20m':9, '17m':10, '15m':11, '12m':12, '10m':13, '6m':14 };
+var wspr_freqs_m = [ 'LF', 'MF', '160m', '80m_JA', '80m', '60m', '60m_EU', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m' ];
 
-var wspr_xvtr_center_freqs = [ 50294.5, 70092.5, 144490.5, 432301.5, 1296501.5 ];
-var wspr_xvtr_freqs_s = [ '6m', '4m', '2m', '440', '1296' ];
+var wspr_xvtr_center_freqs = [ 70092.5, 144490.5, 432301.5, 1296501.5 ];
+var wspr_xvtr_freqs_s = [ '4m', '2m', '440', '1296' ];
 
 var wspr_rfreq=0, wspr_tfreq=0;
 var wspr_bfo = 750;

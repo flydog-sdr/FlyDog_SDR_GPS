@@ -1008,8 +1008,8 @@ void c2s_sound(void *param)
             snd->out_pkt_iq.h.gpssec  = u4_t(gps_tsp->last_gpssec);
             snd->out_pkt_iq.h.gpsnsec = gps_tsp->init? u4_t(1e9*(gps_tsp->last_gpssec - snd->out_pkt_iq.h.gpssec)) : 0;
             // real_printf("__GPS__ gpssec=%.9f diff=%.9f\n",  gps_tsp->gpssec, gps_tsp->gpssec - gps_tsp->last_gpssec);
-            const float dt_to_pos_sol = gps_tsp->last_gpssec - clk.gps_secs;
-            snd->out_pkt_iq.h.last_gps_solution = gps_tsp->init? ((clk.ticks == 0)? 255 : u1_t(std::min(254.0f, dt_to_pos_sol))) : 0;
+            const double dt_to_pos_sol = gps_tsp->last_gpssec - clk.gps_secs;
+            snd->out_pkt_iq.h.last_gps_solution = gps_tsp->init? ((clk.ticks == 0)? 255 : u1_t(std::min(254.0, dt_to_pos_sol))) : 0;
             if (!gps_tsp->init) gps_tsp->init = true;
             snd->out_pkt_iq.h.dummy = 0;
             gps_tsp->last_gpssec = gps_tsp->gpssec;
