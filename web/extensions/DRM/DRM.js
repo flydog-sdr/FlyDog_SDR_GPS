@@ -66,12 +66,11 @@ var drm = {
    monitor: 0,
    
    database: 0,
-   database_s: [ 'kiwisdr.com', 'drmrx.org' ],
+   database_s: [ 'drmrx.org', 'kiwisdr.com' ],
    database_url: [
-      'http://DRM.kiwisdr.com/drm/stations2.cjson',
-      'http://DRM.kiwisdr.com/drm/drmrx.cjson'
-      ],
-
+      'http://DRM.kiwisdr.com/drm/drmrx.cjson',
+      'http://DRM.kiwisdr.com/drm/stations2.cjson'
+   ],
    
    last_occ: -1,
    last_ilv: -1,
@@ -1048,7 +1047,7 @@ function drm_desktop_controls_setup(w_graph)
                w3_divs('id-drm-options-by-svc id-drm-options-by-time id-drm-options-by-freq/w3-tspace-4',
                   w3_div('cl-drm-sched-options-time w3-light-green', 'verified'),
                   w3_div('cl-drm-sched-options-time', 'not verified'),
-                  w3_link('w3-link-color', 'http://valentfx.com/vanilla/discussion/1865/drm-heard#latest', 'Please report<br>schedule changes')
+                  w3_link('w3-link-color', 'http://forum.kiwisdr.com/discussion/1865/drm-heard#latest', 'Please report<br>schedule changes')
                )
             )
          );
@@ -1121,6 +1120,7 @@ function drm_controls_setup()
 
    drm.is_monitor = 0;
    console.log('drm_controls_setup is_monitor='+ drm.is_monitor);
+   ext_send('SET monitor=0');
 
    // URL params that need to be setup before controls instantiated
 	var p = drm.url_params = ext_param();
@@ -1477,7 +1477,7 @@ function DRM_help(show)
             'With DRM selective fading can prevent even the strongest signals from being received properly. ' +
             'To see if signal fading is occurring adjust the waterfall "WF max/min" controls carefully so the ' +
             'waterfall colors are not saturated. The image below shows fading (dark areas) that might cause problems. See the ' +
-            '<a href="http://valentfx.com/vanilla/discussion/1842/v1-360-drm-extension-now-available-for-beta-testing/p1" target="_blank">' +
+            '<a href="http://forum.kiwisdr.com/discussion/1842/v1-360-drm-extension-now-available/p1" target="_blank">' +
             'Kiwi forum</a> for more information. ' +
             '<br><br><img src="gfx/DRM.sel.fade.png" /><br><br>' +
             

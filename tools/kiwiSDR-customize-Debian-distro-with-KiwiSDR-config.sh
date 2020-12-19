@@ -44,7 +44,7 @@ apt-get -y install git
 # Beagle_SDR_GPS sources need to be a git clone so autoupdate scheme works
 echo "--- clone KiwiSDR from github"
 echo -n "hit enter when ready: "; read not_used
-git clone https://github.com/RaspSDR/Beagle_SDR_GPS.git || true
+git clone https://github.com/flydog-sdr/FlyDog_SDR_GPS || true
 
 # in addition to what Kiwi "make install" will get
 echo "--- install tools"

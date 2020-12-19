@@ -2,6 +2,74 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/jks-prv/Beagle_SDR_GPS/commits/master
 
+v1.428  December 17, 2020
+    Reliability fixes.
+
+v1.427  November 29, 2020
+    Added support for antenna switch extension changing frequency scale offset.
+    Added gps_date parameter to /status query. "gps_date=<enable>,<set>" where <enable> and
+        <set> are digits '0' or '1' indicating if gps is enabled to set date/time, and if
+        the set has actually occurred.
+
+v1.425,426  November 26, 2020
+    Channel nulling, preliminary release
+        See forum post: http://forum.kiwisdr.com/discussion/2169/early-demonstration-of-channel-nulling#p1
+    
+    Audio FFT extension:
+        Rename and expansion of former "integrate" extension.
+        Adds continuous audio FFT and audio spectrum modes to existing integration mode.
+        The audio spectrum function is particularly useful in visualizing the effectiveness
+            of the new channel nulling feature of SAM mode.
+
+    Admin security tab: added option to enable/disable console tab access from the local
+        network. This in response to a few Kiwis that still have trouble determining
+        their local network address, e.g. when using unsupported WiFi dongles.
+
+    Prevent open menus from unexpectedly closing when colormap averaging event occurs.
+    Update embedded URLs pointing to the forum.
+
+v1.422,423,424  November 16, 2020
+    Squelch (all modes) will pause the record function (red circle to left of speaker icon)
+        when the squelch is open. The record icon also changes to white.
+        This is consistent with the other UI elements that change to white when the
+        squelch is open. Kiwirecorder behavior is not effected.
+
+v1.421  November 11, 2020
+    Admin config tab: prevent waterfall min dB from being set >= max. Otherwise this case
+        causes the user interface to hang on page load.
+
+v1.419,420  November 10, 2020
+    Added a simple RSSI-based squelch for the non-NBFM modes.
+        See audio tab of control panel. Based on the squelch from kiwirecorder.
+
+v1.418  November 5, 2020
+    Changes to help avoid running out of memory during builds under certain conditions.
+
+v1.417  October 30, 2020
+    Allow GPS to set date/time. See admin page, GPS tab, new setting on top bar.
+        Defaults to false.
+        
+        Before this can happen the GPS-to-UTC correction must be received from the GPS
+        navigation message stream. This can take from zero to 12.5 minutes depending on
+        the sat page/subframe transmission phase. The date correction has been tested
+        using navigation data streams from Navstar, QZSS and Galileo.
+        
+        Only one date correction is performed per restart. However the previous constant
+        correction of the system time (but not date) whenever it differs more than
+        2 seconds from GPS time is still in effect.
+
+    Added FAX extension frequencies for CN stations XSQ and an UNID per forum user Fabrys.
+
+v1.416  October 27, 2020
+    Make drmrx.org the default DRM schedule database.
+
+v1.415  October 20, 2020
+    Admin network tab: added Ethernet MTU selection option of 1440 (default 1500) which
+        seems to help some installations using 4G Internet connections.
+    Bug fixes:
+        Well-known DNS server 1.1.1.1 is always added to end of /etc/resolv.conf file.
+        "Photo max height" field can no longer be set blank (which prevented page load).
+
 v1.414  October 10, 2020
     Added initial waterfall colormap selection to admin page "config" tab.
         Some people now prefer to use the SdrDx colormap and have it shown to
@@ -174,10 +242,6 @@ v1.391  May 23, 2020
         Reworked the audio tab user interface to support multiple blanker/filter algorithms.
         New algorithms planned but not yet available are greyed-out in the menus.
         From Warren Pratt's wdsp package added the variable-leak LMS algorithm.
-    
-    Merged Howard Su's RPi changes.
-        Note: RPi is not officially supported by KiwiSDR. Ask for help on the KiwiSDR forum:
-            valentfx.com/vanilla/discussion/1986/port-kiwisdr-to-raspberrypi-3b
     
     Bug fixes:
         Audio recordings made in SAS (synchronous AM stereo) mode now work.

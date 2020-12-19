@@ -50,16 +50,24 @@ function config_html()
 			w3_input_get('', 'CW offset (Hz)', 'init.cw_offset', 'admin_int_cb')
 		) +
 
-		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
-			w3_input_get('', 'Waterfall min (dBFS, fully zoomed-out)', 'init.min_dB', 'admin_int_cb'),
-			w3_input_get('', 'Waterfall max (dBFS)', 'init.max_dB', 'admin_int_cb'),
-			w3_input_get('', 'Zoom (0-13)', 'init.zoom', 'admin_int_cb')
-		);
+		w3_third('w3-text-teal', 'w3-container',
+			w3_input_get('', 'Waterfall min (dBFS, fully zoomed-out)', 'init.min_dB', 'config_wfmin_cb'),
+			w3_input_get('', 'Waterfall max (dBFS)', 'init.max_dB', 'config_wfmax_cb'),
+			w3_input_get('', 'Zoom (0-13)', 'init.zoom', 'config_zoom_cb')
+		) +
+		
+      w3_third('', 'w3-container',
+         w3_div('id-wfmin-error w3-margin-T-8 w3-red w3-hide', 'Waterfall min must be < max'),
+         w3_div('id-wfmax-error w3-margin-T-8 w3-red w3-hide', 'Waterfall max must be > min'),
+         w3_div('id-zoom-error w3-margin-T-8 w3-red w3-hide', 'Zoom must be 0 to 13')
+      ) +
+      
+      w3_div('w3-margin-bottom');
 
    var s2 =
 		'<hr>' +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
-			w3_div('w3-restart',
+			w3_div('',
 				w3_input_get('', 'Frequency scale offset (kHz)', 'freq_offset', 'admin_int_cb'),
 				w3_div('w3-text-black',
 					'Adds offset to frequency scale. <br> Useful when using a downconverter, e.g. set to <br>' +
@@ -227,6 +235,30 @@ function config_html()
 	return w3_div('id-config w3-hide', s1 + s2 + s3 + s4 + s5);
 }
 
+function config_wfmin_cb(path, val, first)
+{
+   val = +val;
+   var ok = (val < cfg.init.max_dB);
+   if (ok) admin_int_cb(path, val, first);
+   w3_show_hide('id-wfmin-error', !ok);
+}
+
+function config_wfmax_cb(path, val, first)
+{
+   val = +val;
+   var ok = (val > cfg.init.min_dB);
+   if (ok) admin_int_cb(path, val, first);
+   w3_show_hide('id-wfmax-error', !ok);
+}
+
+function config_zoom_cb(path, val, first)
+{
+   val = +val;
+   var ok = (val >= 0 && val <= 13);
+   if (ok) admin_int_cb(path, val, first);
+   w3_show_hide('id-zoom-error', !ok);
+}
+
 function config_OV_counts_cb(path, val, complete, first)
 {
    //console.log('config_OV_counts_cb path='+ path +' val='+ val);
@@ -385,7 +417,7 @@ function webpage_html()
             ),
             w3_checkbox_get_param('w3-restart w3-label-inline', 'Photo left margin', 'index_html_params.RX_PHOTO_LEFT_MARGIN', 'admin_bool_cb', true)
          ),
-			w3_input('', 'Photo maximum height (pixels)', 'index_html_params.RX_PHOTO_HEIGHT', '', 'webpage_string_cb')
+			w3_input('', 'Photo maximum height (pixels)', 'index_html_params.RX_PHOTO_HEIGHT', '', 'webpage_int_cb')
 		) +
 		w3_half('', 'w3-container',
 			w3_input('', 'Photo title', 'index_html_params.RX_PHOTO_TITLE', '', 'webpage_string_cb'),
@@ -561,6 +593,19 @@ function webpage_string_cb(path, val)
 {
 	w3_string_set_cfg_cb(path, val);
 	ext_send('SET reload_index_params');
+}
+
+function webpage_int_cb(path, val)
+{
+	val = parseInt(val);
+	if (isNaN(val)) {
+	   // put old value back
+	   val = ext_get_cfg_param(path);
+		w3_set_value(path, val);
+	} else {
+	   w3_num_set_cfg_cb(path, val);
+	   ext_send('SET reload_index_params');
+	}
 }
 
 

@@ -7,6 +7,7 @@ var extint = {
    override_pb: false,
    displayed: false,
    help_displayed: false,
+   spectrum_used: false,
    current_ext_name: null,
    using_data_container: false,
    default_w: 525,
@@ -207,7 +208,8 @@ function ext_set_mode(mode, freq, opt)
 	var open_ext = w3_opt(opt, 'open_ext', false);
 	var no_drm_proc = w3_opt(opt, 'no_drm_proc', false);
 	var drm_active = (typeof(drm) != 'undefined' && drm.active);
-	console.log('$ new_drm='+ new_drm +' open_ext='+ open_ext);
+	//console.log('$ new_drm='+ new_drm +' open_ext='+ open_ext);
+	w3_show_hide('id-chan-null', mode == 'sam');
 
    if (!no_drm_proc) {
       if (new_drm && open_ext) {
@@ -493,7 +495,9 @@ function ext_panel_init()
       'data-panel-size="'+ extint.default_w +','+ extint.default_h +'"></div>';
 
 	var el = w3_el('id-ext-data-container');
-	el.style.zIndex = 100;
+	// removed because cascading canvases in FFT extension overlay RF waterfall
+	// why was this needed anyway?
+	//el.style.zIndex = 100;
 
 	el = w3_el('id-ext-controls');
 	el.innerHTML =
@@ -524,6 +528,18 @@ function ext_panel_init()
 	   }, true);
 }
 
+function ext_show_spectrum()
+{
+   w3_show_block('id-spectrum-container');
+   extint.spectrum_used = true;
+}
+
+function ext_hide_spectrum()
+{
+   w3_hide('id-spectrum-container');
+   extint.spectrum_used = false;
+}
+
 function extint_panel_show(controls_html, data_html, show_func, show_help_button)
 {
 	extint.using_data_container = (data_html? true:false);
@@ -535,9 +551,12 @@ function extint_panel_show(controls_html, data_html, show_func, show_help_button
 		w3_show_block(w3_innerHTML('id-ext-data-container', data_html));
 	} else {
 		w3_hide('id-ext-data-container');
-		if (!spectrum_display)
+		if (!spec.source_wf)
 			w3_show_block('id-top-container');
 	}
+
+   // remove previous use of spectrum (if any)
+   ext_hide_spectrum();
 
    // remove previous help panel if displayed
    if (extint.help_displayed == true) {
@@ -551,6 +570,7 @@ function extint_panel_show(controls_html, data_html, show_func, show_help_button
 	//console.log('extint_panel_show onclick='+ el.onclick);
 	
 	// some exts change these -- change back to default
+	ext_set_data_height();     // restore default height
 	w3_el('id-ext-controls').style.zIndex = 150;
    w3_attribute('id-ext-controls-close-img', 'src', 'icons/close.24.png');
 	
@@ -576,8 +596,7 @@ function extint_panel_show(controls_html, data_html, show_func, show_help_button
 	      w3_call(extint.current_ext_name +'_help', false);
 	//console.log('show_help_button '+ extint.current_ext_name +' '+ show_help_button);
    w3_set_props('id-ext-controls-help-btn', 'w3-disabled', isUndefined(show_help_button) || show_help_button == false);
-   if (show_help_button == 'off')
-      w3_hide('id-ext-controls-help-btn');
+   w3_show_hide('id-ext-controls-help-btn', show_help_button != 'off');
 	
 	extint.displayed = true;
 }
@@ -594,6 +613,7 @@ function extint_panel_hide()
 
 	if (extint.using_data_container) {
 		w3_hide('id-ext-data-container');
+      ext_hide_spectrum();
 		w3_show_block('id-top-container');
 		extint.using_data_container = false;
 		

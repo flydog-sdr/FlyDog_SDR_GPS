@@ -1028,9 +1028,9 @@ function backup_sd_write_done(err)
 var network = {
    auto_nat_color:   null,
    ip_blacklist_input_prev: null,
+   ethernet_speed_s: [ '100 Mbps', '10 Mbps' ],
+   ethernet_mtu_s: [ '1500', '1440' ]
 };
-
-var ethernet_speed_i = { 0:'100 Mbps', 1:'10 Mbps' };
 
 function network_html()
 {
@@ -1051,26 +1051,29 @@ function network_html()
 
 		'<hr>' +
 		w3_div('id-net-reboot',
-			w3_col_percent('w3-container w3-margin-bottom w3-text-teal/w3-hspace-16',
-				w3_div('w3-restart',
-					w3_input_get('', 'Internal port', 'adm.port', 'admin_int_cb')
-				), 10,
-				w3_div('w3-restart',
+			w3_inline('w3-halign-space-around w3-margin-bottom w3-text-teal/',
+			   w3_divs('w3-valign w3-flex-col w3-restart/w3-tspace-6',
+					w3_input_get('', 'Internal port', 'adm.port', 'admin_int_cb'),
 					w3_input_get('', 'External port', 'adm.port_ext', 'admin_int_cb')
-				), 10,
-				w3_divs('w3-center/w3-restart',
+				),
+				w3_divs('w3-center w3-restart',
 					'<b>Auto add NAT rule<br>on firewall / router?</b><br>',
 					w3_switch('w3-margin-T-8', 'Yes', 'No', 'adm.auto_add_nat', adm.auto_add_nat, 'admin_radio_YN_cb')
-				), 20,
+				),
 				w3_div('w3-center',
 						'<b>IP address<br>(only static IPv4 for now)</b><br> ' +
 						w3_switch_get_param('w3-margin-T-8', 'DHCP', 'Static', 'adm.ip_address.use_static', 0, false, 'network_use_static_cb')
-				), 20,
+				),
             w3_divs('w3-center/',
-               w3_select('', 'Ethernet interface speed', '', 'ethernet_speed', cfg.ethernet_speed, ethernet_speed_i, 'network_ethernet_speed'),
+               w3_select('', 'Ethernet interface speed', '', 'ethernet_speed', cfg.ethernet_speed, network.ethernet_speed_s, 'network_ethernet_speed'),
                w3_div('w3-text-black',
                   'Select 10 Mbps to reduce Ethernet spurs. <br> Try changing while looking at waterfall.')
-            ), 30
+            ),
+            w3_divs('w3-center/',
+               w3_select('', 'Ethernet interface MTU', '', 'ethernet_mtu', cfg.ethernet_mtu, network.ethernet_mtu_s, 'network_ethernet_mtu'),
+               w3_div('w3-text-black',
+                  'Select 1440 when having connection <br> problems using 4G networks.')
+            )
 			),
 			w3_div('id-net-static w3-hide',
 			   w3_div('',
@@ -1089,7 +1092,7 @@ function network_html()
                   w3_input_get('', 'DNS-2 (n.n.n.n where n = 0..255)', 'adm.ip_address.dns2', 'w3_string_set_cfg_cb', ''),
                   w3_div('',
                      w3_label('', '<br>') +     // makes the w3-valign above work for button below
-                     w3_button('w3-show-inline w3-aqua', 'Use Google public DNS', 'net_google_dns_cb')
+                     w3_button('w3-show-inline w3-aqua', 'Use well-known public DNS servers', 'net_public_dns_cb')
                   )
                )
             ),
@@ -1220,7 +1223,15 @@ function network_ip_blacklist_status(status, ip)
 function network_ethernet_speed(path, idx, first)
 {
    idx = +idx;
-	console.log('network_ethernet_speed path='+ path +' idx='+ idx +' first='+ first);
+	//console.log('network_ethernet_speed path='+ path +' idx='+ idx +' first='+ first);
+   if (first) return;
+   admin_select_cb(path, idx, first)
+}
+
+function network_ethernet_mtu(path, idx, first)
+{
+   idx = +idx;
+	//console.log('network_ethernet_mtu path='+ path +' idx='+ idx +' first='+ first);
    if (first) return;
    admin_select_cb(path, idx, first)
 }
@@ -1428,12 +1439,12 @@ function network_gw_address_cb(path, val, first)
 	network_show_check('network-check-gw', 'gateway', path, val, network_gw, first);
 }
 
-function net_google_dns_cb(id, idx)
+function net_public_dns_cb(id, idx)
 {
-	w3_string_set_cfg_cb('adm.ip_address.dns1', '8.8.8.8');
-	w3_set_value('adm.ip_address.dns1', '8.8.8.8');
-	w3_string_set_cfg_cb('adm.ip_address.dns2', '8.8.4.4');
-	w3_set_value('adm.ip_address.dns2', '8.8.4.4');
+	w3_string_set_cfg_cb('adm.ip_address.dns1', '1.1.1.1');
+	w3_set_value('adm.ip_address.dns1', '1.1.1.1');
+	w3_string_set_cfg_cb('adm.ip_address.dns2', '8.8.8.8');
+	w3_set_value('adm.ip_address.dns2', '8.8.8.8');
 }
 
 
@@ -1491,6 +1502,10 @@ function gps_html()
             //w3_div('w3-show-inline w3-margin-right w3-small', '<b>Always<br>acquire?</b>') +
             //w3_switch('w3-show-inline w3-padding-smaller', 'Yes', 'No', 'adm.always_acq_gps', adm.always_acq_gps, 'admin_radio_YN_cb')
             w3_checkbox('w3-label-inline w3-small/w3-small', 'Acquire<br>if Kiwi<br>busy? [n]', 'adm.always_acq_gps', adm.always_acq_gps, 'w3_bool_set_cfg_cb')
+         ),
+
+         w3_div('w3-valign w3-text-teal',
+            w3_checkbox('w3-label-inline w3-small/w3-small', 'Set date<br>from GPS?', 'adm.gps_set_date', adm.gps_set_date, 'w3_bool_set_cfg_cb')
          ),
 
          w3_div('w3-valign w3-text-teal',
@@ -2525,6 +2540,7 @@ function security_html()
 					'No password set: unrestricted Internet access to SDR')
 			), 50
 		) +
+
 		'<hr>' +
 		w3_inline_percent('w3-container/w3-hspace-16 w3-text-teal',
 			w3_div('',
@@ -2543,6 +2559,24 @@ function security_html()
 					'No password set: no admin access from Internet allowed')
 			), 50
 		) +
+
+		'<hr>' +
+		w3_inline_percent('w3-container/w3-hspace-16 w3-text-teal',
+			w3_div('',
+				w3_div('',
+					'<b>Restrict console connections <br> to the local network?</b><br>',
+					w3_switch('w3-margin-T-8', 'Yes', 'No', 'adm.console_local', adm.console_local, 'admin_radio_YN_cb')
+				)
+			), 25,
+
+			w3_div('w3-text-black',
+				'Set to "Yes" (default) to restrict use of the console tab ' +
+				'to connections from the local network. This is an important ' +
+				'security enhancement. You might want to set to "No" if the  ' +
+				'Kiwi has difficulty determining your local network address. '
+			), 33
+		) +
+
 		'<hr>' +
 		w3_inline_percent('w3-container/w3-hspace-16 w3-text-teal',
 			w3_div('',
@@ -2565,12 +2599,10 @@ function security_html()
 				'However we expect most Kiwi owners will want to participate and we encourage ' +
 				'you to do so. Your precise GPS location is not revealed by the timestamp information. ' +
 				'For more discussion please see the ' +
-				w3_link('w3-link-darker-color',
-				   'http://valentfx.com/vanilla/discussion/1218/participation-of-kiwis-in-the-tdoa-process',
-				   'Kiwi forums'
-				) +'.'
+				w3_link('w3-link-darker-color', 'http://http://forum.kiwisdr.com/discussion/1218/participation-of-kiwis-in-the-tdoa-process/p1', 'Kiwi forums') +'.'
 			), 33
 		) +
+
 		'<hr>' +
 		//w3_div('id-security-json w3-section w3-border')
 		''
@@ -3058,10 +3090,10 @@ function admin_int_cb(path, val)
 	if (isNaN(val)) {
 	   // put old value back
 	   val = ext_get_cfg_param(path);
-		w3_set_value(path, val);
 	} else {
 	   ext_set_cfg_param(path, val, true);
 	}
+   w3_set_value(path, val);   // remove any fractional part from field
 }
 
 function admin_float_cb(path, val)

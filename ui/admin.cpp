@@ -1009,7 +1009,7 @@ void c2s_admin(void *param)
         
                 sb = kstr_asprintf(sb, "],\"stype\":%d", gps.soln_type);
         
-                UMS hms(gps.StatSec/60/60);
+                UMS hms(gps.StatDaySec/60/60);
                 
                 unsigned r = (timer_ms() - gps.start)/1000;
                 if (r >= 3600) {
@@ -1131,10 +1131,22 @@ void c2s_admin(void *param)
 			        struct stat st;
 		            if (stat(DIR_CFG "/opt.no_console", &st) == 0)
 		                no_console = true;
-			        if (no_console == false) {
+
+		            //#define TEST_NOT_LOCAL
+		            #ifdef TEST_NOT_LOCAL
+		                bool is_local = false;
+		            #else
+		                bool is_local = conn->isLocal;
+		            #endif
+		            bool console_local = admcfg_bool("console_local", NULL, CFG_REQUIRED);
+
+			        if (no_console == false && ((console_local && is_local) || !console_local)) {
 			            CreateTask(console, conn, ADMIN_PRIORITY);
-			        } else {
+			        } else
+			        if (no_console) {
                         send_msg_encoded(conn, "ADM", "console_c2w", "CONSOLE: disabled by kiwi.config/opt.no_console\n");
+			        } else {
+                        send_msg_encoded(conn, "ADM", "console_c2w", "CONSOLE: only available to local admin connections\n");
 			        }
 			    }
 				continue;
