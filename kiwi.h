@@ -53,7 +53,7 @@ extern int p0, p1, p2, wf_sim, wf_real, wf_time, ev_dump, wf_flip, wf_exit, wf_s
 	rx_cordic, rx_cic, rx_cic2, rx_dump, wf_cordic, wf_cic, wf_mult, wf_mult_gen, meas,
 	rx_yield, gps_chans, spi_clkg, spi_speed, wf_max, rx_num, wf_num, do_slice, do_gps, do_sdr, wf_olap,
 	spi_delay, do_fft, noisePwr, unwrap, rev_iq, ineg, qneg, fft_file, fftsize, fftuse, bg, alt_port,
-	port, print_stats, ecpu_cmds, ecpu_tcmds, serial_number, ip_limit_mins, is_locked,
+	port, print_stats, ecpu_cmds, ecpu_tcmds, serial_number, ip_limit_mins, is_locked, test_flag,
 	use_spidev, inactivity_timeout_mins, S_meter_cal, waterfall_cal, current_nusers, debug_v, debian_ver, drm_nreg_chans,
 	utc_offset, dst_offset, reg_kiwisdr_com_status, reg_kiwisdr_com_tid, sdr_hu_lo_kHz, sdr_hu_hi_kHz,
 	debian_maj, debian_min, gps_debug, gps_var, gps_lo_gain, gps_cg_gain, use_foptim, web_caching_debug;
@@ -71,7 +71,7 @@ extern cfg_t cfg_ipl;
 extern char *fpga_file;
 
 extern lock_t spi_lock;
-extern bool raspsdr;
+extern bool flydogsdr;
 
 // values defined in rx_cmd.cpp
 // CAUTION: order in mode_s/modu_s must match mode_e, mode_hbw, mode_offset

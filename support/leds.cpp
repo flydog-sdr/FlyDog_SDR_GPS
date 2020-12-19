@@ -126,6 +126,7 @@ static void led_set(int l0, int l1, int l2, int l3, int msec)
 #if NLED > 3
     if (l3 != 2) led_set_one(3, l3);
 #endif
+
     kiwi_msleep(msec);
 }
 

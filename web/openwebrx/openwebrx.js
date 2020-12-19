@@ -36,6 +36,9 @@ var owrx = {
    tuning_locked: 0,
    
    dx_click_gid_last: undefined,
+   
+   chan_null: 0,
+   chan_null_s: [ 'normal', 'null LSB', 'null USB' ],
 };
 
 // key freq concepts:
@@ -267,7 +270,6 @@ function kiwi_main()
 	// FIXME: eliminate most of these
 	snd_send("SERVER DE CLIENT openwebrx.js SND");
 	snd_send("SET dbug_v="+ debug_v);
-	snd_send("SET squelch=0 max="+ squelch_threshold.toFixed(0));
 
    if (gen_attn != 0) {
       var dB = gen_attn;
@@ -985,9 +987,12 @@ function demodulator_default_analog(offset_frequency, subtype, locut, hicut)
 		var freq = (freq_car_Hz/1000).toFixed(3);
 		var mode = this.server_mode;
 		var locut = this.low_cut.toString();
-		var hicut = this.high_cut.toString()
-		//console.log('SET mod='+ mode +' low_cut='+ locut +' high_cut='+ hicut +' freq='+ freq);
-		snd_send('SET mod='+ mode +' low_cut='+ locut +' high_cut='+ hicut +' freq='+ freq);
+		var hicut = this.high_cut.toString();
+		var mparam = (mode == 'sam')? (' param='+ owrx.chan_null) : '';
+		//console.log('$mode '+ mode);
+		var s = 'SET mod='+ mode +' low_cut='+ locut +' high_cut='+ hicut +' freq='+ freq + mparam;
+		snd_send(s);
+		//console.log('$'+ s);
 
       var changed = null;
       if (freq != owrx.last_freq) {
@@ -2983,9 +2988,6 @@ function add_canvas()
 	if (kiwi_gc_wf) new_canvas = null;	// gc
 }
 
-var spectrum_canvas, spectrum_ctx;
-var spectrum_dB, spectrum_dB_ttip;
-
 function init_canvas_container()
 {
 	window_width = window.innerWidth;		// window width minus any scrollbar
@@ -3014,20 +3016,20 @@ function init_canvas_container()
 	// the first one to get started
 	add_canvas();
 
-   spectrum_canvas = create_canvas('id-spectrum-canvas', wf_fft_size, height_spectrum_canvas, waterfall_width, height_spectrum_canvas);
-	html("id-spectrum-container").appendChild(spectrum_canvas);
-	spectrum_ctx = spectrum_canvas.ctx;
-	add_canvas_listner(spectrum_canvas);
-	spectrum_ctx.font = "10px sans-serif";
-	spectrum_ctx.textBaseline = "middle";
-	spectrum_ctx.textAlign = "left";
+   spec.canvas = create_canvas('id-spectrum-canvas', wf_fft_size, height_spectrum_canvas, waterfall_width, height_spectrum_canvas);
+	html("id-spectrum-container").appendChild(spec.canvas);
+	spec.ctx = spec.canvas.ctx;
+	add_canvas_listner(spec.canvas);
+	spec.ctx.font = "10px sans-serif";
+	spec.ctx.textBaseline = "middle";
+	spec.ctx.textAlign = "left";
 
-	spectrum_dB = html("id-spectrum-dB");
-	spectrum_dB.style.height = px(height_spectrum_canvas);
-	spectrum_dB.style.width = px(waterfall_width);
-	spectrum_dB.innerHTML = '<span id="id-spectrum-dB-ttip" class="class-spectrum-dB-tooltip class-tooltip-text"></span>';
-	add_canvas_listner(spectrum_dB);
-	spectrum_dB_ttip = html("id-spectrum-dB-ttip");
+	spec.dB = html("id-spectrum-dB");
+	spec.dB.style.height = px(height_spectrum_canvas);
+	spec.dB.style.width = px(waterfall_width);
+	spec.dB.innerHTML = '<span id="id-spectrum-dB-ttip" class="class-spectrum-dB-tooltip class-tooltip-text"></span>';
+	add_canvas_listner(spec.dB);
+	spec.dB_ttip = html("id-spectrum-dB-ttip");
 }
 
 function add_canvas_listner(obj)
@@ -3128,7 +3130,7 @@ function resize_canvases(zoom)
 	canvas_phantom.style.width = new_width;
 	canvas_phantom.style.left = zoom_value;
 
-	spectrum_canvas.style.width = new_width;
+	spec.canvas.style.width = new_width;
 
    // above width change clears canvas, so redraw
    if (wf.audioFFT_active) {
@@ -3248,7 +3250,278 @@ function mobile_init()
 
 
 ////////////////////////////////
-// waterfall / spectrum
+// spectrum
+////////////////////////////////
+
+var spec = {
+   source_wf: 0,
+   source_audio: 0,
+   
+   canvas: null,
+   ctx: null,
+   spectrum_image: null,
+   colormap: null,
+   colormap_transparent: null,
+   dB: null,
+   dB_ttip: null,
+   
+   update: 0,
+   last_update: 0,
+   need_update: 0,
+   
+   need_clear_avg: 0,
+   clear_avg: 0,
+   avg: [],
+   
+   peak_show: 0,
+   peak_clear: 0,
+   peak: [],
+   
+   dB_bands: [],
+   redraw_dB_scale: false,
+};
+
+function spectrum_init()
+{
+	spec.colormap = spec.ctx.createImageData(1, spec.canvas.height);
+	spec.colormap_transparent = spec.ctx.createImageData(1, spec.canvas.height);
+	update_maxmindb_sliders();
+	spectrum_dB_bands();
+	var spectrum_update_rate_Hz = kiwi_isMobile()? 10:10;  // limit update rate since rendering spectrum is currently expensive
+	//if (kiwi_isMobile()) alert('spectrum_update_rate_Hz = '+ spectrum_update_rate_Hz +' Hz');
+	setInterval(function() { spec.update++ }, 1000 / spectrum_update_rate_Hz);
+
+   spec.spectrum_image = spec.ctx.createImageData(spec.canvas.width, spec.canvas.height)
+   
+   if (!wf.audioFFT_active && rx_chan >= wf_chans) {
+		// clear entire spectrum canvas to black
+		var sw = spec.canvas.width;
+		var sh = spec.canvas.height;
+		spec.ctx.fillStyle = "black";
+		spec.ctx.fillRect(0,0,sw,sh);
+		
+	   spec.ctx.font = "18px sans-serif";
+      spec.ctx.fillStyle = "white";
+      var text =
+         wf_chans?
+            ('Spectrum not available for rx'+ rx_chan)
+         :
+            'Spectrum not allowed on this Kiwi';
+      var tw = spec.ctx.measureText(text).width;
+      spec.ctx.fillText(text, sw/2-tw/2, sh/2);
+   }
+
+   kiwi_load_js(['extensions/colormap/colormap.js'], function() { colormap_init(); });
+}
+
+// based on WF max/min range, compute color banding each 10 dB for spectrum display
+function spectrum_dB_bands()
+{
+	spec.dB_bands = [];
+	var i=0;
+	//var color_shift_dB = -8;	// give a little floor room to the spectrum colormap
+	var color_shift_dB = -12;	// give a little floor room to the spectrum colormap
+	var s_maxdb = maxdb, s_mindb = mindb;
+
+	// prevent an illegal configuration of mindb >= maxdb causing code below
+	// to loop infinitely (i.e. s_full_scale = 0 => / 0)
+	if (s_mindb >= s_maxdb) {
+	   s_maxdb = -10;
+	   s_mindb = -110;
+	}
+
+	var s_full_scale = s_maxdb - s_mindb;
+	var barmax = s_maxdb, barmin = s_mindb + color_shift_dB;
+	var rng = barmax - barmin;
+	rng = rng? rng : 1;	// can't be zero
+	//console.log("DB barmax="+barmax+" barmin="+barmin+" s_maxdb="+s_maxdb+" s_mindb="+s_mindb);
+	var last_norm = 0;
+
+   var anti_looping = 0;
+	for (var dB = Math.floor(s_maxdb/10)*10; (s_mindb-dB) < 10; dB -= 10) {
+		var norm = 1 - ((dB - s_mindb) / s_full_scale);
+		var cmi = Math.round((dB - barmin) / rng * 255);
+		var color = color_map[cmi];
+		var color_transparent = color_map_transparent[cmi];
+		var color_name = '#'+(color >>> 8).toString(16).leadingZeros(6);
+		spec.dB_bands[i] = { dB:dB, norm:norm, color:color_name };
+		
+		var ypos = function(norm) { return Math.round(norm * spec.canvas.height) }
+		for (var y = ypos(last_norm); y < ypos(norm); y++) {
+			for (var j=0; j<4; j++) {
+				spec.colormap.data[y*4+j] = ((color>>>0) >> ((3-j)*8)) & 0xff;
+				spec.colormap_transparent.data[y*4+j] = ((color_transparent>>>0) >> ((3-j)*8)) & 0xff;
+			}
+			if (anti_looping++ > 8192) break;
+		}
+		//console.log("DB"+i+' '+dB+' norm='+norm+' last_norm='+last_norm+' cmi='+cmi+' '+color_name+' sh='+spec.canvas.height);
+		last_norm = norm;
+		
+		i++;
+      if (anti_looping++ > 8192) break;
+	}
+
+	spec.redraw_dB_scale = true;
+	w3_call('colormap_aper');
+}
+
+function spectrum_tooltip_update(evt, clientX, clientY)
+{
+	var target = (evt.target == spec.dB || evt.currentTarget == spec.dB || evt.target == spec.dB_ttip || evt.currentTarget == spec.dB_ttip);
+	//console.log('CD '+ target +' x='+ clientX +' tgt='+ evt.target.id +' ctg='+ evt.currentTarget.id);
+	//if (kiwi_isMobile()) alert('CD '+ tf +' x='+ clientX +' tgt='+ evt.target.id +' ctg='+ evt.currentTarget.id);
+
+	if (target) {
+		//event_dump(evt, 'SPEC');
+		
+		// This is a little tricky. The tooltip text span must be included as an event target so its position will update when the mouse
+		// is moved upward over it. But doing so means when the cursor goes below the bottom of the tooltip container, the entire
+		// spectrum div in this case, having included the tooltip text span will cause it to be re-positioned again. And the hover
+		// doesn't go away unless the mouse is moved quickly. So to stop this we need to manually detect when the mouse is out of the
+		// tooltip container and stop updating the tooltip text position so the hover will end.
+		
+		if (clientY >= 0 && clientY < height_spectrum_canvas) {
+			spec.dB_ttip.style.left = px(clientX);
+			spec.dB_ttip.style.bottom = px(200 + 10 - clientY);
+			var dB = (((height_spectrum_canvas - clientY) / height_spectrum_canvas) * full_scale) + mindb;
+			spec.dB_ttip.innerHTML = dB.toFixed(0) +' dBm';
+		}
+	}
+}
+
+function spectrum_update(data)
+{
+	var i, x, y, z, sw, sh, tw=25;
+	
+   spec.last_update = spec.update;
+
+   // clear entire spectrum canvas to black
+   var ctx = spec.ctx;
+   sw = spec.canvas.width-tw;
+   sh = spec.canvas.height;
+   ctx.fillStyle = "black";
+   ctx.fillRect(0,0,sw,sh);
+   
+   // draw lines every 10 dB
+   // spectrum data will overwrite
+   ctx.fillStyle = "lightGray";
+   for (i=0; i < spec.dB_bands.length; i++) {
+      var band = spec.dB_bands[i];
+      y = Math.round(band.norm * sh);
+      ctx.fillRect(0,y,sw,1);
+   }
+
+   if (spec.clear_avg) {
+      for (x=0; x<sw; x++) {
+         spec.avg[x] = color_index(data[x]);
+      }
+      spec.clear_avg = false;
+      spec.peak_clear = true;
+   }
+   
+   if (spec.peak_clear) {
+      for (x=0; x<sw; x++) {
+         spec.peak[x] = 0;
+      }
+      spec.peak_clear = false;
+   }
+   
+   // if necessary, draw scale on right side
+   if (spec.redraw_dB_scale) {
+   
+      // set sidebar background where the dB text will go
+      /*
+      ctx.fillStyle = "black";
+      ctx.fillRect(sw,0,tw,sh);
+      */
+      for (x = sw; x < spec.canvas.width; x++) {
+         ctx.putImageData(spec.colormap_transparent, x, 0, 0, 0, 1, sh);
+      }
+      
+      // the dB scale text
+      ctx.fillStyle = "white";
+      for (i=0; i < spec.dB_bands.length; i++) {
+         var band = spec.dB_bands[i];
+         y = Math.round(band.norm * sh);
+         ctx.fillText(band.dB, sw+3, y-4);
+         //console.log("SP x="+sw+" y="+y+' '+dB);
+      }
+      spec.redraw_dB_scale = false;
+   }
+	
+	// Add line to spectrum image
+   ctx.fillStyle = 'hsl(180, 100%, 70%)';
+
+   for (x=0; x<sw; x++) {
+      z = color_index(wf_gnd? wf_gnd_value : data[x]);
+
+      switch (spec_filter) {
+      
+      case wf_sp_menu_e.IIR:
+         // non-linear spectrum filter from Rocky (Alex, VE3NEA)
+         // see http://www.dxatlas.com/rocky/advanced.asp
+         
+         var iir_gain = 1 - Math.exp(-sp_param * z/255);
+         if (iir_gain <= 0.01) iir_gain = 0.01;    // enforce minimum decay rate
+         var z1 = spec.avg[x];
+         z1 = z1 + iir_gain * (z - z1);
+         if (z1 > 255) z1 = 255; if (z1 < 0) z1 = 0;
+         z = spec.avg[x] = z1;
+         break;
+         
+      case wf_sp_menu_e.MMA:
+         if (z > 255) z = 255; if (z < 0) z = 0;
+         spec.avg[x] = ((spec.avg[x] * (sp_param-1)) + z) / sp_param;
+         z = spec.avg[x];
+         break;
+         
+      case wf_sp_menu_e.EMA:
+         if (z > 255) z = 255; if (z < 0) z = 0;
+         spec.avg[x] += (z - spec.avg[x]) / sp_param;
+         z = spec.avg[x];
+         break;
+         
+      case wf_sp_menu_e.OFF:
+      default:
+         if (z > 255) z = 255; if (z < 0) z = 0;
+         break;
+      }
+
+      if (z > spec.peak[x]) spec.peak[x] = z; 
+
+      // draw the spectrum based on the spectrum colormap which should
+      // color the 10 dB bands appropriately
+      y = Math.round((1 - z/255) * sh);
+
+      if (spectrum_slow_dev) {
+         ctx.fillRect(x,y, 1,sh-y);
+      } else {
+         // fixme: could optimize amount of data moved like smeter
+         ctx.putImageData(spec.colormap, x,0, 0,y, 1,sh-y+1);
+      }
+   }
+   
+   if (spec.peak_show) {
+      ctx.lineWidth = 1;
+      //ctx.fillStyle = 'yellow';
+      ctx.strokeStyle = 'yellow';
+      ctx.beginPath();
+      y = Math.round((1 - spec.peak[0]/255) * sh) - 1;
+      ctx.moveTo(0,y);
+      for (x=1; x<sw; x++) {
+         y = Math.round((1 - spec.peak[x]/255) * sh) - 1;
+         ctx.lineTo(x,y);
+      }
+      ctx.globalAlpha = 0.55;
+      //ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+   }
+}
+
+
+////////////////////////////////
+// waterfall
 ////////////////////////////////
 
 var waterfall_setup_done=0;
@@ -3292,129 +3565,9 @@ function waterfall_init()
 	waterfall_setup_done=1;
 }
 
-var dB_bands = [];
-
-/*
-var color_bands = [
-	"#993333",
-	"#9966ff", "#0066ff", "#00ccff", "#00ffcc", "#66ff33", "#ccff33", "#ffcc00", "#ff6600",
-	"#ff0066", "#ff33cc", "#ff00ff", "#ffffff"
-];
-var color_bands_dB = [
-	9999,
-	-120,	-110,	-100,	-90,	-80,	-70,	-60,	-50,
-	-40,	-30,	-20,	-10
-];
-*/
-
-var redraw_spectrum_dB_scale = false;
-var spectrum_colormap, spectrum_colormap_transparent;
-var spectrum_update = 0, spectrum_last_update = 0;
-var spectrum_image;
-
-function spectrum_init()
-{
-	spectrum_colormap = spectrum_ctx.createImageData(1, spectrum_canvas.height);
-	spectrum_colormap_transparent = spectrum_ctx.createImageData(1, spectrum_canvas.height);
-	update_maxmindb_sliders();
-	spectrum_dB_bands();
-	var spectrum_update_rate_Hz = kiwi_isMobile()? 10:10;  // limit update rate since rendering spectrum is currently expensive
-	//if (kiwi_isMobile()) alert('spectrum_update_rate_Hz = '+ spectrum_update_rate_Hz +' Hz');
-	setInterval(function() { spectrum_update++ }, 1000 / spectrum_update_rate_Hz);
-
-   spectrum_image = spectrum_ctx.createImageData(spectrum_canvas.width, spectrum_canvas.height)
-   
-   if (!wf.audioFFT_active && rx_chan >= wf_chans) {
-		// clear entire spectrum canvas to black
-		var sw = spectrum_canvas.width;
-		var sh = spectrum_canvas.height;
-		spectrum_ctx.fillStyle = "black";
-		spectrum_ctx.fillRect(0,0,sw,sh);
-		
-	   spectrum_ctx.font = "18px sans-serif";
-      spectrum_ctx.fillStyle = "white";
-      var text =
-         wf_chans?
-            ('Spectrum not available for rx'+ rx_chan)
-         :
-            'Spectrum not allowed on this Kiwi';
-      var tw = spectrum_ctx.measureText(text).width;
-      spectrum_ctx.fillText(text, sw/2-tw/2, sh/2);
-   }
-
-   kiwi_load_js(['extensions/colormap/colormap.js'], function() { colormap_init(); });
-}
-
-// based on WF max/min range, compute color banding each 10 dB for spectrum display
-function spectrum_dB_bands()
-{
-	dB_bands = [];
-	var i=0;
-	//var color_shift_dB = -8;	// give a little floor room to the spectrum colormap
-	var color_shift_dB = -12;	// give a little floor room to the spectrum colormap
-	var s_maxdb = maxdb, s_mindb = mindb;
-	var s_full_scale = s_maxdb - s_mindb;
-	var barmax = s_maxdb, barmin = s_mindb + color_shift_dB;
-	var rng = barmax - barmin;
-	rng = rng? rng : 1;	// can't be zero
-	//console.log("DB barmax="+barmax+" barmin="+barmin+" s_maxdb="+s_maxdb+" s_mindb="+s_mindb);
-	var last_norm = 0;
-
-	for (var dB = Math.floor(s_maxdb/10)*10; (s_mindb-dB) < 10; dB -= 10) {
-		var norm = 1 - ((dB - s_mindb) / s_full_scale);
-		var cmi = Math.round((dB - barmin) / rng * 255);
-		var color = color_map[cmi];
-		var color_transparent = color_map_transparent[cmi];
-		var color_name = '#'+(color >>> 8).toString(16).leadingZeros(6);
-		dB_bands[i] = { dB:dB, norm:norm, color:color_name };
-		
-		var ypos = function(norm) { return Math.round(norm * spectrum_canvas.height) }
-		for (var y = ypos(last_norm); y < ypos(norm); y++) {
-			for (var j=0; j<4; j++) {
-				spectrum_colormap.data[y*4+j] = ((color>>>0) >> ((3-j)*8)) & 0xff;
-				spectrum_colormap_transparent.data[y*4+j] = ((color_transparent>>>0) >> ((3-j)*8)) & 0xff;
-			}
-		}
-		//console.log("DB"+i+' '+dB+' norm='+norm+' last_norm='+last_norm+' cmi='+cmi+' '+color_name+' sh='+spectrum_canvas.height);
-		last_norm = norm;
-		
-		i++;
-	}
-
-	redraw_spectrum_dB_scale = true;
-	w3_call('colormap_aper');
-}
-
-function spectrum_tooltip_update(evt, clientX, clientY)
-{
-	var target = (evt.target == spectrum_dB || evt.currentTarget == spectrum_dB || evt.target == spectrum_dB_ttip || evt.currentTarget == spectrum_dB_ttip);
-	//console.log('CD '+ target +' x='+ clientX +' tgt='+ evt.target.id +' ctg='+ evt.currentTarget.id);
-	//if (kiwi_isMobile()) alert('CD '+ tf +' x='+ clientX +' tgt='+ evt.target.id +' ctg='+ evt.currentTarget.id);
-
-	if (target) {
-		//event_dump(evt, 'SPEC');
-		
-		// This is a little tricky. The tooltip text span must be included as an event target so its position will update when the mouse
-		// is moved upward over it. But doing so means when the cursor goes below the bottom of the tooltip container, the entire
-		// spectrum div in this case, having included the tooltip text span will cause it to be re-positioned again. And the hover
-		// doesn't go away unless the mouse is moved quickly. So to stop this we need to manually detect when the mouse is out of the
-		// tooltip container and stop updating the tooltip text position so the hover will end.
-		
-		if (clientY >= 0 && clientY < height_spectrum_canvas) {
-			spectrum_dB_ttip.style.left = px(clientX);
-			spectrum_dB_ttip.style.bottom = px(200 + 10 - clientY);
-			var dB = (((height_spectrum_canvas - clientY) / height_spectrum_canvas) * full_scale) + mindb;
-			spectrum_dB_ttip.innerHTML = dB.toFixed(0) +' dBm';
-		}
-	}
-}
-
 var waterfall_dont_scale=0;
 var need_maxmindb_update = false;
 var need_clear_wf_sp_avg = false;
-
-var need_clear_specavg = false, clear_specavg = true;
-var specavg = [], specpeak = [];
 
 var need_clear_wfavg = false, clear_wfavg = true;
 var wfavg = [];
@@ -3425,7 +3578,7 @@ var x_bin_server_last, wf_swallow = 0;
 
 function waterfall_add(data_raw, audioFFT)
 {
-   var x, y;
+   var x, y, z;
 	if (data_raw == null) return;
 	//var canvas = wf_canvases[0];
 	var canvas = wf_cur_canvas;
@@ -3454,9 +3607,9 @@ function waterfall_add(data_raw, audioFFT)
    
       // when caught up, clear spectrum using new data
       if (x_bin == x_bin_server && zoom_level == x_zoom_server) {
-         if (need_clear_wf_sp_avg || need_clear_specavg) clear_specavg = true;
+         if (need_clear_wf_sp_avg || spec.need_clear_avg) spec.clear_avg = true;
          if (need_clear_wf_sp_avg || need_clear_wfavg)   clear_wfavg = true;
-         need_clear_wf_sp_avg = need_clear_wfavg = need_clear_specavg = false;
+         need_clear_wf_sp_avg = need_clear_wfavg = spec.need_clear_avg = false;
       }
       
       if (flags & wf_flags.COMPRESSED) {
@@ -3487,150 +3640,20 @@ function waterfall_add(data_raw, audioFFT)
       }
    } else {
       data = data_raw;     // unsigned dB values, converted to signed later on
-      if (need_clear_specavg) {
-         clear_specavg = true;
-         need_clear_specavg = false;
+      if (spec.source_wf && spec.need_clear_avg) {
+         spec.clear_avg = true;
+         spec.need_clear_avg = false;
       }
    }
 	
-	var sw, sh, tw=25;
-	var need_spectrum_update = false;
-	
-	if (spectrum_display && spectrum_update != spectrum_last_update) {
-		spectrum_last_update = spectrum_update;
-		need_spectrum_update = true;
-
-		// clear entire spectrum canvas to black
-		sw = spectrum_canvas.width-tw;
-		sh = spectrum_canvas.height;
-		spectrum_ctx.fillStyle = "black";
-		spectrum_ctx.fillRect(0,0,sw,sh);
-		
-		// draw lines every 10 dB
-		// spectrum data will overwrite
-		spectrum_ctx.fillStyle = "lightGray";
-		for (var i=0; i < dB_bands.length; i++) {
-			var band = dB_bands[i];
-			y = Math.round(band.norm * sh);
-			spectrum_ctx.fillRect(0,y,sw,1);
-		}
-
-		if (clear_specavg) {
-			for (x=0; x<sw; x++) {
-				specavg[x] = color_index(data[x]);
-			}
-			clear_specavg = false;
-			spectrum_peak_clear = true;
-		}
-		
-		if (spectrum_peak_clear) {
-			for (x=0; x<sw; x++) {
-				specpeak[x] = 0;
-			}
-			spectrum_peak_clear = false;
-		}
-		
-		// if necessary, draw scale on right side
-		if (redraw_spectrum_dB_scale) {
-		
-			// set sidebar background where the dB text will go
-			/*
-			spectrum_ctx.fillStyle = "black";
-			spectrum_ctx.fillRect(sw,0,tw,sh);
-			*/
-			for (x = sw; x < spectrum_canvas.width; x++) {
-				spectrum_ctx.putImageData(spectrum_colormap_transparent, x, 0, 0, 0, 1, sh);
-			}
-			
-			// the dB scale text
-			spectrum_ctx.fillStyle = "white";
-			for (var i=0; i < dB_bands.length; i++) {
-				var band = dB_bands[i];
-				y = Math.round(band.norm * sh);
-				spectrum_ctx.fillText(band.dB, sw+3, y-4);
-				//console.log("SP x="+sw+" y="+y+' '+dB);
-			}
-			redraw_spectrum_dB_scale = false;
-		}
-	}
-	
-	// Add line to waterfall image			
-	
-	var oneline_image = canvas.oneline_image;
-	var z, color;
-	
-   // spectrum
-	if (spectrum_display && need_spectrum_update) {
-      spectrum_ctx.fillStyle = 'hsl(180, 100%, 70%)';
-
-		for (x=0; x<sw; x++) {
-         z = color_index(wf_gnd? wf_gnd_value : data[x]);
-
-         switch (spec_filter) {
-         
-         case wf_sp_menu_e.IIR:
-            // non-linear spectrum filter from Rocky (Alex, VE3NEA)
-            // see http://www.dxatlas.com/rocky/advanced.asp
-            
-            var iir_gain = 1 - Math.exp(-sp_param * z/255);
-            if (iir_gain <= 0.01) iir_gain = 0.01;    // enforce minimum decay rate
-            var z1 = specavg[x];
-            z1 = z1 + iir_gain * (z - z1);
-            if (z1 > 255) z1 = 255; if (z1 < 0) z1 = 0;
-            z = specavg[x] = z1;
-            break;
-            
-         case wf_sp_menu_e.MMA:
-            if (z > 255) z = 255; if (z < 0) z = 0;
-            specavg[x] = ((specavg[x] * (sp_param-1)) + z) / sp_param;
-            z = specavg[x];
-            break;
-            
-         case wf_sp_menu_e.EMA:
-            if (z > 255) z = 255; if (z < 0) z = 0;
-            specavg[x] += (z - specavg[x]) / sp_param;
-            z = specavg[x];
-            break;
-            
-         case wf_sp_menu_e.OFF:
-         default:
-            if (z > 255) z = 255; if (z < 0) z = 0;
-            break;
-         }
-
-         if (z > specpeak[x]) specpeak[x] = z; 
-
-         // draw the spectrum based on the spectrum colormap which should
-         // color the 10 dB bands appropriately
-         y = Math.round((1 - z/255) * sh);
-
-         if (spectrum_slow_dev) {
-            spectrum_ctx.fillRect(x,y, 1,sh-y);
-         } else {
-            // fixme: could optimize amount of data moved like smeter
-            spectrum_ctx.putImageData(spectrum_colormap, x,0, 0,y, 1,sh-y+1);
-         }
-		}
-		
-		if (spectrum_peak) {
-         spectrum_ctx.lineWidth = 1;
-	      //spectrum_ctx.fillStyle = 'yellow';
-         spectrum_ctx.strokeStyle = 'yellow';
-         spectrum_ctx.beginPath();
-         y = Math.round((1 - specpeak[0]/255) * sh) - 1;
-         spectrum_ctx.moveTo(0,y);
-         for (x=1; x<sw; x++) {
-            y = Math.round((1 - specpeak[x]/255) * sh) - 1;
-            spectrum_ctx.lineTo(x,y);
-         }
-         spectrum_ctx.globalAlpha = 0.55;
-         //spectrum_ctx.fill();
-         spectrum_ctx.stroke();
-         spectrum_ctx.globalAlpha = 1;
-      }
+	// spectrum
+	if (spec.source_wf && spec.update != spec.last_update) {
+	   spectrum_update(data);
 	}
 
    // waterfall
+	var oneline_image = canvas.oneline_image;
+
    for (x=0; x<w; x++) {
       z = color_index(wf_gnd? wf_gnd_value : data[x], wf.sqrt);
       
@@ -3669,7 +3692,7 @@ function waterfall_add(data_raw, audioFFT)
       }
 
       /*
-      color = color_map[z];
+      var color = color_map[z];
 
       for (var i=0; i<4; i++) {
          oneline_image.data[x*4+i] = ((color>>>0) >> ((3-i)*8)) & 0xff;
@@ -4318,7 +4341,7 @@ function color_index(db_value, sqrt)
 }
 
 
-// waterfall_color_index_max_min() and color_index_max_min() used by iq_display.js and integrate.js
+// waterfall_color_index_max_min() and color_index_max_min() used by iq_display.js and FFT.js
 
 function waterfall_color_index_max_min(db_value, maxdb, mindb)
 {
@@ -4330,7 +4353,7 @@ function waterfall_color_index_max_min(db_value, maxdb, mindb)
 	if (db_value > maxdb) db_value = maxdb;
 	var relative_value = db_value - mindb;
 	var fullscale = maxdb - mindb;
-	fullscale = fullscale? full_scale : 1;	// can't be zero
+	fullscale = fullscale? fullscale : 1;	// can't be zero
 	var value_percent = relative_value / fullscale;
 	
 	var i = value_percent * 255;
@@ -4346,7 +4369,7 @@ function color_index_max_min(value, maxdb, mindb)
 	if (value > maxdb) value = maxdb;
 	var relative_value = value - mindb;
 	var fullscale = maxdb - mindb;
-	fullscale = fullscale? full_scale : 1;	// can't be zero
+	fullscale = fullscale? fullscale : 1;	// can't be zero
 	var value_percent = relative_value / fullscale;
 	
 	var i = value_percent * 255;
@@ -4396,7 +4419,7 @@ function color_between(first, second, percent)
 // audio FFT
 ////////////////////////////////
 
-var fft = {
+var afft = {
    init: false,
    comp_1x: false,
    audioFFT_dynload: {},
@@ -4433,9 +4456,9 @@ function audioFFT_setup()
       return (0.5 - 0.5 * Math.cos((2 * Math.PI * i)/(nsamp-1)));
    };
 
-   for (i = 0; i < 512; i++) fft.window_512[i] = window(i, 512);
-   for (i = 0; i < 1024; i++) fft.window_1k[i] = window(i, 1024);
-   for (i = 0; i < 2048; i++) fft.window_2k[i] = window(i, 2048);
+   for (i = 0; i < 512; i++) afft.window_512[i] = window(i, 512);
+   for (i = 0; i < 1024; i++) afft.window_1k[i] = window(i, 1024);
+   for (i = 0; i < 2048; i++) afft.window_2k[i] = window(i, 2048);
 }
 
 function audioFFT_update()
@@ -4452,7 +4475,7 @@ function audioFFT_update()
          cv.ctx.fillStyle = "Black";
          cv.ctx.fillRect(0,0, cv.width,cv.height);
       });
-      need_clear_specavg = true;
+      spec.need_clear_avg = true;
       wf.audioFFT_clear_wf = false;
    
       // colormap auto
@@ -4466,113 +4489,113 @@ function wf_audio_FFT(audio_data, samps)
 {
    if (!wf.audioFFT_active) return;
    
-   if (!kiwi_load_js_polled(fft.audioFFT_dynload, ['pkgs/js/Ooura_FFT32.js'])) return;
+   if (!kiwi_load_js_polled(afft.audioFFT_dynload, ['pkgs/js/Ooura_FFT32.js'])) return;
    
    var i, j, k;
    
    //console.log('iq='+ audio_mode_iq +' comp='+ audio_compression +' samps='+ samps);
 
    var iq = (ext_get_mode() == 'iq');
-   if (!fft.init || iq != fft.iq || audio_compression != fft.comp) {
+   if (!afft.init || iq != afft.iq || audio_compression != afft.comp) {
       console.log('audio_FFT: SWITCHING iq='+ iq +' comp='+ audio_compression);
       var type;
       if (iq) {
          type = 'complex';
-         fft.size = 1024;
-         fft.offt = ooura32.FFT(fft.size, {"type":"complex", "radix":4});
-         fft.i_re = ooura32.vectorArrayFactory(fft.offt);
-         fft.i_im = ooura32.vectorArrayFactory(fft.offt);
+         afft.size = 1024;
+         afft.offt = ooura32.FFT(afft.size, {"type":"complex", "radix":4});
+         afft.i_re = ooura32.vectorArrayFactory(afft.offt);
+         afft.i_im = ooura32.vectorArrayFactory(afft.offt);
       } else {
          type = 'real';
-         fft.size = audio_compression? (fft.comp_1x? 2048 : 1024) : 512;
-         fft.offt = ooura32.FFT(fft.size, {"type":"real", "radix":4});
-         fft.i_re = ooura32.scalarArrayFactory(fft.offt);
+         afft.size = audio_compression? (afft.comp_1x? 2048 : 1024) : 512;
+         afft.offt = ooura32.FFT(afft.size, {"type":"real", "radix":4});
+         afft.i_re = ooura32.scalarArrayFactory(afft.offt);
       }
-      fft.o_re = ooura32.vectorArrayFactory(fft.offt);
-      fft.o_im = ooura32.vectorArrayFactory(fft.offt);
-      //fft.scale = 10.0 * 2.0 / (fft.size * fft.size * fft.CUTESDR_MAX_VAL * fft.CUTESDR_MAX_VAL);
-      // FIXME: What's the correct value to use here? Adding the third fft.size was just arbitrary.
-      fft.scale = 10.0 * 2.0 / (fft.size * fft.size * fft.size * fft.CUTESDR_MAX_VAL * fft.CUTESDR_MAX_VAL);
+      afft.o_re = ooura32.vectorArrayFactory(afft.offt);
+      afft.o_im = ooura32.vectorArrayFactory(afft.offt);
+      //afft.scale = 10.0 * 2.0 / (afft.size * afft.size * afft.CUTESDR_MAX_VAL * afft.CUTESDR_MAX_VAL);
+      // FIXME: What's the correct value to use here? Adding the third afft.size was just arbitrary.
+      afft.scale = 10.0 * 2.0 / (afft.size * afft.size * afft.size * afft.CUTESDR_MAX_VAL * afft.CUTESDR_MAX_VAL);
       
-      for (i = 0; i < 1024; i++) fft.pwr_dB[i] = 0;
-      fft.iq = iq;
-      fft.comp = audio_compression;
-      fft.init = true;
+      for (i = 0; i < 1024; i++) afft.pwr_dB[i] = 0;
+      afft.iq = iq;
+      afft.comp = audio_compression;
+      afft.init = true;
    }
 
-   if (fft.iq) {
+   if (afft.iq) {
       for (i = 0, j = 0; i < 1024; i += 2, j++) {
-         fft.i_re[j] = audio_data[i] * fft.window_512[j];
-         fft.i_im[j] = audio_data[i+1] * fft.window_512[j];
+         afft.i_re[j] = audio_data[i] * afft.window_512[j];
+         afft.i_im[j] = audio_data[i+1] * afft.window_512[j];
       }
-      fft.offt.fft(fft.offt, fft.i_re.buffer, fft.i_im.buffer, fft.o_re.buffer, fft.o_im.buffer);
+      afft.offt.fft(afft.offt, afft.i_re.buffer, afft.i_im.buffer, afft.o_re.buffer, afft.o_im.buffer);
       for (j = 0, k = 512; j < 256; j++, k++) {
-         var re = fft.o_re[j], im = fft.o_im[j];
+         var re = afft.o_re[j], im = afft.o_im[j];
          var pwr = re*re + im*im;
-         var dB = 10.0 * Math.log10(pwr * fft.scale + 1e-30);
+         var dB = 10.0 * Math.log10(pwr * afft.scale + 1e-30);
          dB = Math.round(255 + dB);
-         fft.pwr_dB[k] = dB;
+         afft.pwr_dB[k] = dB;
       }
       for (j = 256, k = 256; j < 512; j++, k++) {
-         var re = fft.o_re[j], im = fft.o_im[j];
+         var re = afft.o_re[j], im = afft.o_im[j];
          var pwr = re*re + im*im;
-         var dB = 10.0 * Math.log10(pwr * fft.scale + 1e-30);
+         var dB = 10.0 * Math.log10(pwr * afft.scale + 1e-30);
          dB = Math.round(255 + dB);
-         fft.pwr_dB[k] = dB;
+         afft.pwr_dB[k] = dB;
       }
-      waterfall_queue.push({ data:fft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
+      waterfall_queue.push({ data:afft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
    } else {
       if (audio_compression) {
-         if (fft.comp_1x) {
+         if (afft.comp_1x) {
             // 2048 real samples done as 1x 2048-pt FFT
             for (i = 0; i < 2048; i++) {
-               fft.i_re[i] = audio_data[i] * fft.window_2k[i];
+               afft.i_re[i] = audio_data[i] * afft.window_2k[i];
             }
-            fft.offt.fft(fft.offt, fft.i_re.buffer, fft.o_re.buffer, fft.o_im.buffer);
+            afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
             for (j = 0, k = 256; j < 1024; j++) {
-               var re = fft.o_re[j], im = fft.o_im[j];
+               var re = afft.o_re[j], im = afft.o_im[j];
                var pwr = re*re + im*im;
-               fft.dBi[j&1] = Math.round(255 + (10.0 * Math.log10(pwr * fft.scale + 1e-30)));
+               afft.dBi[j&1] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
                if (j & 1) {
-                  fft.pwr_dB[k] = Math.max(fft.dBi[0], fft.dBi[1]);
+                  afft.pwr_dB[k] = Math.max(afft.dBi[0], afft.dBi[1]);
                   k++;
                }
             }
          } else {
             // 2048 real samples done as 2x 1024-pt FFTs
             for (i = 0; i < 1024; i++) {
-               fft.i_re[i] = audio_data[i] * fft.window_1k[i];
+               afft.i_re[i] = audio_data[i] * afft.window_1k[i];
             }
-            fft.offt.fft(fft.offt, fft.i_re.buffer, fft.o_re.buffer, fft.o_im.buffer);
+            afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
             for (j = 0, k = 256; j < 512; j++, k++) {
-               var re = fft.o_re[j], im = fft.o_im[j];
+               var re = afft.o_re[j], im = afft.o_im[j];
                var pwr = re*re + im*im;
-               fft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * fft.scale + 1e-30)));
+               afft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
             }
-            waterfall_queue.push({ data:fft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
+            waterfall_queue.push({ data:afft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
       
             for (i = 1024; i < 2048; i++) {
-               fft.i_re[i] = audio_data[i] * fft.window_2k[i-1024];
+               afft.i_re[i] = audio_data[i] * afft.window_2k[i-1024];
             }
-            fft.offt.fft(fft.offt, fft.i_re.buffer, fft.o_re.buffer, fft.o_im.buffer);
+            afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
             for (j = 0, k = 256; j < 512; j++, k++) {
-               var re = fft.o_re[j], im = fft.o_im[j];
+               var re = afft.o_re[j], im = afft.o_im[j];
                var pwr = re*re + im*im;
-               fft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * fft.scale + 1e-30)));
+               afft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
             }
          }
-         waterfall_queue.push({ data:fft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
+         waterfall_queue.push({ data:afft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
       } else {
          for (i = 0; i < 512; i++) {
-            fft.i_re[i] = audio_data[i] * fft.window_512[i];
+            afft.i_re[i] = audio_data[i] * afft.window_512[i];
          }
-         fft.offt.fft(fft.offt, fft.i_re.buffer, fft.o_re.buffer, fft.o_im.buffer);
+         afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
          for (j = 0, k = 256; j < 256; j++, k += 2) {
-            var re = fft.o_re[j], im = fft.o_im[j];
+            var re = afft.o_re[j], im = afft.o_im[j];
             var pwr = re*re + im*im;
-            fft.pwr_dB[k] = fft.pwr_dB[k+1] = Math.round(255 + (10.0 * Math.log10(pwr * fft.scale + 1e-30)));
+            afft.pwr_dB[k] = afft.pwr_dB[k+1] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
          }
-         waterfall_queue.push({ data:fft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
+         waterfall_queue.push({ data:afft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
       }
    }
 }
@@ -4581,26 +4604,26 @@ function wf_audio_FFT(audio_data, samps)
          // 2048 real samples done as 2x 1024-pt FFTs
          
          for (i = 0; i < 1024; i++) {
-            fft.i_re[i] = audio_data[i] * fft.window_1k[i];
+            afft.i_re[i] = audio_data[i] * afft.window_1k[i];
          }
-         fft.offt.fft(fft.offt, fft.i_re.buffer, fft.o_re.buffer, fft.o_im.buffer);
+         afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
          for (j = 0, k = 256; j < 512; j++, k++) {
-            var re = fft.o_re[j], im = fft.o_im[j];
+            var re = afft.o_re[j], im = afft.o_im[j];
             var pwr = re*re + im*im;
-            fft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * fft.scale + 1e-30)));
+            afft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
          }
-         waterfall_queue.push({ data:fft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
+         waterfall_queue.push({ data:afft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
    
          for (i = 1024; i < 2048; i++) {
-            fft.i_re[i] = audio_data[i] * fft.window_1k[i-1024];
+            afft.i_re[i] = audio_data[i] * afft.window_1k[i-1024];
          }
-         fft.offt.fft(fft.offt, fft.i_re.buffer, fft.o_re.buffer, fft.o_im.buffer);
+         afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
          for (j = 0, k = 256; j < 512; j++, k++) {
-            var re = fft.o_re[j], im = fft.o_im[j];
+            var re = afft.o_re[j], im = afft.o_im[j];
             var pwr = re*re + im*im;
-            fft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * fft.scale + 1e-30)));
+            afft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
          }
-         waterfall_queue.push({ data:fft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
+         waterfall_queue.push({ data:afft.pwr_dB, audioFFT:1, seq:0, spacing:0 });
 */
 
 
@@ -4846,12 +4869,15 @@ function modeset_update_ui(mode)
 	if (el && el.style) el.style.color = "lime";
 	owrx.last_mode_el = el;
 
-	squelch_setup(0);
+	squelch_setup(toggle_e.FROM_COOKIE);
 	writeCookie('last_mode', mode);
 	freq_link_update();
 
 	// disable compression button in iq mode
-	w3_set_props('id-button-compression', 'w3-disabled', (mode == 'iq'));
+   var els = w3_els('id-button-compression');
+   for (var i = 0; i < els.length; i++) {
+	   w3_set_props(els[i], 'w3-disabled', (mode == 'iq'));
+	}
 }
 
 // delay the UI updates called from the audio path until the waterfall UI setup is done
@@ -6573,7 +6599,7 @@ function keyboard_shortcut(key, mod, ctlAlt)
    
    }
    
-   if (action && !shortcut.nav_click) keyboard_shortcut_nav('users');
+   //if (action && !shortcut.nav_click) keyboard_shortcut_nav('users');
 
    ignore_next_keyup_event = true;     // don't trigger e.g. freqset_keyup()/freqset_complete()
 }
@@ -6812,8 +6838,8 @@ function panels_setup()
          ),
          w3_div('|width:8%|title="mute"',
             // from https://jsfiddle.net/cherrador/jomgLb2h since fa doesn't have speaker-slash
-            w3_div('id-mute-no fa-stack|width:100%;',
-               w3_icon('', 'fa-volume-up fa-stack-2x fa-nudge-right-OFF', 24, 'lime', 'toggle_or_set_mute')
+            w3_div('id-mute-no fa-stack|width:100%; color:lime',
+               w3_icon('', 'fa-volume-up fa-stack-2x fa-nudge-right-OFF', 24, 'inherit', 'toggle_or_set_mute')
             ),
             w3_div('id-mute-yes fa-stack w3-hide|width:100%;color:magenta;',  // hsl(340, 82%, 60%) w3-text-pink but lighter
                w3_icon('', 'fa-volume-off fa-stack-2x fa-nudge-left', 24, '', 'toggle_or_set_mute'),
@@ -6928,13 +6954,13 @@ function panels_setup()
       w3_col_percent('w3-valign/class-slider',
          w3_text(optbar_prefix_color, 'WF max'), 19,
          '<input id="id-input-maxdb" type="range" min="-100" max="20" value="'+ maxdb
-            +'" step="1" onchange="setmaxdb(1,this.value)" oninput="setmaxdb(0, this.value)">', 60,
+            +'" step="1" onchange="setmaxdb(1,this.value)" oninput="setmaxdb(0,this.value)">', 60,
          w3_div('id-field-maxdb class-slider'), 19
       ) +
       w3_col_percent('w3-valign/class-slider',
          w3_text(optbar_prefix_color, 'WF min'), 19,
          '<input id="id-input-mindb" type="range" min="-190" max="-30" value="'+ mindb
-            +'" step="1" onchange="setmindb(1,this.value)" oninput="setmindb(0, this.value)">', 60,
+            +'" step="1" onchange="setmindb(1,this.value)" oninput="setmindb(0,this.value)">', 60,
          w3_div('id-field-mindb class-slider'), 19
       );
 
@@ -6942,13 +6968,13 @@ function panels_setup()
       w3_col_percent('w3-valign/class-slider',
          w3_text(optbar_prefix_color, 'WF ceil'), 19,
          '<input id="id-input-ceildb" type="range" min="-30" max="30" value="'+ wf.auto_ceil.val
-            +'" step="5" onchange="setceildb(1,this.value)" oninput="setceildb(0, this.value)">', 60,
+            +'" step="5" onchange="setceildb(1,this.value)" oninput="setceildb(0,this.value)">', 60,
          w3_div('id-field-ceildb class-slider'), 19
       ) +
       w3_col_percent('w3-valign/class-slider',
          w3_text(optbar_prefix_color, 'WF floor'), 19,
          '<input id="id-input-floordb" type="range" min="-30" max="30" value="'+ wf.auto_floor.val
-            +'" step="5" onchange="setfloordb(1,this.value)" oninput="setfloordb(0, this.value)">', 60,
+            +'" step="5" onchange="setfloordb(1,this.value)" oninput="setfloordb(0,this.value)">', 60,
          w3_div('id-field-floordb class-slider'), 19
       );
 
@@ -7016,26 +7042,38 @@ function panels_setup()
          w3_select_conditional('|color:red', '', 'filter', 'nr_algo', 0, nr_algo_s, 'nr_algo_cb'), 23,
 			w3_div('w3-hcenter', w3_div('class-button||onclick="extint_open(\'noise_filter\'); freqset_select();"', 'More')), 15
 		) +
-		w3_col_percent('w3-valign/class-slider',
+		w3_col_percent('id-vol w3-valign w3-margin-T-4 w3-hide/class-slider',
+			w3_text(optbar_prefix_color, 'Volume'), 17,
+			'<input id="id-input-volume" type="range" min="0" max="200" value="'+ volume +'" step="1" onchange="setvolume(1, this.value)" oninput="setvolume(0, this.value)">', 50,
+         '&nbsp;', 8,
+         w3_select('|color:red', '', 'de-emp', 'de_emphasis', de_emphasis, de_emphasis_s, 'de_emp_cb')
+		) +
+		w3_col_percent('id-vol-comp w3-valign w3-margin-T-4/class-slider',
 			w3_text(optbar_prefix_color, 'Volume'), 17,
 			'<input id="id-input-volume" type="range" min="0" max="200" value="'+ volume +'" step="1" onchange="setvolume(1, this.value)" oninput="setvolume(0, this.value)">', 40,
          w3_select('|color:red', '', 'de-emp', 'de_emphasis', de_emphasis, de_emphasis_s, 'de_emp_cb'), 28,
-		   w3_button('id-button-compression class-button w3-hcenter||title="compression"', 'Comp', 'toggle_or_set_compression'), 15
+		   w3_button('id-button-compression class-button w3-hcenter||title="compression"', 'Comp', 'toggle_or_set_compression')
 		) +
       w3_col_percent('id-pan w3-valign w3-hide/class-slider',
          w3_text(optbar_prefix_color, 'Pan'), 17,
-         '<input id="id-pan-value" type="range" min="-1" max="1" value="'+ pan +'" step="0.01" onchange="setpan(1,this.value)" oninput="setpan(0, this.value)">', 50,
-         w3_div('id-pan-field'), 15
+         '<input id="id-pan-value" type="range" min="-1" max="1" value="'+ pan +'" step="0.01" onchange="setpan(1,this.value)" oninput="setpan(0,this.value)">', 50,
+         '&nbsp;', 3, w3_div('id-pan-field'), 8, '&nbsp;', 7,
+		   w3_button('id-button-compression class-button w3-hcenter||title="compression"', 'Comp', 'toggle_or_set_compression')
       ) +
-      w3_col_percent('id-squelch w3-valign w3-hide/class-slider',
+      w3_col_percent('id-squelch w3-valign/class-slider',
 			w3_text('id-squelch-label', 'Squelch'), 17,
-         '<input id="id-squelch-value" type="range" min="0" max="99" value="'+ squelch +'" step="1" onchange="setsquelch(1,this.value)" oninput="setsquelch(1, this.value)">', 50,
-         w3_div('id-squelch-field class-slider'), 30
+         w3_slider('', '', 'squelch-value', squelch, 0, 99, 1, 'set_squelch_cb'), 50,
+         '&nbsp;', 3, w3_div('id-squelch-field class-slider'), 14,
+         w3_select('w3-hide|color:red', '', 'tail', 'squelch_tail', squelch_tail, squelch_tail_s, 'squelch_tail_cb')
 	   ) +
       w3_col_percent('id-sam-carrier-container w3-valign w3-hide/class-slider',
          w3_text(optbar_prefix_color, 'SAM'), 17,
-         w3_text('id-sam-carrier')
+         w3_text('id-sam-carrier'), 42,
+         '&nbsp;', 8,
+         w3_select('id-chan-null w3-hide|color:red', '', 'channel null', 'owrx.chan_null', owrx.chan_null, owrx.chan_null_s, 'chan_null_cb')
       );
+      
+      //w3_button('id-button-test class-button w3-hcenter w3-hide', 'Test', 'toggle_or_set_test')
 
    kiwi_load_js_dir('extensions/', ['noise_blank/noise_blank.js', 'noise_filter/noise_filter.js'],
       function() {
@@ -7044,8 +7082,8 @@ function panels_setup()
       }
    );
 
-   w3_color('id-button-mute', muted? 'lime':'white');
    //toggle_or_set_test(0);
+   //w3_show('id-button-test', dbgUs);
    //toggle_or_set_audio(toggle_e.FROM_COOKIE | toggle_e.SET, 1);
    toggle_or_set_compression(toggle_e.FROM_COOKIE | toggle_e.SET, 1);
 	squelch_setup(toggle_e.FROM_COOKIE);
@@ -7168,7 +7206,7 @@ function panels_setup()
 	      w3_text('',
             (admin_email? '<a href="javascript:sendmail(\''+ admin_email +'\');">Owner/Admin</a> | ' : '') +
             '<a href="http://kiwisdr.com" target="_blank">KiwiSDR</a> ' +
-            '| <a href="http://valentfx.com/vanilla/discussions" target="_blank">Forum</a> ' +
+            '| <a href="http://forum.kiwisdr.com/discussions" target="_blank">Forum</a> ' +
             '| <a href="https://kiwiirc.com/client/chat.freenode.net/#kiwisdr" target="_blank">Chat</a> '
          )
 		) +
@@ -7342,7 +7380,7 @@ function wf_sp_menu_cb(path, idx, first, param)    // param indicated which menu
    toggle_or_set_wf_sp_button(toggle_e.SET, wf_sp_which);
 	writeCookie(wf_sp_which? 'last_wf_filter':'last_spec_filter', f_val.toString());
 
-	if (wf_sp_which) need_clear_wfavg = true; else need_clear_specavg = true;
+	if (wf_sp_which) need_clear_wfavg = true; else spec.need_clear_avg = true;
    freqset_select();
    //console.log('wf_sp_menu_cb EXIT path='+ path +' wf_filter='+ wf_filter +' wf_param='+ wf_param +' spec_filter='+ spec_filter +' sp_param='+ sp_param);
 }
@@ -7478,7 +7516,7 @@ function setwfspeed(done, str)
    if (done) freqset_select();
 }
 
-function setmaxdb(done, str)
+function setmaxdb(done, str, no_freqset_select)
 {
 	var strdb = parseFloat(str);
 	var write_cookies = false;
@@ -7505,7 +7543,7 @@ function setmaxdb(done, str)
       }
    }
 	
-	setmaxmindb(done, write_cookies);
+	setmaxmindb(done, write_cookies, no_freqset_select);
 }
 
 function incr_mindb(done, incr)
@@ -7517,7 +7555,7 @@ function incr_mindb(done, incr)
    setmindb(done, val.toFixed(0));
 }
 
-function setmindb(done, str)
+function setmindb(done, str, no_freqset_select)
 {
 	var strdb = parseFloat(str);
    //console.log('setmindb strdb='+ strdb +' maxdb='+ maxdb +' mindb='+ mindb +' done='+ done);
@@ -7548,10 +7586,10 @@ function setmindb(done, str)
    }
 
 	mindb_un = mindb + zoomCorrection();
-	setmaxmindb(done, write_cookies);
+	setmaxmindb(done, write_cookies, no_freqset_select);
 }
 
-function setmaxmindb(done, write_cookies)
+function setmaxmindb(done, write_cookies, no_freqset_select)
 {
 	full_scale = maxdb - mindb;
 	full_scale = full_scale? full_scale : 1;	// can't be zero
@@ -7560,7 +7598,8 @@ function setmaxmindb(done, write_cookies)
 	need_clear_wf_sp_avg = true;
 
    if (done) {
-   	freqset_select();
+      if (no_freqset_select != true)
+   	   freqset_select();
    	if (write_cookies) {
    	   writeCookie(wf.audioFFT_active? 'last_AF_max_dB' : 'last_max_dB', maxdb.toFixed(0));
    	   writeCookie(wf.audioFFT_active? 'last_AF_min_dB' : 'last_min_dB', mindb_un.toFixed(0));	// need to save the uncorrected (z0) value
@@ -7667,19 +7706,16 @@ function toggle_or_set_slow_dev(set, val)
 	   setwfspeed(1, WF_SPEED_MED);
 }
 
-var spectrum_peak = 0;
-var spectrum_peak_clear = false;
-
 function toggle_or_set_spec_peak(set, val)
 {
 	if (isNumber(set))
-		spectrum_peak = kiwi_toggle(set, val, spectrum_peak, 'last_spec_peak');
+		spec.peak_show = kiwi_toggle(set, val, spec.peak_show, 'last_spec_peak');
 	else
-		spectrum_peak ^= 1;
-	if (spectrum_peak) spectrum_peak_clear = true;
-	w3_color('id-button-spec-peak', spectrum_peak? 'lime':'white');
+		spec.peak_show ^= 1;
+	if (spec.peak_show) spec.peak_clear = true;
+	w3_color('id-button-spec-peak', spec.peak_show? 'lime':'white');
 	freqset_select();
-	writeCookie('last_spec_peak', spectrum_peak.toString());
+	writeCookie('last_spec_peak', spec.peak_show.toString());
 }
 
 
@@ -7713,7 +7749,6 @@ function toggle_or_set_mute(set)
    //console.log('toggle_or_set_mute set='+ set +' muted='+ muted);
    w3_show_hide('id-mute-no', !muted);
    w3_show_hide('id-mute-yes', muted);
-   w3_color('id-button-mute', muted? 'lime':'white');
    f_volume = muted? 0 : volume/100;
    freqset_select();
 }
@@ -7736,6 +7771,7 @@ function setpan(done, str)
    //console.log('pan='+ pan.toFixed(1));
    if (pan > -0.1 && pan < +0.1) pan = 0;    // snap-to-zero interval
    w3_set_value('id-pan-value', pan);
+   w3_color('id-pan-value', null, (pan < 0)? 'rgba(255,0,0,0.3)' : (pan? 'rgba(0,255,0,0.2)':''));
    w3_set_innerHTML('id-pan-field', pan? ((Math.abs(pan)*100).toFixed(0) +' '+ ((pan < 0)? 'L':'R')) : 'L=R');
    audio_set_pan(pan);
    if (done) {
@@ -7748,6 +7784,8 @@ function setpan(done, str)
 function audio_panner_ui_init()
 {
    if (audio_panner) {
+      w3_hide('id-vol-comp');
+      w3_show_block('id-vol');
       w3_show_block('id-pan');
       setpan(1, pan);
    }
@@ -7763,7 +7801,7 @@ function toggle_or_set_hide_topbar(set)
 	   hide_topbar = (hide_topbar + 1) & 3;
 	   
 	   // there is no top container to hide if data container or spectrum in use
-      if ((hide_topbar & 1) && (extint.using_data_container || spectrum_display))
+      if ((hide_topbar & 1) && (extint.using_data_container || spec.source_wf || spec.source_audio))
 	      hide_topbar = (hide_topbar + 1) & 3;
 	}
    //console.log('toggle_or_set_hide_topbar set='+ set +' hide_topbar='+ hide_topbar);
@@ -7805,13 +7843,13 @@ function toggle_or_set_rec(set)
    recording = !recording;
    //console.log('toggle_or_set_rec set=' + set + ' recording=' + recording);
    var el1 = w3_el('id-rec1');
-   var el2 = w3_el('id-rec2');
+   w3_show_hide('id-rec2', recording);
    if (recording) {
       w3_remove_then_add(el1, 'fa-circle', 'fa-circle-o-notch fa-spin');
-      w3_remove(el2, 'w3-hide');
    } else {
       w3_remove_then_add(el1, 'fa-circle-o-notch fa-spin', 'fa-circle');
-      w3_add(el2, 'w3-hide');
+      w3_remove_then_add('id-rec1', 'w3-text-white', 'w3-text-pink');
+      w3_remove_then_add('id-rec2', 'w3-text-white', 'w3-text-pink');
    }
    if (recording) {
       // Start recording. This is a 'window' property, so audio_recv(), where the
@@ -7864,36 +7902,95 @@ function toggle_or_set_rec(set)
 }
 
 // squelch
-var squelch_state = 0;
+var squelched = 0;
 var squelch = 0;
+var squelch_tail = 0;
+var squelch_tail_s = [ '0', '.2s', '.5s', '1s', '2s' ];
+var squelch_tail_v = [ 0, 0.2, 0.5, 1, 2 ];
 
-function squelch_setup(flags)
+function squelch_action(sq)
 {
-   if (flags & toggle_e.FROM_COOKIE) { 
-      var sq = readCookie('last_squelch');
-      if (sq != null) {
-         squelch = sq;
-         w3_set_value('id-squelch-value', sq);
-         setsquelch(1, sq);
-      }
-   }
-	if (cur_mode == 'nbfm') {
-		w3_el('id-squelch-label').style.color = squelch_state? 'lime':'white';
-		w3_el('id-squelch-field').innerHTML = squelch;
-		w3_show_block('id-squelch');
-   } else {
-		w3_hide('id-squelch');
+   squelched = sq;
+   var sq_color = squelched? 'white':'lime';
+   w3_color('id-squelch-label', sq_color);
+   w3_color('id-mute-no', sq_color);
+   
+   if (recording) {
+      sq_color = squelched? 'w3-text-white':'w3-text-pink';
+      w3_remove_then_add('id-rec1', 'fa-spin', squelched? '':'fa-spin');
+      w3_remove_then_add('id-rec1', 'w3-text-white w3-text-pink', sq_color);
+      w3_remove_then_add('id-rec2', 'w3-text-white w3-text-pink', sq_color);
    }
 }
 
-function setsquelch(done, str)
+function squelch_setup(flags)
 {
-   squelch = parseFloat(str);
-	w3_el('id-squelch-field').innerHTML = str;
-   if (done) {
-      snd_send("SET squelch="+ squelch.toFixed(0) +' max='+ squelch_threshold.toFixed(0));
-      writeCookie('last_squelch', str);
+   var nbfm = (cur_mode == 'nbfm');
+   
+   if (flags & toggle_e.FROM_COOKIE) { 
+      var sq = readCookie('last_squelch'+ (nbfm? '':'_efm'));
+      squelch = sq? +sq : 0;
+      //console.log('$squelch_setup nbfm='+ nbfm +' sq='+ sq +' squelch='+ squelch);
+      w3_el('id-squelch-value').max = nbfm? 99:40;
+      w3_set_value('id-squelch-value', squelch);
    }
+   
+   set_squelch_cb('', squelch, true, false, true);
+
+	if (nbfm) {
+	   squelch_action(squelched);
+   } else {
+      w3_color('id-mute-no', 'lime');
+   }
+
+   //w3_show_hide('id-sq-thresh', !nbfm);
+   w3_show_hide('id-squelch_tail', !nbfm);
+   w3_show_hide('id-squelch', cur_mode != 'drm');
+}
+
+function send_squelch()
+{
+   var nbfm = (cur_mode == 'nbfm');
+   snd_send("SET squelch="+ squelch.toFixed(0) +' param='+ (nbfm? squelch_threshold : squelch_tail_v[squelch_tail]).toFixed(2));
+}
+
+function set_squelch_cb(path, str, done, first, no_write_cookie)
+{
+   var nbfm = (cur_mode == 'nbfm');
+   //console.log('$set_squelch_cb path='+ path +' str='+ str +' done='+ done +' first='+ first +' no_write_cookie='+ no_write_cookie +' nbfm='+ nbfm);
+   if (first) return;
+
+   squelch = parseFloat(str);
+	w3_el('id-squelch-field').innerHTML = squelch? (str + (nbfm? '':' dB')) : 'off';
+   w3_color('id-squelch-value', null, squelch? '' : 'rgba(255,0,0,0.3)');
+
+   if (done) {
+      send_squelch();
+      if (no_write_cookie != true) {
+         writeCookie('last_squelch'+ (nbfm? '':'_efm'), str);
+      }
+      freqset_select();
+   }
+}
+
+function squelch_tail_cb(path, val, first)
+{
+   //console.log('squelch_tail_cb path='+ path +' val='+ val +' first='+ first);
+   if (first) return;
+   squelch_tail = +val;
+   send_squelch();
+}
+
+function chan_null_cb(path, val, first)
+{
+   //console.log('$chan_null_cb path='+ path +' val='+ val +' first='+ first);
+   if (first) {
+      //console.log('$cur_mode='+ cur_mode);
+	   w3_show_hide('id-chan-null', cur_mode == 'sam');
+      return;
+   }
+   owrx.chan_null = +val;
+   ext_set_mode(cur_mode);
 }
 
 // less buffering and compression buttons
@@ -7936,8 +8033,9 @@ function toggle_or_set_compression(set, val)
 	else
 		btn_compression ^= 1;
 
-   var el = w3_el('id-button-compression');
-   if (el) {
+   var els = w3_els('id-button-compression');
+   for (var i = 0; i < els.length; i++) {
+      var el = els[i];
       el.style.color = btn_compression? 'lime':'white';
       el.style.visibility = 'visible';
       freqset_select();
@@ -8131,24 +8229,24 @@ function freq_up_down_cb(path, up)
 	w3_field_select('id-freq-input', { focus_only:1 });
 }
 
-var spectrum_display = false;
-
 function toggle_or_set_spec(set, val)
 {
 	if (isNumber(set) && (set & toggle_e.SET)) {
-		spectrum_display = val;
+		spec.source_wf = val;
 	} else {
-		spectrum_display ^= 1;
+		spec.source_wf ^= 1;
 	}
 
 	// close the extension first if it's using the data container and the spectrum button is pressed
-	if (extint.using_data_container && spectrum_display) {
+	if (extint.using_data_container && spec.source_wf) {
+	   //console.log('toggle_or_set_spec: extint_panel_hide()..');
 		extint_panel_hide();
 	}
 
-	html('id-button-spectrum').style.color = spectrum_display? 'lime':'white';
-	w3_show_hide('id-spectrum-container', spectrum_display);
-	w3_show_hide('id-top-container', !spectrum_display);
+   //console.log('toggle_or_set_spec: source_wf='+ spec.source_wf);
+	html('id-button-spectrum').style.color = spec.source_wf? 'lime':'white';
+	w3_show_hide('id-spectrum-container', spec.source_wf);
+	w3_show_hide('id-top-container', !spec.source_wf);
    freqset_select();
 }
 
@@ -8609,21 +8707,15 @@ function owrx_msg_cb(param, ws)
 		case "fft_mode":
 			kiwi_fft_mode();
 			break;
-		case "squelch":
-			squelch_state = parseInt(param[1]);
-			var el = w3_el('id-squelch-label');
-			//console.log('SQ '+ squelch_state);
-			if (el) el.style.color = squelch_state? 'lime':'white';
-			break;
 		case "maxdb":
 		   wf.auto_maxdb = +param[1];
-         setmaxdb(1, wf.auto_maxdb);
+         setmaxdb(1, wf.auto_maxdb, true);
 			break;
 		case "mindb":
 		   wf.auto_mindb = +param[1];
-         setmindb(1, wf.auto_mindb);
+         setmindb(1, wf.auto_mindb, true);
 	      w3_call('colormap_maxmin_cb');
-         update_maxmindb_sliders();
+         update_maxmindb_sliders(true);
 			break;
 		default:
 		   return false;

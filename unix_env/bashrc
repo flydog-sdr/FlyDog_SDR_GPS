@@ -119,6 +119,8 @@ alias lt="function _lt () { /bin/ls \$COLOR -lath \$* ; } ; _lt"
 alias ldt="function _ldt () { /bin/ls \$COLOR -ladth \$* ; } ; _ldt"
 
 # grep
+# to grep with embedded spaces on Debian now need: g 'text1[[:space:]]text2'
+#
 d_gr_exclude="--exclude-dir .git --exclude-dir .svn --exclude-dir ./web/pkgs_maps/leaflet ${no_grep}"
 alias grep="grep \$COLOR"
 alias gr="grep -i \$COLOR"
@@ -156,7 +158,7 @@ alias gdi="git diff"
 alias gst="git status"
 alias gsh="git show"
 alias grem="git remote -v"
-alias gclone="function _gclone () { git clone https://github.com/RaspSDR/\$1.git ; } ; _gclone"
+alias gclone="function _gclone () { git clone https://github.com/flydog-sdr/\$1.git ; } ; _gclone"
 
 # git commits
 # current commit
@@ -272,7 +274,7 @@ alias cm="while true; do date; ct; cf; vmstat; sleep 2; done"
 alias opp="omapconf show opp"
 
 # BBB
-alias dog="echo Debian `cat /etc/debian_version`; more /etc/dogtag; uname -a"
+alias dog="echo Debian `cat /etc/debian_version`; more /etc/dogtag; uname -a; lsb_release -ds"
 alias tag=dog
 alias slots7="cat /sys/devices/bone_capemgr.*/slots"
 alias slots8="cat /sys/devices/platform/bone_capemgr/slots"
@@ -313,7 +315,7 @@ alias mu="make users"
 alias ja="jq '.' /root/kiwi.config/admin.json"
 alias jk="jq '.' /root/kiwi.config/kiwi.json"
 alias jd="jq '.' /root/kiwi.config/dx.json"
-alias scD="git clone https://github.com/RaspSDR/Beagle_SDR_GPS.git"
+alias scD="git clone https://github.com/flydog-sdr/FlyDog_SDR_GPS.git"
 alias urldecode='sed "s@+@ @g;s@%@\\\\x@g" | xargs -0 printf "%b"'
 alias wk="json_pp -t dumper <~root/kiwi.config/kiwi.json | grep rx_name | urldecode"
 alias status="function _status () { curl --connect-timeout 5 \${*}:8073/status ; } ; _status"

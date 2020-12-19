@@ -1,7 +1,7 @@
 VERSION_MAJ = 1
-VERSION_MIN = 414
+VERSION_MIN = 428
 
-REPO_NAME = Beagle_SDR_GPS
+REPO_NAME = FlyDog_SDR_GPS
 DEBIAN_VER = 8.11
 
 # Caution: software update mechanism depends on format of first two lines in this file
@@ -330,8 +330,8 @@ endif
 SRC_DEPS = 
 BIN_DEPS = KiwiSDR.rx4.wf4.bit KiwiSDR.rx8.wf2.bit KiwiSDR.rx3.wf3.bit KiwiSDR.rx14.wf0.bit
 #BIN_DEPS = 
-DEVEL_DEPS = $(OBJ_DIR_DEFAULT)/web_devel.o $(KEEP_DIR)/edata_always.o
-EMBED_DEPS = $(OBJ_DIR_DEFAULT)/web_embed.o $(OBJ_DIR)/edata_embed.o $(KEEP_DIR)/edata_always.o
+DEVEL_DEPS = $(OBJ_DIR_DEFAULT)/web_devel.o $(KEEP_DIR)/edata_always.o $(KEEP_DIR)/edata_always2.o
+EMBED_DEPS = $(OBJ_DIR_DEFAULT)/web_embed.o $(OBJ_DIR)/edata_embed.o $(KEEP_DIR)/edata_always.o $(KEEP_DIR)/edata_always2.o
 EXTS_DEPS = $(OBJ_DIR)/ext_init.o
 
 # these MUST be run by single-threaded make before use of -j in sub makes
@@ -369,7 +369,7 @@ ifneq ($(PVT_EXT_DIRS),)
 endif
 
 .PHONY: c_ext_clang_conv
-c_ext_clang_conv: $(SUB_MAKE_DEPS)
+c_ext_clang_conv: DISABLE_WS $(SUB_MAKE_DEPS)
 ifeq ($(PVT_EXT_C_FILES),)
 #	@echo SUB_MAKE_DEPS = $(SUB_MAKE_DEPS)
 #	@echo no installed extensions with files needing conversion from .c to .cpp for clang compatibility
@@ -565,16 +565,20 @@ foptim_clean: roptim_embed roptim_ext roptim_maps
 
 FILES_EMBED_SORTED_NW = $(sort $(EMBED_NW) $(EXT_EMBED_NW) $(PKGS_MAPS_EMBED_NW))
 FILES_ALWAYS_SORTED_NW = $(sort $(FILES_ALWAYS))
-#FILES_ALWAYS2_SORTED_NW = $(sort $(FILES_ALWAYS2))
+FILES_ALWAYS2_SORTED_NW = $(sort $(FILES_ALWAYS2))
 
 EDATA_EMBED = $(GEN_DIR)/edata_embed.cpp
 EDATA_ALWAYS = $(GEN_DIR)/edata_always.cpp
+EDATA_ALWAYS2 = $(GEN_DIR)/edata_always2.cpp
 
 $(EDATA_EMBED): $(EDATA_DEP) $(addprefix web/,$(FILES_EMBED_SORTED_NW))
 	(cd web; perl mkdata.pl edata_embed $(FILES_EMBED_SORTED_NW) >../$(EDATA_EMBED))
 
 $(EDATA_ALWAYS): $(EDATA_DEP) $(addprefix web/,$(FILES_ALWAYS_SORTED_NW))
 	(cd web; perl mkdata.pl edata_always $(FILES_ALWAYS_SORTED_NW) >../$(EDATA_ALWAYS))
+
+$(EDATA_ALWAYS2): $(EDATA_DEP) $(addprefix web/,$(FILES_ALWAYS2_SORTED_NW))
+	(cd web; perl mkdata.pl edata_always2 $(FILES_ALWAYS2_SORTED_NW) >../$(EDATA_ALWAYS2))
 
 
 ################################
@@ -610,7 +614,7 @@ c_ext_clang_conv_vars:
 	@echo FILES_EMBED = $(FILES_EMBED)
 	@echo FILES_EXT = $(FILES_EXT)
 	@echo FILES_ALWAYS = $(FILES_ALWAYS)
-#	@echo FILES_ALWAYS2 = $(FILES_ALWAYS2)
+	@echo FILES_ALWAYS2 = $(FILES_ALWAYS2)
 	@echo
 	@echo EXT_SKIP = $(EXT_SKIP)
 	@echo EXT_SKIP1 = $(EXT_SKIP1)
@@ -745,6 +749,10 @@ $(KEEP_DIR)/edata_always.o: $(EDATA_ALWAYS)
 	$(CPP) $(OPTS_VIS_UNOPT) @$(MF_INC) -c -o $@ $<
 	$(POST_PROCESS_DEPS)
 
+$(KEEP_DIR)/edata_always2.o: $(EDATA_ALWAYS2)
+	$(CPP) $(OPTS_VIS_UNOPT) @$(MF_INC) -c -o $@ $<
+	$(POST_PROCESS_DEPS)
+
 $(OBJ_DIR)/ext_init.o: $(GEN_DIR)/ext_init.cpp
 	$(CPP) $(OPTS_VIS_UNOPT) @$(MF_INC) -c -o $@ $<
 	$(POST_PROCESS_DEPS)
@@ -814,6 +822,18 @@ $(TOOLS_DIR):
 ################################
 # installation
 ################################
+
+# on BBAI incremental update/upgrade can cause the window system to be re-enabled
+.PHONY: DISABLE_WS
+DISABLE_WS:
+ifeq ($(BBAI),true)
+ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
+else
+	@echo "disable window system"
+	-@systemctl stop lightdm.service >/dev/null 2>&1
+	-@systemctl disable lightdm.service >/dev/null 2>&1
+endif
+endif
 
 REBOOT = $(DIR_CFG)/.reboot
 ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
@@ -941,11 +961,11 @@ else
 	install -D -o root -g root KiwiSDR.rx8.wf2.bit /usr/local/bin/KiwiSDR.rx8.wf2.bit
 	install -D -o root -g root KiwiSDR.rx3.wf3.bit /usr/local/bin/KiwiSDR.rx3.wf3.bit
 	install -D -o root -g root KiwiSDR.rx14.wf0.bit /usr/local/bin/KiwiSDR.rx14.wf0.bit
-#	Firmwares for raspsdr
-	install -D -o root -g root RaspSDR.rx4.wf4.bit /usr/local/bin/RaspSDR.rx4.wf4.bit
-	install -D -o root -g root RaspSDR.rx8.wf2.bit /usr/local/bin/RaspSDR.rx8.wf2.bit
-	install -D -o root -g root RaspSDR.rx3.wf3.bit /usr/local/bin/RaspSDR.rx3.wf3.bit
-	install -D -o root -g root RaspSDR.rx14.wf0.bit /usr/local/bin/RaspSDR.rx14.wf0.bit
+#	Firmwares for FlyDog SDR
+	install -D -o root -g root FlyDogSDR.rx4.wf4.bit /usr/local/bin/FlyDogSDR.rx4.wf4.bit
+	install -D -o root -g root FlyDogSDR.rx8.wf2.bit /usr/local/bin/FlyDogSDR.rx8.wf2.bit
+	install -D -o root -g root FlyDogSDR.rx3.wf3.bit /usr/local/bin/FlyDogSDR.rx3.wf3.bit
+	install -D -o root -g root FlyDogSDR.rx14.wf0.bit /usr/local/bin/FlyDogSDR.rx14.wf0.bit
 #
 	#install -o root -g root unix_env/kiwid /etc/init.d
 	#install -o root -g root -m 0644 unix_env/kiwid.service /etc/systemd/system
@@ -1108,14 +1128,14 @@ git:
 	@# remove local changes from development activities before the pull
 	git clean -fd
 	git checkout .
-	git pull -v $(GIT_PROTO)://github.com/RaspSDR/Beagle_SDR_GPS.git
+	git pull -v $(GIT_PROTO)://github.com/flydog-sdr/FlyDog_SDR_GPS.git
 
 GITHUB_COM_IP = "52.64.108.95"
 git_using_ip:
 	@# remove local changes from development activities before the pull
 	git clean -fd
 	git checkout .
-	git pull -v $(GIT_PROTO)://$(GITHUB_COM_IP)/jks-prv/Beagle_SDR_GPS.git
+	git pull -v $(GIT_PROTO)://$(GITHUB_COM_IP)/flydog-sdr/FlyDog_SDR_GPS.git
 
 update_check:
 	git fetch origin
@@ -1149,7 +1169,7 @@ endif
 	@echo BeagleBone EEPROM:
 	-hexdump -C /sys/bus/i2c/devices/0-0050/eeprom
 
-REPO = https://github.com/RaspSDR/$(REPO_NAME).git
+REPO = https://github.com/flydog-sdr/$(REPO_NAME).git
 
 # selectively transfer files to the target so everything isn't compiled each time
 EXCLUDE_RSYNC = ".DS_Store" ".git" "/obj" "/obj_O3" "/obj_keep" "*.dSYM" "*.bin" "*.aout" "e_cpu/a" "*.aout.h" "kiwi.gen.h" \
@@ -1223,6 +1243,8 @@ copy_to_git:
 	@echo
 	@(cd $(GITAPP)/$(REPO_NAME); echo 'repo branch set to:'; pwd; git branch)
 	@echo '################################'
+#	@echo 'DANGER: #define MINIFY_WEBSITE_DOWN'
+#	@echo '################################'
 	@echo -n 'did you make install to rebuild the optimized files? '
 	@read not_used
 	make clean_dist

@@ -28,9 +28,9 @@ if test ! -f /etc/dogtag; then
 	exit 0
 fi
 
-RPI=0
+RPI=$(cat /proc/device-tree/model | grep -q -s "Raspberry Pi 3"; echo $?)
 #echo "not RPI = ${RPI}"
-BBAI=1
+BBAI=$(cat /proc/device-tree/model | grep -q -s "BeagleBone AI"; echo $?)
 #echo "not BBAI = ${BBAI}"
 
 if [ "x${BBAI}" = "x0" ] ; then
