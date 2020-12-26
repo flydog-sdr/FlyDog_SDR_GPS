@@ -211,9 +211,9 @@ function control_html()
 		w3_half('w3-valign', '',
          w3_div('',
             w3_div('',
-               w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'control_restart_cb')
-               //w3_button('w3-blue w3-margin', 'Beagle reboot', 'control_reboot_cb'),
-               //w3_button('w3-red w3-margin', 'Beagle power off', 'control_power_off_cb')
+               w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'control_restart_cb')//,
+               /*w3_button('w3-blue w3-margin', 'Beagle reboot', 'control_reboot_cb'),
+               w3_button('w3-red w3-margin', 'Beagle power off', 'control_power_off_cb')*/
             ),
             w3_div('id-confirm w3-valign w3-hide',
                w3_button('w3-green w3-margin', 'Confirm', 'control_confirm_cb'),
@@ -452,7 +452,6 @@ function connect_html()
          )
       );
 
-   /*
    var s2 =
 		'<hr>' +
       w3_div('w3-container w3-text-teal|width:80%',
@@ -471,7 +470,6 @@ function connect_html()
             'This prevents the browser from going into a loop when all channels on all Kiwis are full.'
          )
       );
-   */
 
    var s3 =
 		'<hr>' +
@@ -1044,7 +1042,6 @@ function network_html()
    ext_set_cfg_param('adm.ip_address.use_static', commit_use_static, EXT_SAVE)
    w3_switch_set_value('adm.ip_address.use_static', commit_use_static? w3_SWITCH_NO_IDX : w3_SWITCH_YES_IDX);
    
-/*
    var s1 =
 		w3_div('id-net-auto-nat-msg w3-valign w3-hide') +
 
@@ -1055,7 +1052,7 @@ function network_html()
 		'<hr>' +
 		w3_div('id-net-reboot',
 			w3_inline('w3-halign-space-around w3-margin-bottom w3-text-teal/',
-			   w3_divs('w3-valign w3-flex-col w3-restart/w3-tspace-6',
+			   /*w3_divs('w3-valign w3-flex-col w3-restart/w3-tspace-6',
 					w3_input_get('', 'Internal port', 'adm.port', 'admin_int_cb'),
 					w3_input_get('', 'External port', 'adm.port_ext', 'admin_int_cb')
 				),
@@ -1071,7 +1068,7 @@ function network_html()
                w3_select('', 'Ethernet interface speed', '', 'ethernet_speed', cfg.ethernet_speed, network.ethernet_speed_s, 'network_ethernet_speed'),
                w3_div('w3-text-black',
                   'Select 10 Mbps to reduce Ethernet spurs. <br> Try changing while looking at waterfall.')
-            ),
+            ),*/
             w3_divs('w3-center/',
                w3_select('', 'Ethernet interface MTU', '', 'ethernet_mtu', cfg.ethernet_mtu, network.ethernet_mtu_s, 'network_ethernet_mtu'),
                w3_div('w3-text-black',
@@ -1102,15 +1099,14 @@ function network_html()
             w3_text('w3-margin-left w3-text-black', 'If DNS fields are blank the DNS servers specified by your router\'s DHCP will be used.')
 			)
       );
-   */
-	
+
 	var s2 =
 		'<hr>' +
 		w3_div('id-net-config w3-container') +
 
 		'<hr>' +
 		w3_half('w3-container', '',
-         w3_div('',
+         /*w3_div('',
             w3_div('', 
                w3_label('w3-show-inline w3-bold w3-text-teal', 'Check if your external router port is open:') +
                w3_button('w3-show-inline w3-aqua|margin-left:10px', 'Check port open', 'net_port_open_cb')
@@ -1127,7 +1123,7 @@ function network_html()
                w3_label('id-net-check-port-ip-q w3-show-inline-block w3-margin-LR-16 w3-text-teal') +
                w3_div('id-net-check-port-ip-s w3-show-inline-block w3-text-black w3-background-pale-aqua')
             )
-         ),
+         ),*/
          w3_div('w3-center',
             w3_label('w3-bold w3-text-teal', 'Register this Kiwi on my.kiwisdr.com<br>on each reboot?<br>'),
             w3_switch('w3-margin-T-8 w3-margin-B-8', 'Yes', 'No', 'adm.my_kiwi', adm.my_kiwi, 'admin_radio_YN_cb'),
@@ -1140,9 +1136,8 @@ function network_html()
       );
 
    var s3 =
-   /*
    '<hr>' +
-      w3_div('w3-container w3-text-teal',
+      /*w3_div('w3-container w3-text-teal',
          w3_textarea_get_param('w3-input-any-change|width:100%',
             w3_inline('',
                w3_label('w3-show-inline-block w3-bold w3-text-teal', 'IP address blacklist'),
@@ -1160,9 +1155,8 @@ function network_html()
          w3_label('w3-show-inline-block w3-margin-R-16 w3-margin-T-8 w3-text-teal', 'Status:') +
          w3_div('id-ip-blacklist-status w3-show-inline-block w3-text-black w3-background-pale-aqua', '')
       ) +
-   */
 
-    '<hr>' +
+    '<hr>' +*/
     w3_half('w3-margin-bottom w3-text-teal', 'w3-container',
         w3_div('w3-restart',
             w3_input_get('id-proxy-server', 'Proxy server hostname', 'adm.proxy_server', 'network_proxy_server_cb'),
