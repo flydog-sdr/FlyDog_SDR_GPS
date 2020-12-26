@@ -1,6 +1,10 @@
 CHANGE_LOG
 
-For the Github commit log see here: github.com/jks-prv/Beagle_SDR_GPS/commits/master
+For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
+
+v1.4281  December 26, 2020
+    Removed functions that are not compatible with Raspberry Pi.
+    Minimise the corresponding container.
 
 v1.428  December 17, 2020
     Reliability fixes.
