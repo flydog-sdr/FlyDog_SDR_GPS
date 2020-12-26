@@ -237,7 +237,7 @@ void c2s_sound(void *param)
 	    case FW_SEL_SDR_RX4_WF4: norm_nrx_samps = nrx_samps - ref_nrx_samps; break;
 	    case FW_SEL_SDR_RX8_WF2: norm_nrx_samps = nrx_samps; break;
 	    case FW_SEL_SDR_RX14_WF0: norm_nrx_samps = nrx_samps; break;    // FIXME: this is now the smallest buffer size
-	    case FW_SEL_SDR_RX3_WF3: const float target = 15960.828e-6 / (1 + flydogsdr);      // empirically measured using GPS 1 PPS input
+	    case FW_SEL_SDR_RX3_WF3: const float target = 15960.828e-6 / (1 + fdsdr);      // empirically measured using GPS 1 PPS input
 	                             norm_nrx_samps = (int) (target * SND_RATE_3CH);
 	                             gps_delay2 = target - (float) norm_nrx_samps / SND_RATE_3CH; // fractional part of target delay
 	                             break;

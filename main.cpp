@@ -76,7 +76,7 @@ bool create_eeprom, need_hardware, test_flag, sdr_hu_debug, have_ant_switch_ext,
 char **main_argv;
 char *fpga_file;
 
-bool flydogsdr = false;
+bool fdsdr = false;
 
 int main(int argc, char *argv[])
 {
@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 		if (strcmp(argv[i], "-p2")==0) { i++; p2 = strtol(argv[i], 0, 0); }
 
 #ifdef PLATFORM_raspberrypi
-		if (strcmp(argv[i], "-flydogsdr")==0) flydogsdr = true;
+		if (strcmp(argv[i], "-fdsdr")==0) fdsdr = true;
 #endif
 		i++;
 		while (i<argc && ((argv[i][0] != '+') && (argv[i][0] != '-'))) {
@@ -304,7 +304,7 @@ int main(int argc, char *argv[])
     } else
         panic("fw_sel");
 
-    if (flydogsdr) rx_decim *= 2;
+    if (fdsdr) rx_decim *= 2;
 
     asprintf(&fpga_file, "rx%d.wf%d", rx_chans, wf_chans);
     

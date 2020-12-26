@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 428
+VERSION_MIN = 4281
 
 REPO_NAME = FlyDog_SDR_GPS
 DEBIAN_VER = 8.11
@@ -286,10 +286,12 @@ endif
 	-apt-get -y install wget
 
 /usr/sbin/avahi-autoipd:
-	-apt-get -y install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
+	#-apt-get -y install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
+	-echo "Skipped"
 
 /usr/bin/upnpc:
-	-apt-get -y install miniupnpc
+	#-apt-get -y install miniupnpc
+	-echo "Skipped"
 
 /usr/bin/dig:
 	-apt-get -y install dnsutils
@@ -307,7 +309,8 @@ endif
 	-apt-get -y install psmisc
 
 /usr/bin/dtc:
-	-apt-get -y install device-tree-compiler
+	#-apt-get -y install device-tree-compiler
+	-echo "Skipped"
 
 ifeq ($(BBAI),true)
 /usr/bin/cpufreq-info:
@@ -1270,7 +1273,8 @@ endif
 ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 
 /usr/bin/xz: $(KEYRING)
-	apt-get -y install xz-utils
+	#apt-get -y install xz-utils
+	echo "Skipped"
 
 #
 # DANGER: "count=1600M" below (i.e. 1.6 GB) must be larger than the partition size (currently ~1.4 GB)

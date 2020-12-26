@@ -211,9 +211,9 @@ function control_html()
 		w3_half('w3-valign', '',
          w3_div('',
             w3_div('',
-               w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'control_restart_cb'),
-               w3_button('w3-blue w3-margin', 'Beagle reboot', 'control_reboot_cb'),
-               w3_button('w3-red w3-margin', 'Beagle power off', 'control_power_off_cb')
+               w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'control_restart_cb')
+               //w3_button('w3-blue w3-margin', 'Beagle reboot', 'control_reboot_cb'),
+               //w3_button('w3-red w3-margin', 'Beagle power off', 'control_power_off_cb')
             ),
             w3_div('id-confirm w3-valign w3-hide',
                w3_button('w3-green w3-margin', 'Confirm', 'control_confirm_cb'),
@@ -452,6 +452,7 @@ function connect_html()
          )
       );
 
+   /*
    var s2 =
 		'<hr>' +
       w3_div('w3-container w3-text-teal|width:80%',
@@ -469,7 +470,8 @@ function connect_html()
             'Always create a chain that stops redirecting at the end: A -> B <br>' +
             'This prevents the browser from going into a loop when all channels on all Kiwis are full.'
          )
-		);
+      );
+   */
 
    var s3 =
 		'<hr>' +
@@ -612,9 +614,9 @@ function connect_update_url()
 
    if (cfg.sdr_hu_dom_sel != connect_dom_sel.REV) {
       host_and_port += ':'+ adm.port_ext;
-      w3_set_label('Based on above selection, and external port from Network tab, the URL to connect to your Kiwi is:', 'connect-url-text');
+      w3_set_label('Based on above selection, the URL to connect to your Kiwi is:', 'connect-url-text');
    } else {
-      host_and_port += ':8073';
+      host_and_port += ':80';
       if (adm.port_ext != 8073)
          host_and_port += ' (proxy always uses port 8073 even though your external port is '+ adm.port_ext +')';
       w3_set_label('Based on the above selection the URL to connect to your Kiwi is:', 'connect-url-text');
@@ -1042,7 +1044,8 @@ function network_html()
    ext_set_cfg_param('adm.ip_address.use_static', commit_use_static, EXT_SAVE)
    w3_switch_set_value('adm.ip_address.use_static', commit_use_static? w3_SWITCH_NO_IDX : w3_SWITCH_YES_IDX);
    
-	var s1 =
+/*
+   var s1 =
 		w3_div('id-net-auto-nat-msg w3-valign w3-hide') +
 
 		w3_div('id-net-need-update w3-valign w3-margin-T-8 w3-hide',
@@ -1098,7 +1101,8 @@ function network_html()
             ),
             w3_text('w3-margin-left w3-text-black', 'If DNS fields are blank the DNS servers specified by your router\'s DHCP will be used.')
 			)
-		);
+      );
+   */
 	
 	var s2 =
 		'<hr>' +
@@ -1136,7 +1140,8 @@ function network_html()
       );
 
    var s3 =
-		'<hr>' +
+   /*
+   '<hr>' +
       w3_div('w3-container w3-text-teal',
          w3_textarea_get_param('w3-input-any-change|width:100%',
             w3_inline('',
@@ -1155,6 +1160,7 @@ function network_html()
          w3_label('w3-show-inline-block w3-margin-R-16 w3-margin-T-8 w3-text-teal', 'Status:') +
          w3_div('id-ip-blacklist-status w3-show-inline-block w3-text-black w3-background-pale-aqua', '')
       ) +
+   */
 
     '<hr>' +
     w3_half('w3-margin-bottom w3-text-teal', 'w3-container',
@@ -2677,8 +2683,8 @@ function admin_draw(sdr_mode)
          w3_nav(admin_colors[ci++], 'Public', 'sdr_hu', 'admin_nav') +
          w3_nav(admin_colors[ci++], 'DX', 'dx', 'admin_nav');
    s += 
-      w3_nav(admin_colors[ci++], 'Update', 'update', 'admin_nav') +
-      w3_nav(admin_colors[ci++], 'Backup', 'backup', 'admin_nav') +
+      //w3_nav(admin_colors[ci++], 'Update', 'update', 'admin_nav') +
+      //w3_nav(admin_colors[ci++], 'Backup', 'backup', 'admin_nav') +
       w3_nav(admin_colors[ci++], 'Network', 'network', 'admin_nav') +
       (sdr_mode? w3_nav(admin_colors[ci++], 'GPS', 'gps', 'admin_nav') : '') +
       w3_nav(admin_colors[ci++], 'Log', 'log', 'admin_nav') +
