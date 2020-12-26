@@ -164,7 +164,7 @@ void update_vars_from_config()
             ui_srate = 62*MHz;
             break;
         default:
-            ui_srate = flydogsdr ? 54*MHz : 30*MHz;
+            ui_srate = fdsdr ? 54*MHz : 30*MHz;
             break;
     }
 

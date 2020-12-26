@@ -129,7 +129,7 @@ void fpga_init() {
 	}
 
 	// FPGA configuration bitstream
-    if (!flydogsdr)
+    if (!fdsdr)
         fp = fopen(stprintf("%sKiwiSDR.%s.bit", background_mode? "/usr/local/bin/":"", fpga_file) , "rb");
     else
         fp = fopen(stprintf("%sFlyDogSDR.%s.bit", background_mode? "/usr/local/bin/":"", fpga_file) , "rb");

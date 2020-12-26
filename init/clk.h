@@ -30,8 +30,8 @@ Boston, MA  02110-1301, USA.
 #define ADC_CLOCK_TYP_1	    (66.665900*MHz)		// typical 20 degC value
 #define ADC_CLOCK_NOM_2	    (125.0*MHz)		// 125.0 MHz 15.0 ns
 #define ADC_CLOCK_TYP_2	    (125.0*MHz)		// typical 20 degC value
-#define ADC_CLOCK_NOM	    (flydogsdr?ADC_CLOCK_NOM_2:ADC_CLOCK_NOM_1)
-#define ADC_CLOCK_TYP	    (flydogsdr?ADC_CLOCK_TYP_2:ADC_CLOCK_TYP_1)
+#define ADC_CLOCK_NOM	    (fdsdr?ADC_CLOCK_NOM_2:ADC_CLOCK_NOM_1)
+#define ADC_CLOCK_TYP	    (fdsdr?ADC_CLOCK_TYP_2:ADC_CLOCK_TYP_1)
 
 #define ADC_CLOCK_PPM_TYP   50                  // XO spec
 #define ADC_CLOCK_PPM_LIMIT 100                 // max manual adjustment we allow

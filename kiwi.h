@@ -71,7 +71,7 @@ extern cfg_t cfg_ipl;
 extern char *fpga_file;
 
 extern lock_t spi_lock;
-extern bool flydogsdr;
+extern bool fdsdr;
 
 // values defined in rx_cmd.cpp
 // CAUTION: order in mode_s/modu_s must match mode_e, mode_hbw, mode_offset
