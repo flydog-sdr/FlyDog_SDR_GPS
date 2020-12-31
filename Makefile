@@ -294,13 +294,15 @@ endif
 	-echo "Skipped"
 
 /usr/bin/dig:
-	-apt-get -y install dnsutils
+	#-apt-get -y install dnsutils
+	-echo "Skipped"
 
 /usr/bin/pnmtopng:
 	-apt-get -y install pnmtopng
 
 /sbin/ethtool:
-	-apt-get -y install ethtool
+	#-apt-get -y install ethtool
+	-echo "Skipped"
 
 /usr/bin/sshpass:
 	-apt-get -y install sshpass
