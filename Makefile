@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 4281
+VERSION_MIN = 4282
 
 REPO_NAME = FlyDog_SDR_GPS
 DEBIAN_VER = 8.11
@@ -300,7 +300,8 @@ endif
 	-apt-get -y install pnmtopng
 
 /sbin/ethtool:
-	-apt-get -y install ethtool
+	#-apt-get -y install ethtool
+	-echo "Skipped"
 
 /usr/bin/sshpass:
 	-apt-get -y install sshpass
