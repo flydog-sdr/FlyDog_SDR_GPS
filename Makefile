@@ -294,8 +294,7 @@ endif
 	-echo "Skipped"
 
 /usr/bin/dig:
-	#-apt-get -y install dnsutils
-	-echo "Skipped"
+	-apt-get -y install dnsutils
 
 /usr/bin/pnmtopng:
 	-apt-get -y install pnmtopng
