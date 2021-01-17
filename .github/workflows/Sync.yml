@@ -1,0 +1,42 @@
+name: Sync
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Setup Git
+        env:
+          ACTION_DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          apt-get update
+          apt-get install -y busybox
+          mkdir -p ~/.ssh/
+          echo "${ACTION_DEPLOY_KEY}" > ~/.ssh/id_rsa
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan e.coding.net >> ~/.ssh/known_hosts
+          git config --global user.email "flydog_sdr-project@yahoo.co.jp"
+          git config --global user.name "FlyDog SDR Project"
+
+      - name: Sync
+        run: |
+          export LATEST_VER=$(curl -s https://raw.githubusercontent.com/flydog-sdr/FlyDog_SDR_GPS/master/Makefile | head -2 | cut -d " " -f3 | tr -d "\n")
+          git clone git@e.coding.net:bclswl0827/flydog-sdr/api.git /tmp/api
+          curl -s https://codeload.github.com/flydog-sdr/customised-scripts/zip/master | busybox unzip - -d /tmp
+          mv -f /tmp/customised-scripts-master/* /tmp/api
+          cd /tmp/api
+          echo ${LATEST_VER} > /tmp/api/VER
+          git add .
+          git commit -m "New Version ${LATEST_VER}"
+          git push
