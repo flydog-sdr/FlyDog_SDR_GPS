@@ -3,7 +3,8 @@ CHANGE_LOG
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
 v1.4283  January 21, 2021
-    Reliability fixes.
+    Fixed an issue where FAX could not be decoded.
+        See issue: https://github.com/flydog-sdr/FlyDog_SDR_GPS/issues/5
 
 v1.4282  January 16, 2021
     Removed unnecessary dependencies.
