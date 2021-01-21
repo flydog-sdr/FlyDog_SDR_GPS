@@ -617,13 +617,13 @@ void webserver_collect_print_stats(int print)
 		}
 
 		for (i = 0; i < ncpu; i++) {
-            del_usi[0][i] = lroundf((float)(usi[0][i] - last_usi[0][i]) / secs);
-            del_usi[1][i] = lroundf((float)(usi[1][i] - last_usi[1][i]) / secs);
-            del_usi[2][i] = lroundf((float)(usi[2][i] - last_usi[2][i]) / secs);
-            //printf("CPU%d %.1fs u=%d%% s=%d%% i=%d%%\n", i, secs, del_usi[0][i], del_usi[1][i], del_usi[2][i]);
-        }
-
+            		del_usi[0][i] = lroundf((float)(usi[0][i] - last_usi[0][i]) / secs);
+            		del_usi[1][i] = lroundf((float)(usi[1][i] - last_usi[1][i]) / secs);
+            		del_usi[2][i] = lroundf((float)(usi[2][i] - last_usi[2][i]) / secs);
+            		//printf("CPU%d %.1fs u=%d%% s=%d%% i=%d%%\n", i, secs, del_usi[0][i], del_usi[1][i], del_usi[2][i]);
+        	}
 		kstr_free(reply);
+		
 	    int cpufreq_kHz = 1000000, temp_deg_mC = 0;
 
 #if defined(CPU_AM5729) || defined(CPU_BCM2837)
