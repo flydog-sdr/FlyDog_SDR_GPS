@@ -132,6 +132,9 @@ TYPEREAL DC_offset_I, DC_offset_Q;
 #define WATERFALL_CALIBRATION_DEFAULT -13
 #define SMETER_CALIBRATION_DEFAULT -13
 
+#define N_MTU 3
+static int mtu_v[N_MTU] = { 1500, 1440, 1400 };
+
 void update_vars_from_config()
 {
 	bool update_cfg = false;
