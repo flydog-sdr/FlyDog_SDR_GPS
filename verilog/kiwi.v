@@ -27,7 +27,7 @@
 
 module KiwiSDR (
 
-    input  wire	signed [13:0] ADC_DATA,
+    input  wire	signed [ADC_BITS - 1:0] ADC_DATA,
     input  wire	ADC_OVFL,
     input  wire	ADC_CLKIN,
     output wire	ADC_CLKEN,
@@ -102,7 +102,7 @@ module KiwiSDR (
     //////////////////////////////////////////////////////////////////////////
     // clocks
 
-    wire gps_clk, adc_clk, cpu_clk;
+    wire gps_clk, adc_clk, cpu_clk, sign_adc;
     
     IBUFG vcxo_ibufg(.I(ADC_CLKIN), .O(adc_clk));
 	assign ADC_CLKEN = ctrl[CTRL_OSC_EN];
@@ -110,11 +110,12 @@ module KiwiSDR (
     IBUFG tcxo_ibufg(.I(GPS_TCXO), .O(gps_clk));		// 16.368 MHz TCXO
     assign cpu_clk = gps_clk;
 
+    IBUFG sign_adc_ibufg(.I(ADC_DATA[ADC_BITS-1]), .O(sign_adc));
 
-	reg signed [13:0] reg_adc_data;
+	reg signed [ADC_BITS - 1:0] reg_adc_data;
     always @ (posedge adc_clk)
     begin
-    	reg_adc_data <= ADC_DATA;
+    	reg_adc_data <= {sign_adc, ADC_DATA[ADC_BITS - 2 : 0]};
     end
     
     wire  [2:1] rst;
