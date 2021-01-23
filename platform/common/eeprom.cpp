@@ -149,7 +149,6 @@ struct eeprom_t {
 static eeprom_t eeprom;
 static bool debian8 = false;
 
-
 #define EEPROM_DEV_DEBIAN7	    "/sys/bus/i2c/devices/1-0054/eeprom"
 
 #ifdef CPU_AM5729

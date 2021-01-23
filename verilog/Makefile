@@ -10,7 +10,7 @@
 #
 
 ifeq ($(V_SRC_DIR)x,x)
-    V_SRC_DIR = /media/sf_shared
+    V_SRC_DIR = .. 
 endif
 
 all:
@@ -27,7 +27,17 @@ rx14:
 	@reset
 	@echo "build rx14_wf0 project with Vivado via tcl"
 	time vivado -mode batch -source make_proj.tcl -tclargs --result_dir $(V_SRC_DIR) --rx14_wf0
-	
+
+rx3:
+	@reset
+	@echo "build rx3_wf3 project with Vivado via tcl"
+	time vivado -mode batch -source make_proj.tcl -tclargs --result_dir $(V_SRC_DIR) --rx3_wf3
+
+rx8:
+	@reset
+	@echo "build rx8_wf2 project with Vivado via tcl"
+	time vivado -mode batch -source make_proj.tcl -tclargs --result_dir $(V_SRC_DIR) --rx8_wf2
+
 rebuild:
 	@reset
 	@echo "rebuild project ip with Vivado via tcl"
