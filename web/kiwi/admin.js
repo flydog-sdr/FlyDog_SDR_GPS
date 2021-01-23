@@ -469,7 +469,7 @@ function connect_html()
             'Always create a chain that stops redirecting at the end: A -> B <br>' +
             'This prevents the browser from going into a loop when all channels on all Kiwis are full.'
          )
-      );
+		);
 
    var s3 =
 		'<hr>' +
@@ -1042,7 +1042,7 @@ function network_html()
    ext_set_cfg_param('adm.ip_address.use_static', commit_use_static, EXT_SAVE)
    w3_switch_set_value('adm.ip_address.use_static', commit_use_static? w3_SWITCH_NO_IDX : w3_SWITCH_YES_IDX);
    
-   var s1 =
+	var s1 =
 		w3_div('id-net-auto-nat-msg w3-valign w3-hide') +
 
 		w3_div('id-net-need-update w3-valign w3-margin-T-8 w3-hide',
@@ -1098,8 +1098,8 @@ function network_html()
             ),
             w3_text('w3-margin-left w3-text-black', 'If DNS fields are blank the DNS servers specified by your router\'s DHCP will be used.')
 			)
-      );
-
+		);
+	
 	var s2 =
 		'<hr>' +
 		w3_div('id-net-config w3-container') +
@@ -1136,7 +1136,7 @@ function network_html()
       );
 
    var s3 =
-   '<hr>' +
+		'<hr>' +
       /*w3_div('w3-container w3-text-teal',
          w3_textarea_get_param('w3-input-any-change|width:100%',
             w3_inline('',
