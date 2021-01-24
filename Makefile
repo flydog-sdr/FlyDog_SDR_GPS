@@ -260,67 +260,67 @@ ifeq ($(DEBIAN_7),true)
 	mv /tmp/sources.list /etc/apt/sources.list
 endif
 	-apt-get -y update
-	-apt-get -y install debian-archive-keyring
+	-apt-get --no-install-recommends -y install debian-archive-keyring
 	-apt-get -y update
 	@mkdir -p $(DIR_CFG)
 	touch $(KEYRING)
 
 /usr/lib/arm-linux-gnueabihf/libfftw3f.a:
-	apt-get -y install libfftw3-dev
+	apt-get --no-install-recommends -y install libfftw3-dev
 
 # NB not a typo: "clang-6.0" vs "clang-7"
 
 /usr/bin/clang-6.0:
 	# only available recently?
 	-apt-get -y update
-	apt-get -y install clang-6.0
+	apt-get --no-install-recommends -y install clang-6.0
 
 /usr/bin/clang-7:
 	-apt-get -y update
-	apt-get -y install clang-7
+	apt-get --no-install-recommends -y install clang-7
 
 /usr/bin/curl:
-	-apt-get -y install curl
+	-apt-get --no-install-recommends -y install curl
 
 /usr/bin/wget:
-	-apt-get -y install wget
+	-apt-get --no-install-recommends -y install wget
 
 /usr/sbin/avahi-autoipd:
-	#-apt-get -y install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
+	#-apt-get --no-install-recommends -y install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
 	-echo "Skipped"
 
 /usr/bin/upnpc:
-	#-apt-get -y install miniupnpc
+	#-apt-get --no-install-recommends -y install miniupnpc
 	-echo "Skipped"
 
 /usr/bin/dig:
-	-apt-get -y install dnsutils
+	-apt-get --no-install-recommends -y install dnsutils
 
 /usr/bin/pnmtopng:
-	-apt-get -y install pnmtopng
+	-apt-get --no-install-recommends -y install pnmtopng
 
 /sbin/ethtool:
-	#-apt-get -y install ethtool
+	#-apt-get --no-install-recommends -y install ethtool
 	-echo "Skipped"
 
 /usr/bin/sshpass:
-	-apt-get -y install sshpass
+	-apt-get --no-install-recommends -y install sshpass
 
 /usr/bin/killall:
-	-apt-get -y install psmisc
+	-apt-get --no-install-recommends -y install psmisc
 
 /usr/bin/dtc:
-	#-apt-get -y install device-tree-compiler
+	#-apt-get --no-install-recommends -y install device-tree-compiler
 	-echo "Skipped"
 
 ifeq ($(BBAI),true)
 /usr/bin/cpufreq-info:
-	-apt-get -y install cpufrequtils
+	-apt-get --no-install-recommends -y install cpufrequtils
 endif
 
 ifneq ($(DEBIAN_7),true)
 /usr/bin/jq:
-	-apt-get -y install jq
+	-apt-get --no-install-recommends -y install jq
 endif
 
 endif
@@ -1274,7 +1274,7 @@ endif
 ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 
 /usr/bin/xz: $(KEYRING)
-	#apt-get -y install xz-utils
+	#apt-get --no-install-recommends -y install xz-utils
 	echo "Skipped"
 
 #

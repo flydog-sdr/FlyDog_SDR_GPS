@@ -56,8 +56,8 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
         CC = clang
         CPP = clang++
         CPP_FLAGS += -std=gnu++11
-        CFLAGS += --target=armv7a-linux-gnueabihf
-        CFLAGS += -mfpu=neon
+        CFLAGS += --target=arm-linux-gnueabihf
+        CFLAGS += -mfpu=vfp
         CFLAGS += -mfloat-abi=hard
         CFLAGS += --sysroot=$(KIWI_XC_REMOTE_FS)
         CFLAGS += -I$(KIWI_XC_REMOTE_FS)/usr/include/c++/4.9
@@ -68,12 +68,12 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
         LDFLAGS += -fuse-ld=$(KIWI_XC_LD)
         LDFLAGS += -v
         LDFLAGS += --sysroot=$(KIWI_XC_REMOTE_FS)
-        LDFLAGS += --target=armv7a-linux-gnueabihf
+        LDFLAGS += --target=arm-linux-gnueabihf
         LDFLAGS += -L$(KIWI_XC_REMOTE_FS)/usr/lib/arm-linux-gnueabihf
         LDFLAGS += -L$(KIWI_XC_REMOTE_FS)/usr/local/lib/
 
 		ifeq ($(RPI),true)
-			CFLAGS += -mtune=cortex-a53 -mcpu=cortex-a53
+			CFLAGS += -mtune=native -mcpu=native
 		else
 			CFLAGS += -mtune=cortex-a8 -mcpu=cortex-a8
 		endif
@@ -100,8 +100,8 @@ endif
 
 # Debian target
 ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
-	#CFLAGS += -mfloat-abi=softfp -mfpu=neon
-	CFLAGS +=  -mfpu=neon -mfloat-abi=hard
+	#CFLAGS += -mfloat-abi=hardfp -mfpu=vfp
+	CFLAGS +=  -mfpu=vfp -mfloat-abi=hard
 	CFLAGS += -DHOST
 
 	BBAI = $(shell cat /dev/null)
@@ -142,7 +142,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 		CC = clang-7
 		CPP = clang++-7
         VIS_OPT = -Ofast
-		CFLAGS += -mtune=cortex-a53 -mcpu=cortex-a53
+		CFLAGS += -mtune=native -mcpu=native
 		# needed for iq_display.cpp et al
 		CPP_FLAGS += -std=gnu++11
 	else
