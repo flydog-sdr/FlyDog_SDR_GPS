@@ -100,7 +100,6 @@ endif
 
 # Debian target
 ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
-	#CFLAGS += -mfloat-abi=hardfp -mfpu=vfp
 	CFLAGS +=  -mfpu=vfp -mfloat-abi=hard
 	CFLAGS += -DHOST
 
