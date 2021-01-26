@@ -3,7 +3,6 @@ CHANGE_LOG
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
 v1.4292  January 24, 2021
-    Use /dev/mem instead of /dev/gpiomem, preparing for support of more development boards.
     With --no-install-recommends option for dependencies installation during compiling.
     Adjusted the compilation flags.
 
