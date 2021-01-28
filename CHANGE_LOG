@@ -2,6 +2,9 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.4293  January 28, 2021
+    Adjusted Docker entrypoint of FlyDog SDR.
+
 v1.4292  January 24, 2021
     With --no-install-recommends option for dependencies installation during compiling.
     Adjusted the compilation flags.
