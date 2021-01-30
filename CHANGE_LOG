@@ -2,6 +2,10 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.430  January 30, 2021
+    Make de-emphasis option simply on/off since we've been unable to figure out why
+        the 75/50 usec filter coefficient code doesn't work anymore.
+
 v1.4293  January 28, 2021
     Adjusted Docker entrypoint of FlyDog SDR.
 
@@ -11,7 +15,7 @@ v1.4292  January 24, 2021
 
 v1.4291  January 23, 2021
     Followed up the upstream.
-       github.com/jks-prv/Beagle_SDR_GPS
+        github.com/jks-prv/Beagle_SDR_GPS
 
 v1.429  January 16, 2021
     FAX: added Vanino Radio 6455 to Asia menu per forum user Fabrys.
