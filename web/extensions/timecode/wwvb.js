@@ -75,13 +75,13 @@ function wwvb_legend(phase)
 
 function wwvb_ampl_decode(bits)
 {
-   var min  = (tc_gap_bcd(bits,  8,  8, -1) + 1) % 60;   // bits are what the minute _was_ at the previous minute boundary
+   var min  = (tc_gap_bcd(bits, 8,  8, -1) + 1) % 60;   // bits are what the minute _was_ at the previous minute boundary
    var hour = tc_gap_bcd(bits, 18,  7, -1);
    var doy  = tc_gap_bcd(bits, 33, 12, -1);
-   var yr   = tc_gap_bcd(bits, 53,  9, -1);
+   var yr   = tc_gap_bcd(bits, 53,  9, -1) + 2000;
 
-   tc_dmsg('  day #'+ doy +' '+ (yr+2000) +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' UTC<br>');
-   tc_stat('lime', 'Time decoded: day #'+ doy +' '+ (yr+2000) +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' UTC');
+   tc_dmsg('  day #'+ doy +' '+ yr +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' UTC<br>');
+   tc_stat('lime', 'Time decoded: day #'+ doy +' '+ yr +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' UTC');
 }
 
 function wwvb_clr()
@@ -100,6 +100,7 @@ function wwvb_ampl(ampl)
 	var w = wwvb;
 	tc.trig++; if (tc.trig >= 100) tc.trig = 0;
 	ampl = (ampl > 0.95)? 1:0;
+	if (!tc.ref) { tc.data = ampl; tc.ref = 1; }
 	
 	// de-noise signal
    if (ampl == w.cur) {
@@ -167,6 +168,7 @@ function wwvb_phase(ampl_sgn)
 	var i;
 	var w = wwvb;
 	tc.trig++; if (tc.trig >= 100) tc.trig = 0;
+	if (!tc.ref) { tc.data = ampl_sgn; tc.ref = 1; }
 	
 	// de-noise signal
    if (ampl_sgn == w.cur) {
@@ -247,7 +249,7 @@ function wwvb_phase(ampl_sgn)
 			if (w.dcnt == 19) w.time0_copy = data;
 			if (w.dcnt == 46) w.time0 = data;
 			
-			//tc_dmsg2('dlen='+ tc.raw.length +' dcnt='+ w.dcnt);
+			//tc_info('dlen='+ tc.raw.length +' dcnt='+ w.dcnt);
 			if (tc.raw.length >= 14 && w.dcnt == 12) {
 				var sync = wwvb_sync();
 				if (!sync) {

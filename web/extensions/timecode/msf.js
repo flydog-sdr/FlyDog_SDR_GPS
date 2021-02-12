@@ -46,10 +46,10 @@ function msf_decode(bits)
    var day  = tc_bcd(bits, 35, 6, -1);
    var wday = tc_bcd(bits, 38, 3, -1);
    var mo   = tc_bcd(bits, 29, 5, -1) - 1;
-   var yr   = tc_bcd(bits, 24, 8, -1);
+   var yr   = tc_bcd(bits, 24, 8, -1) + 2000;
 
-   tc_dmsg('  '+ day +' '+ tc.mo[mo] +' '+ (yr+2000) +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' UTC<br>');
-   tc_stat('lime', 'Time decoded: '+ day +' '+ tc.mo[mo] +' '+ (yr+2000) +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' UTC');
+   tc_dmsg('  '+ day +' '+ tc.mo[mo] +' '+ yr +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' UTC<br>');
+   tc_stat('lime', 'Time decoded: '+ day +' '+ tc.mo[mo] +' '+ yr +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' UTC');
 }
 
 function msf_clr()
@@ -67,6 +67,7 @@ function msf_ampl(ampl)
 	var m = msf;
 	tc.trig++; if (tc.trig >= 100) tc.trig = 0;
 	ampl = (ampl > 0.5)? 1:0;
+	if (!tc.ref) { tc.data = ampl; tc.ref = 1; }
 	
 	// de-noise signal
    if (ampl == m.cur) {
