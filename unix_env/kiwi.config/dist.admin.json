@@ -9,6 +9,5 @@
 "update_check":false,
 "update_install":false,
 "sdr_hu_register":false,
-"api_key":"",
-"console_local":true
+"api_key":""
 }

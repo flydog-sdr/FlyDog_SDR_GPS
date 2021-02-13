@@ -27,16 +27,19 @@ function dcf77_legend()
 
 function dcf77_decode(bits)
 {
-   var min  = tc_bcd(bits, 21, 7, 1);     // what the minute _will be_ at the approaching minute boundary
+   // bits are what the minute _will be_ at the approaching minute boundary
+   
+   var min  = tc_bcd(bits, 21, 7, 1);
    var hour = tc_bcd(bits, 29, 6, 1);
    var day  = tc_bcd(bits, 36, 6, 1);
    var wday = tc_bcd(bits, 42, 3, 1);
    var mo   = tc_bcd(bits, 45, 5, 1) - 1;
-   var yr   = tc_bcd(bits, 50, 8, 1);
+   var yr   = tc_bcd(bits, 50, 8, 1) + 2000;
    var tz   = bits[17]? 'CEST' : (bits[18]? 'CET' : 'TZ?');
 
-   tc_dmsg('  '+ day +' '+ tc.mo[mo] +' '+ (yr+2000) +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' '+ tz +'<br>');
-   tc_stat('lime', 'Time decoded: '+ day +' '+ tc.mo[mo] +' '+ (yr+2000) +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' '+ tz);
+   var s = day +' '+ tc.mo[mo] +' '+ yr +' '+ hour.leadingZeros(2) +':'+ min.leadingZeros(2) +' '+ tz;
+   tc_dmsg('  '+ s +'<br>');
+   tc_stat('lime', 'Time decoded: '+ s);
 }
 
 function dcf77_clr()
@@ -54,6 +57,7 @@ function dcf77_ampl(ampl)
 	var d = dcf77;
 	tc.trig++; if (tc.trig >= 100) tc.trig = 0;
 	ampl = (ampl > 0.5)? 1:0;
+	if (!tc.ref) { tc.data = ampl; tc.ref = 1; }
 	
 	// de-noise signal
    if (ampl == d.cur) {
