@@ -46,15 +46,15 @@ double ext_update_get_sample_rateHz(int rx_chan)
         adc_clk = ADC_CLOCK_TYP;
     } else {
         // jksx FIXME XXX WRONG-WRONG-WRONG
-	    //conn_t *c = ext_users[rx_chan].conn_ext;
+        //conn_t *c = ext_users[rx_chan].conn_ext;
         //srate = c->adc_clock_corrected;
         //c->srate = srate;   // update stored sample rate since we're using a new clock value
         adc_clk = adc_clock_system();
     }
-    
+
     double srate = adc_clk / rx_decim;
     //printf("EXT adc_clk=%.6f srate=%.6f\n", adc_clk, srate);
-	return srate;
+    return srate;
 }
 
 void ext_adjust_clock_offset(int rx_chan, double offset)
@@ -297,7 +297,7 @@ void extint_c2s(void *param)
 			char *cmd = nb->buf;
 			cmd[n] = 0;		// okay to do this -- see nbuf.c:nbuf_allocq()
 
-			// SECURITY: this must be first for auth check (except for keepalive check above)
+			// SECURITY: this must be first for auth check
 			if (rx_common_cmd("EXT", conn_ext, cmd))
 				continue;
 			
