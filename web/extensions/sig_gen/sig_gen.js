@@ -138,6 +138,7 @@ function gen_enable_cb(path, idx, first)
 	//console.log('gen_enable_cb enabled='+ gen.enable +' f='+ (gen.enable? gen.freq : 0));
 	if (!gen.enable && gen.sweeping) gen_sweep_cancel();
 	gen_set(gen.enable? gen.freq : 0, gen.attn_ampl, true);
+   colormap_update();
 }
 
 function gen_freq_cb(path, val)
@@ -185,14 +186,17 @@ function gen_attn_cb(path, val, complete)
 {
    val = +val;
 	var dB = +val + gen.attn_offset_val;
+	if (dB < 0) dB = 0;
 	var attn_ampl = Math.pow(10, -dB/20);		// use the amplitude form since we are multipling a signal
-	gen.attn_ampl = 0x01ffff * attn_ampl;
-	//console.log('gen_attn dB='+ dB +' val='+ val +' attn_ampl='+ gen.attn_ampl +' / '+ gen.attn_ampl.toHex());
+	gen.attn_ampl = 0x1ffff * attn_ampl;      // hardware gen_attn is 18-bit signed so max pos is 0x1ffff
+	//console.log('gen_attn val='+ val +' attn_offset_val='+ gen.attn_offset_val +' dB='+ dB +' attn_ampl='+ gen.attn_ampl.toFixed(1) +' / '+ gen.attn_ampl.toHex());
 	w3_num_cb(path, val);
 	w3_set_label('Attenuation '+ (-val).toString() +' dB', path);
 	
-	if (complete)
+	if (complete) {
 		gen_set(gen.freq, gen.attn_ampl);
+		colormap_update();
+	}
 }
 
 function gen_attn_offset_cb(path, idx, first)
@@ -215,6 +219,7 @@ function sig_gen_blur()
 	gen_set(0, 0, true);
 	ext_send('SET run=0');
 	ext_send('SET wf_comp=1');
+   toggle_or_set_spec(toggle_e.SET, 0);
 }
 
 // called to display HTML for configuration parameters in admin interface

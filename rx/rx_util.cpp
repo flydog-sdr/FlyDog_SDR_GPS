@@ -122,7 +122,8 @@ void cfg_adm_transition()
 int inactivity_timeout_mins, ip_limit_mins;
 int S_meter_cal, waterfall_cal;
 double ui_srate, freq_offset;
-int sdr_hu_lo_kHz, sdr_hu_hi_kHz;
+int kiwi_reg_lo_kHz, kiwi_reg_hi_kHz;
+float max_thr;
 
 #define DC_OFFSET_DEFAULT -0.02F
 #define DC_OFFSET_DEFAULT_PREV 0.05F
@@ -229,8 +230,8 @@ void update_vars_from_config()
     cfg_default_string("owner_info", "", &update_cfg);
     cfg_default_int("clk_adj", 0, &update_cfg);
     freq_offset = cfg_default_float("freq_offset", 0, &update_cfg);
-    sdr_hu_lo_kHz = cfg_default_int("sdr_hu_lo_kHz", 0, &update_cfg);
-    sdr_hu_hi_kHz = cfg_default_int("sdr_hu_hi_kHz", 30000, &update_cfg);
+    kiwi_reg_lo_kHz = cfg_default_int("sdr_hu_lo_kHz", 0, &update_cfg);
+    kiwi_reg_hi_kHz = cfg_default_int("sdr_hu_hi_kHz", 30000, &update_cfg);
     cfg_default_bool("index_html_params.RX_PHOTO_LEFT_MARGIN", true, &update_cfg);
     cfg_default_string("index_html_params.HTML_HEAD", "", &update_cfg);
     cfg_default_bool("ext_ADC_clk", false, &update_cfg);
@@ -248,6 +249,7 @@ void update_vars_from_config()
     cfg_default_int("init.aperture", 1, &update_cfg);
     cfg_default_int("S_meter_OV_counts", 10, &update_cfg);
     cfg_default_bool("webserver_caching", true, &update_cfg);
+    max_thr = (float) cfg_default_int("overload_mute", -15, &update_cfg);
 
     if (wspr_update_vars_from_config()) update_cfg = true;
 
@@ -334,6 +336,24 @@ void update_vars_from_config()
 	    update_cfg = true;
     }
     cfg_string_free(status_msg); status_msg = NULL;
+
+    char *rx_name = (char *) cfg_string("rx_name", NULL, CFG_REQUIRED);
+    // shrinking, so same memory space
+	nsm = kiwi_str_replace(rx_name, ", ZL/KF6VO, New Zealand", "");
+	if (nsm) {
+        cfg_set_string("rx_name", nsm);
+        update_cfg = true;
+    }
+    cfg_string_free(rx_name); rx_name = NULL;
+
+    char *rx_title = (char *) cfg_string("RX_TITLE", NULL, CFG_REQUIRED);
+    // shrinking, so same memory space
+	nsm = kiwi_str_replace(rx_title, " at <a href='http://kiwisdr.com' target='_blank' onclick='dont_toggle_rx_photo()'>ZL/KF6VO</a>", "");
+	if (nsm) {
+        cfg_set_string("RX_TITLE", nsm);
+        update_cfg = true;
+    }
+    cfg_string_free(rx_title); rx_title = NULL;
 
 	if (update_cfg)
 		cfg_save_json(cfg_cfg.json);

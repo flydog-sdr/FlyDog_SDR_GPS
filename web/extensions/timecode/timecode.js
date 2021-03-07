@@ -1,5 +1,24 @@
 // Copyright (c) 2017-2019 John Seamons, ZL/KF6VO
 
+//
+// TODO
+//
+// all
+//    For amplitude modes do better auto-inversion detection and restart.
+//    No leap second, UTC correction processing etc.
+//
+// JJY
+//    Add hours, minutes field parity checking.
+//    Minute 15/45: CW ID, year field replaced with service interruption field.
+//
+// RBU/RTZ
+//    Decode second data bit so parity bits can be used.
+//
+// WWVB
+//    Process six-minute sequences.
+//    Do some of the weak signal integration scenarios?
+//
+
 var tc = {
    ext_name:   'timecode',    // NB: must match timecode.c:timecode_ext.name
    first_time: true,
@@ -14,7 +33,7 @@ var tc = {
    ACQ_DATA2:  3,
 
    dbug:       '',
-   test:       0,
+   //test:       0,
    
 	srate:		0,
 	srate_upd:  0,
@@ -38,8 +57,9 @@ var tc = {
    pll_bw:     0,
 
    config:     0,
+   // RBU: lsb stronger, RTZ: usb stronger
    sig:        { JJY40:0,  RTZ:1,   WWVBa:2, WWVBp:3, JJY60:4, MSF:5,   RBU:6,   BPCa:7,  BPCss:8, DCF77a:9,   DCF77ss:10, TDF:11,  WWV:12 },
-   freq:       [ 40,       50.1,    60,      60,      60,      60,      66.766,  68.5,    68.5,    77.5,       77.5,       162,     10000.1, ],
+   freq:       [ 40,       50.1,    60,      60,      60,      60,      66.566,  68.5,    68.5,    77.5,       77.5,       162,     10000.1, ],
    pb:         [ 5,        30,      5,       5,       5,       5,       30,      5,       5,       5,          5,          5,       5 ],
    pll_bw_i:   [ 100,      100,     100,     5,       100,     100,     100,     100,     100,     100,        100,        5,       5 ],
    pll_off_i:  [ 500,      500,     500,     0,       500,     500,     500,     500,     500,     500,        500,        0,       100 ],
@@ -132,39 +152,6 @@ function tc_gap_bcd(bits, offset, n_bits, dir)
    for (var i=0; i < n_bits; i++) val += bits[offset + (dir*i)]? [1,2,4,8,0,10,20,40,80,0,100,200][i] : 0;
    return val;
 }
-
-// test function
-function tc_test(samp, ph, slice)
-{
-	var tct = tc.tct;
-	tct.bs.push(samp);
-	tct.bp.push(ph);
-	if (tct.bs.length > 500) { tct.bs.shift(); tct.bp.shift(); }
-	
-	if (tct.prev == 0 && slice == 1) {
-		tct.ct++;
-		if (tct.ct == 1) {
-			scope_clr();
-			var l = tct.bs.length;
-			console.log('len='+ l);
-			var tk=0;
-			for (var k=0; k<l; k++) {
-				var s = tct.bs[k]/10000;
-				var jph = tct.bp[k];
-				var mkr = undefined;
-				if (tk >= 0) {
-					tk -= 19.2;
-					mkr = 2;
-				}
-				tk += 1;
-				
-				for (var m=0; m<120; m++) scope_draw(s, mkr, undefined, jph);
-			}
-		}
-	}
-	tct.prev = slice;
-}
-
 
 function tc_recv(data)
 {
@@ -448,7 +435,7 @@ function tc_controls_setup()
             w3_button('w3-padding-small w3-aqua', 'Reset PLL', 'timecode_reset_pll_cb'),
             //w3_checkbox('w3-label-inline w3-label-not-bold/', 'update Kiwi<br>date &amp; time', 'tc.update', tc.update, 'w3_bool_cb'),
 			   w3_input('w3-padding-tiny w3-label-inline w3-label-not-bold|width:auto|size=3', 'pll bw:', 'tc.pll_bw', tc.pll_bw, 'timecode_pll_bw_cb'),
-            w3_button('w3-padding-small w3-aqua', 'Test', 'timecode_test_cb'),
+            //w3_button('w3-padding-small w3-aqua', 'Test', 'timecode_test_cb'),
 				w3_div('', '<pre id="id-tc-info" style="margin:0"></pre>')
 			),
 			w3_inline('w3-margin-T-4/w3-margin-right',
@@ -639,7 +626,7 @@ function timecode_resync_cb(path, val)
 	tc.ref = 0;
    w3_call(tc.sigid_s[tc.config] +'_clr');
 	scope_clr();
-	if (tc.test) ext_send('SET test');
+	//if (tc.test) ext_send('SET test');
 }
 
 function timecode_reset_pll_cb(path, val)
@@ -657,12 +644,14 @@ function timecode_pll_bw_cb(path, val, complete, first)
 	ext_send('SET pll_bandwidth='+ val);
 }
 
+/*
 function timecode_test_cb(path, val, first)
 {
    if (first) return;
    tc.test = 1;
 	ext_send('SET test');
 }
+*/
 
 function timecode_update_srate()
 {

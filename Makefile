@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 434
+VERSION_MIN = 437
 
 REPO_NAME = FlyDog_SDR_GPS
 DEBIAN_VER = 8.11
@@ -565,7 +565,17 @@ fopt foptim: foptim_files_embed foptim_ext foptim_files_maps
 endif
 
 foptim_list: loptim_embed loptim_ext loptim_maps
+
+CLEAN_MIN_GZ_2 = $(wildcard $(CLEAN_MIN_GZ))
+ifeq ($(CLEAN_MIN_GZ_2),)
 foptim_clean: roptim_embed roptim_ext roptim_maps
+	@echo "nothing to foptim_clean"
+else
+foptim_clean: roptim_embed roptim_ext roptim_maps
+	@echo "removing:"
+	@-ls -la $(CLEAN_MIN_GZ_2)
+	@-rm $(CLEAN_MIN_GZ_2)
+endif
 
 FILES_EMBED_SORTED_NW = $(sort $(EMBED_NW) $(EXT_EMBED_NW) $(PKGS_MAPS_EMBED_NW))
 FILES_ALWAYS_SORTED_NW = $(sort $(FILES_ALWAYS))
@@ -870,7 +880,7 @@ endif
 
 V_DIR = ~/shared/shared
 
-ifeq ($(XC),) ## do not copy bit streams from ~/shared/shared when cross-compiling
+ifeq ($(XC),) ## do not copy bit streams from $(V_DIR) when cross-compiling
 ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
 
 KiwiSDR.rx4.wf4.bit: $(V_DIR)/KiwiSDR.rx4.wf4.bit
@@ -961,24 +971,10 @@ else
 	install -D -o root -g root $(BUILD_DIR)/kiwid.bin /usr/local/bin/kiwid
 	install -D -o root -g root $(GEN_DIR)/kiwi.aout /usr/local/bin/kiwid.aout
 #	install -D -o root -g root $(GEN_DIR)/kiwi_realtime.bin /usr/local/bin/kiwid_realtime.bin
-	#install -D -o root -g root KiwiSDR.rx4.wf4.bit /usr/local/bin/KiwiSDR.rx4.wf4.bit
-	#install -D -o root -g root KiwiSDR.rx8.wf2.bit /usr/local/bin/KiwiSDR.rx8.wf2.bit
-	#install -D -o root -g root KiwiSDR.rx3.wf3.bit /usr/local/bin/KiwiSDR.rx3.wf3.bit
-	#install -D -o root -g root KiwiSDR.rx14.wf0.bit /usr/local/bin/KiwiSDR.rx14.wf0.bit
-#	Firmwares for FlyDog SDR
 	install -D -o root -g root FlyDogSDR.rx4.wf4.bit /usr/local/bin/FlyDogSDR.rx4.wf4.bit
 	install -D -o root -g root FlyDogSDR.rx8.wf2.bit /usr/local/bin/FlyDogSDR.rx8.wf2.bit
 	install -D -o root -g root FlyDogSDR.rx3.wf3.bit /usr/local/bin/FlyDogSDR.rx3.wf3.bit
 	install -D -o root -g root FlyDogSDR.rx14.wf0.bit /usr/local/bin/FlyDogSDR.rx14.wf0.bit
-#
-	#install -o root -g root unix_env/kiwid /etc/init.d
-	#install -o root -g root -m 0644 unix_env/kiwid.service /etc/systemd/system
-ifneq ($(RPI), true)
-	install -D -o root -g root -m 0644 unix_env/$(CAPE).dts /lib/firmware/$(CAPE).dts
-	install -D -o root -g root -m 0644 unix_env/$(SPI).dts /lib/firmware/$(SPI).dts
-	install -D -o root -g root -m 0644 unix_env/$(PRU).dts /lib/firmware/$(PRU).dts
-endif
-#
 	install -D -o root -g root $(GEN_DIR)/noip2 /usr/local/bin/noip2
 #
 	install -D -o root -g root -m 0644 $(DIR_CFG_SRC)/frpc.template.ini $(DIR_CFG)/frpc.template.ini
@@ -1245,7 +1241,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
 copy_to_git:
 	@(echo 'current dir is:'; pwd)
 	@echo
-	@(cd $(GITAPP)/$(REPO_NAME); echo 'repo branch set to:'; pwd; git branch)
+	@(cd $(GITAPP)/$(REPO_NAME); echo 'repo branch set to:'; pwd; git --no-pager branch)
 	@echo '################################'
 #	@echo 'DANGER: #define MINIFY_WEBSITE_DOWN'
 #	@echo '################################'
@@ -1257,7 +1253,7 @@ copy_to_git:
 copy_from_git:
 	@(echo 'current dir is:'; pwd)
 	@echo
-	@(cd $(GITAPP)/$(REPO_NAME); echo 'repo branch set to:'; pwd; git branch)
+	@(cd $(GITAPP)/$(REPO_NAME); echo 'repo branch set to:'; pwd; git --no-pager branch)
 	@echo -n 'are you sure? '
 	@read not_used
 	make clean_dist
