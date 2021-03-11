@@ -195,7 +195,7 @@ bool fft_msgs(char *msg, int rx_chan)
         
 		if (e->run != FUNC_OFF) {
 			float scale = 10.0 * 2.0 / (CUTESDR_MAX_VAL * CUTESDR_MAX_VAL * INTEG_WIDTH * INTEG_WIDTH);
-            e->isSAM = (snd->mode == MODE_SAM || snd->mode == MODE_SAL || snd->mode == MODE_SAU || snd->mode == MODE_SAS);
+            e->isSAM = (snd->mode == MODE_SAM || snd->mode == MODE_SAL || snd->mode == MODE_SAU || snd->mode == MODE_SAS || snd->mode == MODE_QAM);
             float boost = 1;
 			
 			switch (e->run) {
@@ -203,28 +203,32 @@ bool fft_msgs(char *msg, int rx_chan)
 			    case FUNC_WF:
 			        e->ch = 0;
 			        snd->secondary_filter = false;
-			        boost = 1e4;
+			        //boost = 1e4;
+			        boost = (p3_f? p3_f : 1e4);
 			        break;
 			
 			    case FUNC_SPEC:
 			        e->ch = e->isSAM? 1:0;
 			        snd->secondary_filter = e->isSAM? true:false;
 
-                    boost = e->isSAM? 1e4 : 1e6;    // scale up to roughly match WF spectrum values
+                    //boost = e->isSAM? 1e4 : 1e6;    // scale up to roughly match WF spectrum values
+                    boost = e->isSAM? ( (snd->mode == MODE_QAM)? (p2_f? p2_f : 0.002) : (p1_f? p1_f : 0.001) ) : (p0_f? p0_f : 1e6);    // scale up to roughly match WF spectrum values
                     e->last_ms = 0;
 			        break;
 			
 			    case FUNC_INTEG:
 			        e->ch = 0;
 			        snd->secondary_filter = false;
+			        //boost = 1e4;
+			        boost = (p3_f? p3_f : 1e4);
 			        break;
 			}
 
             e->spectrum_scale = scale * boost;
             e->fft_scale      = scale * boost;
 			ext_register_receive_FFT_samps(fft_data, rx_chan, POST_FILTERED);
-            //printf("FFT func=%s isSAM=%d scale=%g boost=%.1g spectrum_scale=%g fft_scale=%g\n",
-            //    func_s[e->run+1], e->isSAM, scale, boost, e->spectrum_scale, e->fft_scale);
+            printf("FFT func=%s mode=%s isSAM=%d (scale=%g * boost=%.1g) => spectrum_scale=%g fft_scale=%g\n",
+                func_s[e->run+1], modu_s[snd->mode], e->isSAM, scale, boost, e->spectrum_scale, e->fft_scale);
 		} else {
             snd->secondary_filter = false;
 			ext_unregister_receive_FFT_samps(rx_chan);
