@@ -49,7 +49,7 @@ extern bool background_mode, need_hardware, is_multi_core, kiwi_restart,
 	DUC_enable_start, rev_enable_start, web_nocache, auth_su, kiwi_reg_debug,
 	have_ant_switch_ext, gps_e1b_only, disable_led_task, debug_printfs, force_camp;
 
-extern int p0, p1, p2, wf_sim, wf_real, wf_time, ev_dump, wf_flip, wf_exit, wf_start, tone, down, navg,
+extern int wf_sim, wf_real, wf_time, ev_dump, wf_flip, wf_exit, wf_start, tone, down, navg,
 	rx_cordic, rx_cic, rx_cic2, rx_dump, wf_cordic, wf_cic, wf_mult, wf_mult_gen, meas,
 	rx_yield, gps_chans, spi_clkg, spi_speed, wf_max, rx_num, wf_num, do_slice, do_gps, do_sdr, wf_olap,
 	spi_delay, do_fft, noisePwr, unwrap, rev_iq, ineg, qneg, fft_file, fftsize, fftuse, bg, alt_port,
@@ -69,20 +69,23 @@ extern char *tzone_id, *tzone_name;
 extern char auth_su_remote_ip[NET_ADDRSTRLEN];
 extern cfg_t cfg_ipl;
 extern char *fpga_file;
-
 extern lock_t spi_lock;
+
+extern float p0_f, p1_f, p2_f, p3_f, p4_f, p5_f, p6_f, p7_f;
+extern int p0_i, p1_i, p2_i, p3_i, p4_i, p5_i, p6_i, p7_i;
+
 extern bool fdsdr;
 
 // values defined in rx_cmd.cpp
 // CAUTION: order in mode_s/modu_s must match mode_e, mode_hbw, mode_offset
 // CAUTION: order in mode_s/modu_s must match kiwi.js:kiwi.modes_l
 // CAUTION: add new entries at the end
-#define N_MODE 15
-// = { "am", "amn", "usb", "lsb", "cw", "cwn", "nbfm", "iq", "drm", "usn", "lsn", "sam", "sau", "sal", "sas" };
+#define N_MODE 16
+// = { "am", "amn", "usb", "lsb", "cw", "cwn", "nbfm", "iq", "drm", "usn", "lsn", "sam", "sau", "sal", "sas", "qam" };
 extern const char *mode_s[N_MODE], *modu_s[N_MODE];
 extern const int mode_hbw[N_MODE], mode_offset[N_MODE];
 typedef enum {
-    MODE_AM, MODE_AMN, MODE_USB, MODE_LSB, MODE_CW, MODE_CWN, MODE_NBFM, MODE_IQ, MODE_DRM, MODE_USN, MODE_LSN, MODE_SAM, MODE_SAU, MODE_SAL, MODE_SAS
+    MODE_AM, MODE_AMN, MODE_USB, MODE_LSB, MODE_CW, MODE_CWN, MODE_NBFM, MODE_IQ, MODE_DRM, MODE_USN, MODE_LSN, MODE_SAM, MODE_SAU, MODE_SAL, MODE_SAS, MODE_QAM
 } mode_e;
 
 
@@ -90,7 +93,8 @@ typedef enum { DOM_SEL_NAM=0, DOM_SEL_DUC=1, DOM_SEL_PUB=2, DOM_SEL_SIP=3, DOM_S
 
 typedef enum { RX4_WF4=0, RX8_WF2=1, RX3_WF3=2, RX14_WF0=3 } firmware_e;
 
-#define	KEEPALIVE_SEC		60
+#define	KEEPALIVE_SEC		    60
+#define KEEPALIVE_SEC_NO_AUTH   15      // don't hang the rx channel as long if waiting for password entry
 
 // print_stats
 #define STATS_GPS       0x01

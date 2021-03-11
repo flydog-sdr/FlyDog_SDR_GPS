@@ -820,6 +820,7 @@ var passbands = {
 	sal:		{ lo: -4900,	hi:     0 },
 	sau:		{ lo:     0,	hi:  4900 },
 	sas:		{ lo: -4900,	hi:  4900 },
+	qam:		{ lo: -4900,	hi:  4900 },
 	drm:		{ lo: -5000,	hi:  5000 },
 	lsb:		{ lo: -2700,	hi:  -300 },	         // cf = 1500 Hz, bw = 2400 Hz
 	lsn:		{ lo: -2400,	hi:  -300 },	         // cf = 1350 Hz, bw = 2100 Hz
@@ -944,6 +945,7 @@ function demodulator_default_analog(offset_frequency, subtype, locut, hicut)
 	   case 'sal':
 	   case 'sau':
 	   case 'sas':
+	   case 'qam':
 	   case 'drm':
 	   case 'nbfm':
 	   case 'iq':
@@ -1213,7 +1215,7 @@ function demodulator_analog_replace(subtype, freq)
 	var offset = 0, prev_pbo = 0, low_cut = NaN, high_cut = NaN;
 	var wasCW = false, toCW = false, fromCW = false;
 	
-   w3_show_hide('id-sam-carrier-container', subtype.startsWith('sa'));
+   w3_show_hide('id-sam-carrier-container', subtype.startsWith('sa') || subtype.startsWith('qa'));
 
 	if (demodulators.length) {
 		wasCW = demodulators[0].isCW;
@@ -2115,7 +2117,7 @@ function canvas_start_drag(evt, x, y)
 		var fold = canvas_get_dspfreq(x);
 		var b = find_band(fold);
 		var cm = cur_mode.substr(0,2);
-		var am_ssb_iq_drm = (cm == 'am' || cm == 'sa' || cm == 'ls' || cm == 'us' || cm == 'iq' || cm == 'dr');
+		var am_ssb_iq_drm = (cm == 'am' || cm == 'sa' || cm == 'qa' || cm == 'ls' || cm == 'us' || cm == 'iq' || cm == 'dr');
 		//console_log('nearest', cm, am_ssb_iq_drm);
 	   var ITU_region = cfg.init.ITU_region + 1;
 	   var ham_80m_swbc_75m_overlap = (ITU_region == 2 && b && b.name == '75m');
@@ -4874,7 +4876,9 @@ function modeset_update_ui(mode)
 	if (owrx.last_mode_el != null) owrx.last_mode_el.style.color = "white";
 	
 	// if sound comes up before waterfall then the button won't be there
-	var el = w3_el('id-mode-'+ mode.substr(0,2));
+	var m = mode.substr(0,2);
+	if (m == 'qa') m = 'sa';   // QAM -> SAM case
+	var el = w3_el('id-mode-'+ m);
 	el.innerHTML = mode.toUpperCase();
 	if (el && el.style) el.style.color = "lime";
 	owrx.last_mode_el = el;
@@ -4898,8 +4902,8 @@ function try_freqset_update_ui()
 		if (wf.audioFFT_active) {
 		
          // if not already clearing then clear on iq mode change
-         var c_iq_drm_sas = (cur_mode == 'iq' || cur_mode == 'drm' || cur_mode == 'sas')? 1:0;
-         var p_iq_drm_sas = (wf.audioFFT_prev_mode == 'iq' || wf.audioFFT_prev_mode == 'drm' || wf.audioFFT_prev_mode == 'sas')? 1:0;
+         var c_iq_drm_sas = ext_is_IQ_or_stereo_curmode()? 1:0;
+         var p_iq_drm_sas = ext_is_IQ_or_stereo_mode(wf.audioFFT_prev_mode)? 1:0;
 		   if (!wf.audioFFT_clear_wf && (c_iq_drm_sas ^ p_iq_drm_sas))
 		      wf.audioFFT_clear_wf = true;
 		   audioFFT_update();
@@ -4955,7 +4959,7 @@ function freqset_complete(from)
 	var err = true;
 
    if (obj.value == '/') {
-      //console.log('--> restore_passband '+ cur_mode);
+      //console.log('restore_passband '+ cur_mode);
       restore_passband(cur_mode);
       demodulator_analog_replace(cur_mode);
       freqset_update_ui();    // restore previous
@@ -5041,9 +5045,8 @@ function freqset_keyup(obj, evt)
 	if (evt != undefined && evt.key != undefined) {
 		var klen = evt.key.length;
 		
-		// any_alternate_click_event_except_shift(), and check for evt.key != 'Shift',  allows e.g. "10M" for 10 MHz
-		if (any_alternate_click_event_except_shift(evt) || (klen != 1 && evt.key != 'Backspace' && evt.key != 'Shift')) {
-		   //console.log('--> key='+ evt.key);
+		// any_alternate_click_event_except_shift() allows e.g. "10M" for 10 MHz
+		if (any_alternate_click_event_except_shift(evt) || (klen != 1 && evt.key != 'Backspace')) {
 	
 			// An escape while the the freq box has focus causes the browser to put input value back to the
 			// last entered value directly by keyboard. This value is likely different than what was set by
@@ -5052,9 +5055,6 @@ function freqset_keyup(obj, evt)
 			   //event_dump(evt, 'Escape-freq');
 				//console.log('** restore freq box');
 				freqset_update_ui();
-			} else
-			if (evt.key == 'Enter') {
-			   freqset_complete('Enter');
 			}
 	
 			//console.log('FKU IGNORE ign='+ ignore_next_keyup_event +' klen='+ klen);
@@ -5064,8 +5064,6 @@ function freqset_keyup(obj, evt)
 	}
 	
 	if (ignore_next_keyup_event) {
-      freqset_complete('IKU');
-      //console.log('--> IKU');
       ignore_next_keyup_event = false;
       return;
    }
@@ -5083,6 +5081,7 @@ var up_down = {
 	sal: [ 0, -1, -0.1, 0.1, 1, 0 ],
 	sau: [ 0, -1, -0.1, 0.1, 1, 0 ],
 	sas: [ 0, -1, -0.1, 0.1, 1, 0 ],
+	qam: [ 0, -1, -0.1, 0.1, 1, 0 ],
 	drm: [ 0, -1, -0.1, 0.1, 1, 0 ],
 	usb: [ 0, -1, -0.1, 0.1, 1, 0 ],
 	usn: [ 0, -1, -0.1, 0.1, 1, 0 ],
@@ -5103,6 +5102,7 @@ var up_down_default = {
 	sal: [ 5, 0, 0, 0, 0, 5 ],
 	sau: [ 5, 0, 0, 0, 0, 5 ],
 	sas: [ 5, 0, 0, 0, 0, 5 ],
+	qam: [ 5, 0, 0, 0, 0, 5 ],
 	drm: [ 5, 0, 0, 0, 0, 5 ],
 	usb: [ 5, 0, 0, 0, 0, 5 ],
 	usn: [ 5, 0, 0, 0, 0, 5 ],
@@ -5131,7 +5131,7 @@ function special_step(b, sel, caller)
 	} else
 	if (b != null && (b.name == 'LW' || b.name == 'MW')) {
 	   var cm = cur_mode.substr(0,2);
-		var am_ssb_iq_drm = (cm == 'am' || cm == 'sa' || cm == 'ls' || cm == 'us' || cm == 'iq' || cm == 'dr');
+		var am_ssb_iq_drm = (cm == 'am' || cm == 'sa' || cm == 'qa' || cm == 'ls' || cm == 'us' || cm == 'iq' || cm == 'dr');
 		//console_log('special step', cm, am_ssb_iq_drm);
 		if (am_ssb_iq_drm) {
 			step_Hz = step_9_10? 9000 : 10000;
@@ -5209,7 +5209,7 @@ function freq_step_update_ui(force)
 	}
 
    var cm = cur_mode.substr(0,2);
-   var am_ssb_iq_drm = (cm == 'am' || cm == 'sa' || cm == 'ls' || cm == 'us' || cm == 'iq' || cm == 'dr');
+   var am_ssb_iq_drm = (cm == 'am' || cm == 'sa' || cm == 'qa' || cm == 'ls' || cm == 'us' || cm == 'iq' || cm == 'dr');
 	var show_9_10 = (b != null && (b.name == 'LW' || b.name == 'MW') && am_ssb_iq_drm)? true:false;
 	w3_visible('id-9-10-cell', show_9_10);
 
@@ -6361,13 +6361,12 @@ function smeter_init()
 	sMeter_ctx.fillStyle = "white";
 	for (var i=0; i < bars.text.length; i++) {
 		var x = smeter_dBm_biased_to_x(bars.dBm[i] + SMETER_BIAS);
-		line_stroke(sMeter_ctx, 1, 3, "white", x,y-8,x,y+8);
+		line_stroke(sMeter_ctx, 1, 3, "white", x,y-8, x,y+8);
 		sMeter_ctx.fillText(bars.text[i], x, y-15);
 		//console.log("SM x="+x+' dBm='+bars.dBm[i]+' '+bars.text[i]);
 	}
 
-	line_stroke(sMeter_ctx, 0, 2, "black", 0,y-3,w,y-3);
-	line_stroke(sMeter_ctx, 0, 5, "black", 0,y,w,y);
+	line_stroke(sMeter_ctx, 0, 5, "black", 0,y, w,y);
 	setInterval(update_smeter, 100);
 }
 
@@ -6378,22 +6377,24 @@ var sm_ovfl_showing = false;
 function update_smeter()
 {
 	var x = smeter_dBm_biased_to_x(owrx.sMeter_dBm_biased);
-	var x_thr = smeter_dBm_biased_to_x(-thresh);
 	var y = SMETER_SCALE_HEIGHT-8;
 	var w = smeter_width;
 	sMeter_ctx.globalAlpha = 1;
-	line_stroke(sMeter_ctx, 0, 5, "lime", 0,y,x,y);
-	line_stroke(sMeter_ctx, 0, 2, "white", 0,y-3,w-x_thr,y-3);
-	line_stroke(sMeter_ctx, 0, 2, "black", w-x_thr,y-3,w,y-3);
+	line_stroke(sMeter_ctx, 0, 5, "lime", 0,y, x,y);
+
+   if (cfg.agc_thresh_smeter) {
+	   var x_thr = smeter_dBm_biased_to_x(-thresh);
+	   line_stroke(sMeter_ctx, 0, 2, "white", 0,y-3, w-x_thr,y-3);
+	   line_stroke(sMeter_ctx, 0, 2, "black", w-x_thr,y-3, w,y-3);
+	}
 	
 	if (sm_timeout-- == 0) {
 		sm_timeout = sm_interval;
-		if (x < sm_px) line_stroke(sMeter_ctx, 0, 5, "black", x,y,sm_px,y);
-		//if (x < sm_px) line_stroke(sMeter_ctx, 0, 5, "black", x,y,w,y);
+		if (x < sm_px) line_stroke(sMeter_ctx, 0, 5, "black", x,y, sm_px,y);
 		sm_px = x;
 	} else {
 		if (x < sm_px) {
-			line_stroke(sMeter_ctx, 0, 5, "red", x,y,sm_px,y);
+			line_stroke(sMeter_ctx, 0, 5, "red", x,y, sm_px,y);
 		} else {
 			sm_px = x;
 			sm_timeout = sm_interval;
@@ -6473,7 +6474,7 @@ function ident_keyup(el, evt)
 	if (evt != undefined && evt.key != undefined) {
 		var klen = evt.key.length;
 		if (any_alternate_click_event_except_shift(evt) || klen != 1 && evt.key != 'Backspace' && evt.key != 'Shift') {
-		   //console.log('--> IDENT key='+ evt.key);
+		   //console.log('IDENT key='+ evt.key);
 			if (evt.key == 'Enter') {
 			   ident_complete('Enter');
 			}
@@ -6805,7 +6806,13 @@ function panels_setup()
 	w3_el("id-control-freq1").innerHTML =
 	   w3_inline('',
          w3_div('id-freq-cell',
-            w3_input('w3-custom-events|padding:0 4px;max-width:74px|size=8 onkeydown="freqset_keydown(event)" onkeyup="freqset_keyup(this, event)"', '', 'freq-input')
+            // NB: DO NOT remove the following <form> (3/2021)
+            // The CATSync app depends on this API by using the following javascript injection:
+            // Dim jsFreqKiwiSDR As String = "targetForm = document.forms['form_freq'];targetForm.elements[0].value = '" + frequency + "';freqset_complete(0); false"
+            // Form1.browser.ExecuteScriptAsync(jsFreqKiwiSDR)
+            '<form id="id-freq-form" name="form_freq" action="#" onsubmit="freqset_complete(0); return false;">' +
+               w3_input('w3-custom-events|padding:0 4px;max-width:74px|size=8 onkeydown="freqset_keydown(event)" onkeyup="freqset_keyup(this, event)"', '', 'freq-input') +
+            '</form>'
          ),
 
          w3_div('|padding:0 0 0 3px',
@@ -6875,21 +6882,20 @@ function panels_setup()
          ),
          w3_div('',
             w3_div('fa-stack||title="record"',
-               w3_icon('id-rec1', 'fa-circle fa-nudge-down fa-stack-2x w3-text-pink', 22, '', 'toggle_or_set_rec'),
-               w3_icon('id-rec2', 'fa-stop fa-stack-1x w3-text-pink w3-hide', 10, '', 'toggle_or_set_rec')
+               w3_icon('id-rec1', 'fa-repeat fa-stack-1x w3-text-pink', 22, '', 'toggle_or_set_rec')
             )
          ),
          w3_div('|width:8%|title="mute"',
             // from https://jsfiddle.net/cherrador/jomgLb2h since fa doesn't have speaker-slash
             w3_div('id-mute-no fa-stack|width:100%; color:lime',
-               w3_icon('', 'fa-volume-up fa-stack-2x fa-nudge-right-OFF', 24, 'inherit', 'toggle_or_set_mute')
+               w3_icon('', 'fa-volume-up fa-stack-2x', 24, 'inherit', 'toggle_or_set_mute')
             ),
             w3_div('id-mute-yes fa-stack w3-hide|width:100%;color:magenta;',  // hsl(340, 82%, 60%) w3-text-pink but lighter
                w3_icon('', 'fa-volume-off fa-stack-2x fa-nudge-left', 24, '', 'toggle_or_set_mute'),
-               w3_icon('', 'fa-times fa-right fa-nudge-left-OFF', 12, '', 'toggle_or_set_mute')
+               w3_icon('', 'fa-times fa-right', 12, '', 'toggle_or_set_mute')
             ),
             w3_div('id-mute-exclaim fa-stack w3-hide|width:100%; color:yellow',
-               w3_icon('', 'fa-exclamation-triangle fa-stack-1x fa-nudge-right-OFF', 20, 'inherit')
+               w3_icon('', 'fa-exclamation-triangle fa-stack-1x', 20, 'inherit')
             )
          )
       );
@@ -7150,7 +7156,7 @@ function panels_setup()
 			w3_col_percent('w3-valign/class-slider',
 				w3_div('label-threshold w3-show-inline-block', 'Threshold'), 18,
 				'<input id="input-threshold" type="range" min="-130" max="0" value="'+ thresh +'" step="1" onchange="setThresh(1,this.value)" oninput="setThresh(0,this.value)">', 52,
-				w3_div('field-threshold w3-show-inline-block', thresh.toString()) +' dB', 30
+				w3_div('field-threshold w3-show-inline-block', thresh.toString()) +' dBm', 30
 			),
 			w3_col_percent('w3-valign/class-slider',
 				w3_div('label-slope w3-show-inline-block', 'Slope'), 18,
@@ -7893,15 +7899,9 @@ function toggle_or_set_rec(set)
 {
    recording = !recording;
    //console.log('toggle_or_set_rec set=' + set + ' recording=' + recording);
-   var el1 = w3_el('id-rec1');
-   w3_show_hide('id-rec2', recording);
-   if (recording) {
-      w3_remove_then_add(el1, 'fa-circle', 'fa-circle-o-notch fa-spin');
-   } else {
-      w3_remove_then_add(el1, 'fa-circle-o-notch fa-spin', 'fa-circle');
-      w3_remove_then_add('id-rec1', 'w3-text-white', 'w3-text-pink');
-      w3_remove_then_add('id-rec2', 'w3-text-white', 'w3-text-pink');
-   }
+   w3_remove_then_add('id-rec1', 'fa-spin', recording? 'fa-spin':'');
+   w3_remove_then_add('id-rec1', 'w3-text-white', 'w3-text-pink');      // in case squelched when recording stopped
+
    if (recording) {
       // Start recording. This is a 'window' property, so audio_recv(), where the
       // recording hooks are, can access it.
@@ -7924,7 +7924,7 @@ function toggle_or_set_rec(set)
       wav_data.setUint32(12, 0x666d7420);                                 // ASCII "fmt "
       wav_data.setUint32(16, 16, true);                                   // Length of this section ("fmt ") in bytes
       wav_data.setUint16(20, 1, true);                                    // PCM coding
-      var nch = (cur_mode === 'iq' || cur_mode === 'drm' || cur_mode === 'sas')? 2 : 1;   // Two channels for stereo modes, one channel otherwise
+      var nch = ext_is_IQ_or_stereo_curmode()? 2 : 1;                     // Two channels for stereo modes, one channel otherwise
       wav_data.setUint16(22, nch, true);
       var srate = Math.round(audio_input_rate || 12000);
       wav_data.setUint32(24, srate, true);                                // Sample rate
@@ -7968,7 +7968,7 @@ function squelch_action(sq)
 
    owrx.squelched_overload = (owrx.sMeter_dBm >= cfg.overload_mute);
    if (owrx.prev_squelched_overload != owrx.squelched_overload) {
-      //console.log('--> squelched_overload='+ (owrx.squelched_overload? 1:0));
+      //console.log('squelched_overload='+ (owrx.squelched_overload? 1:0));
       w3_show_hide('id-mute-exclaim', owrx.squelched_overload);
       w3_show_hide('id-mute-no', owrx.squelched_overload? false : !muted);
       w3_show_hide('id-mute-yes', owrx.squelched_overload? false : muted);
@@ -7979,10 +7979,9 @@ function squelch_action(sq)
    w3_color('id-mute-no', mute_color);
    
    if (recording) {
-      sq_color = squelched? 'w3-text-white':'w3-text-pink';
-      w3_remove_then_add('id-rec1', 'fa-spin', squelched? '':'fa-spin');
-      w3_remove_then_add('id-rec1', 'w3-text-white w3-text-pink', sq_color);
-      w3_remove_then_add('id-rec2', 'w3-text-white w3-text-pink', sq_color);
+      var stop = (squelched || owrx.squelched_overload);
+      w3_remove_then_add('id-rec1', 'fa-spin', stop? '':'fa-spin');
+      w3_remove_then_add('id-rec1', 'w3-text-white w3-text-pink', stop? 'w3-text-white' : 'w3-text-pink');
    }
 }
 
@@ -8355,6 +8354,7 @@ function mode_over(evt, el)
       case 'sal': s = 'synchronous AM LSB'; break;
       case 'sau': s = 'synchronous AM USB'; break;
       case 'sas': s = 'synchronous AM stereo'; break;
+      case 'qam': s = 'C-QUAM AM stereo'; break;
       
       default: s = ''; break;
    }
@@ -8382,14 +8382,14 @@ function restore_passband(mode)
 }
 
 var mode_buttons = [
-   { s:[ 'AM', 'AMN' ],                 dis:0 },    // fixme: add AMW dynamically if 20 kHz mode? would have to deal with last_mode=ANW cookie
-   { s:[ 'SAM', 'SAL', 'SAU', 'SAS' ],  dis:0 },
-   { s:[ 'DRM' ],                       dis:0 },
-   { s:[ 'LSB', 'LSN' ],                dis:0 },
-   { s:[ 'USB', 'USN' ],                dis:0 },
-   { s:[ 'CW', 'CWN' ],                 dis:0 },
-   { s:[ 'NBFM' ],                      dis:0 },
-   { s:[ 'IQ' ],                        dis:0 },
+   { s:[ 'AM', 'AMN' ],                         dis:0 },    // fixme: add AMW dynamically if 20 kHz mode? would have to deal with last_mode=ANW cookie
+   { s:[ 'SAM', 'SAL', 'SAU', 'SAS', 'QAM' ],   dis:0 },
+   { s:[ 'DRM' ],                               dis:0 },
+   { s:[ 'LSB', 'LSN' ],                        dis:0 },
+   { s:[ 'USB', 'USN' ],                        dis:0 },
+   { s:[ 'CW', 'CWN' ],                         dis:0 },
+   { s:[ 'NBFM' ],                              dis:0 },
+   { s:[ 'IQ' ],                                dis:0 },
 ];
 
 function mode_button(evt, el, dir)
@@ -8399,8 +8399,8 @@ function mode_button(evt, el, dir)
 
 	// Prevent going between mono and stereo modes while recording
 	// FIXME: do something better like disable ineligible mode buttons and show reason in mouseover tooltip 
-   var c_iq_drm_sas = (cur_mode == 'iq' || cur_mode == 'drm' || cur_mode == 'sas')? 1:0;
-   var m_iq_drm_sas = (mode == 'iq' || mode == 'drm' || mode == 'sas')? 1:0;
+   var c_iq_drm_sas = ext_is_IQ_or_stereo_curmode()? 1:0;
+   var p_iq_drm_sas = ext_is_IQ_or_stereo_mode(wf.audioFFT_prev_mode)? 1:0;
 	if (recording && (c_iq_drm_sas ^ m_iq_drm_sas)) {
 		return;
 	}
