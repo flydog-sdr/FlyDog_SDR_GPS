@@ -510,12 +510,13 @@ void reload_index_params()
 	iparams_add("GEN_LIST_CSS", kstr_sp(sb));
 	kstr_free(sb);
 	
-	const char *gen_list_js[2][11] = {
+	const char *gen_list_js[2][12] = {
 	    {
 		    "kiwi/kiwi_util.js",
 		    "kiwi/kiwi.js",
 		    "kiwi/kiwi_ui.js",
 		    "kiwi/w3_util.js",
+		    "kiwi/monitor.js",
 		    "openwebrx.js",
 		    "ima_adpcm.js",
 		    "audio.js",
@@ -677,7 +678,10 @@ int web_request(struct mg_connection *mc, enum mg_event evt) {
         o_uri = (char *) "index.html";
 
         // Kiwi URL redirection
-        if (rx_count_server_conns(INCLUDE_INTERNAL) == rx_chans || down || update_in_progress || backup_in_progress) {
+        // don't redirect if camp specified in URL
+        bool camp = (mc->query_string && (kiwi_str_begins_with((char *) mc->query_string, "camp") || strstr(mc->query_string, "&camp")));
+        bool all_chans_full = (rx_count_server_conns(INCLUDE_INTERNAL) == rx_chans);
+        if ((!camp && all_chans_full) || down || update_in_progress || backup_in_progress) {
             char *url_redirect = (char *) admcfg_string("url_redirect", NULL, CFG_REQUIRED);
             if (url_redirect != NULL && *url_redirect != '\0') {
             

@@ -24,9 +24,7 @@ var extint = {
 };
 
 var devl = {
-   in1: 1,
-   in2: 0,
-   in3: 0
+   p0: 0, p1: 0, p2: 0, p3: 0, p4: 0, p5: 0, p6: 0, p7: 0
 };
 
 function ext_switch_to_client(ext_name, first_time, recv_func)
