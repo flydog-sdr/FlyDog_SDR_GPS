@@ -34,6 +34,8 @@ var owrx = {
    
    sMeter_dBm_biased: 0,
    sMeter_dBm: 0,
+   smeter_interval: null,
+   force_no_agc_thresh_smeter: false,
    squelched_overload: false,
    prev_squelched_overload: false,
    
@@ -198,7 +200,7 @@ function kiwi_main()
 	s = 'pbc'; if (q[s]) override_pbc = q[s];
 	s = 'sp'; if (q[s]) spectrum_show = q[s];
 	s = 'spp'; if (q[s]) spectrum_param = parseFloat(q[s]);
-	s = 'vol'; if (q[s]) { volume = parseInt(q[s]); volume = Math.max(0, volume); volume = Math.min(400, volume); }
+	s = 'vol'; if (q[s]) { kiwi.volume = parseInt(q[s]); kiwi.volume = Math.max(0, Math.min(400, kiwi.volume)); }
 	s = 'mute'; if (q[s]) muted_initially = parseInt(q[s]);
 	s = 'wf'; if (q[s]) wf_rate = q[s];
 	s = 'wfm'; if (q[s]) wf_mm = q[s];
@@ -1214,8 +1216,8 @@ function demodulator_analog_replace(subtype, freq)
 
 	var offset = 0, prev_pbo = 0, low_cut = NaN, high_cut = NaN;
 	var wasCW = false, toCW = false, fromCW = false;
-	
-   w3_show_hide('id-sam-carrier-container', subtype.startsWith('sa') || subtype.startsWith('qa'));
+	var m = subtype.substr(0,2);
+   w3_show_hide('id-sam-carrier-container', m == 'sa' || m == 'qa');
 
 	if (demodulators.length) {
 		wasCW = demodulators[0].isCW;
@@ -1264,6 +1266,8 @@ function demodulator_analog_replace(subtype, freq)
    if (cur_mode != 'drm')
       extint.prev_mode = cur_mode;
 	cur_mode = subtype;
+   if (toCW || fromCW)
+      set_agc();
 	//console.log("demodulator_analog_replace: cur_mode="+ cur_mode);
 
 	// must be done here after demod is added, so demod.isCW is available after demodulator_add()
@@ -1533,12 +1537,16 @@ function get_visible_freq_range()
 {
 	out={};
 	
-	if (wf.audioFFT_active && cur_mode != undefined) {
+	if (wf.audioFFT_active && cur_mode) {
 	   var off, span;
       var srate = Math.round(audio_input_rate || 12000);
-	   if (cur_mode == 'iq' || cur_mode == 'drm') {
+	   if (ext_is_IQ_or_stereo_curmode()) {
 	      off = 0;
 	      span = srate;
+	   } else
+	   if (cur_mode && (cur_mode.substr(0,2) == 'ls' || cur_mode == 'sal')) {
+	      off = 0;
+	      span = srate/2;
 	   } else {
 	      off = srate/4;
 	      span = srate/2;
@@ -2054,9 +2062,9 @@ function canvas_get_carfreq_offset(relativeX, incl_PBO)
    var norm = relativeX/waterfall_width;
    if (wf.audioFFT_active) {
       var cur = center_freq + demodulators[0].offset_frequency;
-      var iq_or_drm = (cur_mode == 'iq' || cur_mode == 'drm');
-      norm -= iq_or_drm? 0.5 : 0.25;
-      var incr = norm * audio_input_rate * (iq_or_drm? 2 : 1);
+      var iq = (ext_is_IQ_or_stereo_curmode());
+      norm -= iq? 0.5 : 0.25;
+      var incr = norm * audio_input_rate * (iq? 2 : 1);
       freq = cur + incr;
       //console.log('canvas_get_carfreq_offset(audioFFT) f='+ freq +' cur='+ cur +' incr='+ incr +' norm='+ norm);
    } else {
@@ -2116,6 +2124,7 @@ function canvas_start_drag(evt, x, y)
 		var step_Hz = 1000;
 		var fold = canvas_get_dspfreq(x);
 		var b = find_band(fold);
+		//if (b) console.log(b)
 		var cm = cur_mode.substr(0,2);
 		var am_ssb_iq_drm = (cm == 'am' || cm == 'sa' || cm == 'qa' || cm == 'ls' || cm == 'us' || cm == 'iq' || cm == 'dr');
 		//console_log('nearest', cm, am_ssb_iq_drm);
@@ -2755,10 +2764,15 @@ function zoom_step(dir, arg2)
 				if (sb_trace)
 					console.log("ZTB-user f="+f+" cf="+cf+" b="+b.name+" z="+b.zoom_level);
 			} else {
+	         var ITU_region = cfg.init.ITU_region + 1;    // cfg.init.ITU_region = 0:R1, 1:R2, 2:R3
+            //console.log('zoom_band f='+ f +' ITU_region=R'+ ITU_region);
 				for (i=0; i < bands.length; i++) {		// search for first containing band
 					b = bands[i];
-					if (f >= b.min && f <= b.max)
+		         if (!(b.itu == 0 || b.itu == ITU_region)) continue;
+					if (f >= b.min && f <= b.max) {
+		            //console.log('zoom_band FOUND itu=R'+ b.itu +' '+ b.min +' '+ f +' '+ b.max);
 						break;
+					}
 				}
 				if (i != bands.length) {
 					//console.log("ZTB-calc f="+f+" cf="+b.cf+" b="+b.name+" z="+b.zoom_level);
@@ -3550,11 +3564,12 @@ function waterfall_init()
    wf.audioFFT_active = (rx_chan >= wf_chans);
 	resize_waterfall_container(false);
 	resize_canvases();
+	bands_init();
 	panels_setup();
 	ident_init();
 	scale_setup();
 	mkcolormap();
-	bands_init();
+   mkscale();
 	spectrum_init();
 	dx_schedule_update();
 	users_init( { user:1 } );
@@ -3784,9 +3799,6 @@ function waterfall_add(data_raw, audioFFT)
    
 	if (wf.need_autoscale == 1 && !fixup) {
 	   var pwr_dBm = [];
-	   
-	   // FIXME: for audio FFT need to limit autoscale sampling to passband portion of FFT
-	   // (the current algorithm at least)
       var autoscale = wf.audioFFT_active? data.slice(256, 768) : data;
 	   var len = autoscale.length;
 	   
@@ -3795,16 +3807,21 @@ function waterfall_add(data_raw, audioFFT)
 	      pwr_dBm[i] = dB_wire_to_dBm(autoscale[i]);
       }
 	   pwr_dBm.sort(function(a,b) {return a-b});
-	   var noise = pwr_dBm[Math.floor(0.5 * len)];
+	   var noise = pwr_dBm[Math.floor(0.50 * len)];
 	   var signal = pwr_dBm[Math.floor(0.98 * len)];
-	   //console_log_dbgUs('# autoscale min='+ pwr_dBm[0] +' noise='+ noise +' signal='+ signal +' max='+ pwr_dBm[len-1]);
+	   console_log_dbgUs('# autoscale min='+ pwr_dBm[0] +' noise='+ noise +' signal='+ signal +' max='+ pwr_dBm[len-1]);
 
 	   var _10 = pwr_dBm[Math.floor(0.10 * len)];
 	   var _20 = pwr_dBm[Math.floor(0.20 * len)];
-	   //console_log_dbgUs('# autoscale min='+ pwr_dBm[0] +' 5%='+ noise +' 10%='+ _10 +' 20%='+ _20 +' 98%='+ signal +' max='+ pwr_dBm[len-1]);
+	   console_log_dbgUs('# autoscale min='+ pwr_dBm[0] +' 10%='+ _10 +' 20%='+ _20 +' 50%(noise)='+ noise +' 98%(signal)='+ signal +' max='+ pwr_dBm[len-1]);
 	   signal += 30;
 	   if (signal < -80) signal = -80;
       noise -= 10;
+      
+      if (wf.audioFFT_active) {
+         noise = (dbgUs && devl.p4)? Math.round(devl.p4) : -110;
+         console_log_dbgUs('audioFFT_active: force noise = '+ noise.toFixed(0) +' dBm');
+      }
 
       setmaxdb(1, signal);
       setmindb(1, noise);
@@ -4433,6 +4450,7 @@ function color_between(first, second, percent)
 var afft = {
    init: false,
    comp_1x: false,
+   prev_lsb: false,
    audioFFT_dynload: {},
 
    offt: 0,
@@ -4498,16 +4516,19 @@ function audioFFT_update()
 
 function wf_audio_FFT(audio_data, samps)
 {
-   if (!wf.audioFFT_active) return;
+   if (!wf.audioFFT_active || !isDefined(cur_mode)) return;
    
    if (!kiwi_load_js_polled(afft.audioFFT_dynload, ['pkgs/js/Ooura_FFT32.js'])) return;
    
-   var i, j, k;
+   var i, j, k, ki;
    
    //console.log('iq='+ audio_mode_iq +' comp='+ audio_compression +' samps='+ samps);
 
-   var iq = (ext_get_mode() == 'iq');
-   if (!afft.init || iq != afft.iq || audio_compression != afft.comp) {
+   var iq = ext_is_IQ_or_stereo_curmode();
+   var lsb = (cur_mode.substr(0,2) == 'ls' || cur_mode == 'sal');
+   var fft_setup = (!afft.init || iq != afft.iq || audio_compression != afft.comp);
+
+   if (fft_setup) {
       console.log('audio_FFT: SWITCHING iq='+ iq +' comp='+ audio_compression);
       var type;
       if (iq) {
@@ -4528,10 +4549,18 @@ function wf_audio_FFT(audio_data, samps)
       // FIXME: What's the correct value to use here? Adding the third afft.size was just arbitrary.
       afft.scale = 10.0 * 2.0 / (afft.size * afft.size * afft.size * afft.CUTESDR_MAX_VAL * afft.CUTESDR_MAX_VAL);
       
-      for (i = 0; i < 1024; i++) afft.pwr_dB[i] = 0;
+      // do initial autoscale in case stored max/min values are unreasonable
+      if (!afft.init && wf.aper != kiwi.aper_e.auto)
+         wf.need_autoscale = 16;
+      
       afft.iq = iq;
       afft.comp = audio_compression;
       afft.init = true;
+   }
+
+   if (fft_setup || (lsb != afft.prev_lsb)) {
+      for (i = 0; i < 1024; i++) afft.pwr_dB[i] = 0;
+      afft.prev_lsb = lsb;
    }
 
    if (afft.iq) {
@@ -4563,13 +4592,17 @@ function wf_audio_FFT(audio_data, samps)
                afft.i_re[i] = audio_data[i] * afft.window_2k[i];
             }
             afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
-            for (j = 0, k = 256; j < 1024; j++) {
+            if (lsb)
+               k = 512, ki = -1;
+            else
+               k = 256, ki = +1;
+            for (j = 0; j < 1024; j++) {
                var re = afft.o_re[j], im = afft.o_im[j];
                var pwr = re*re + im*im;
                afft.dBi[j&1] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
                if (j & 1) {
                   afft.pwr_dB[k] = Math.max(afft.dBi[0], afft.dBi[1]);
-                  k++;
+                  k += ki;
                }
             }
          } else {
@@ -4578,7 +4611,11 @@ function wf_audio_FFT(audio_data, samps)
                afft.i_re[i] = audio_data[i] * afft.window_1k[i];
             }
             afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
-            for (j = 0, k = 256; j < 512; j++, k++) {
+            if (lsb)
+               k = 512, ki = -1;
+            else
+               k = 256, ki = +1;
+            for (j = 0; j < 512; j++, k += ki) {
                var re = afft.o_re[j], im = afft.o_im[j];
                var pwr = re*re + im*im;
                afft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
@@ -4589,7 +4626,11 @@ function wf_audio_FFT(audio_data, samps)
                afft.i_re[i] = audio_data[i] * afft.window_2k[i-1024];
             }
             afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
-            for (j = 0, k = 256; j < 512; j++, k++) {
+            if (lsb)
+               k = 512, ki = -1;
+            else
+               k = 256, ki = +1;
+            for (j = 0; j < 512; j++, k += ki) {
                var re = afft.o_re[j], im = afft.o_im[j];
                var pwr = re*re + im*im;
                afft.pwr_dB[k] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
@@ -4601,7 +4642,11 @@ function wf_audio_FFT(audio_data, samps)
             afft.i_re[i] = audio_data[i] * afft.window_512[i];
          }
          afft.offt.fft(afft.offt, afft.i_re.buffer, afft.o_re.buffer, afft.o_im.buffer);
-         for (j = 0, k = 256; j < 256; j++, k += 2) {
+         if (lsb)
+            k = 512, ki = -2;
+         else
+            k = 256, ki = +2;
+         for (j = 0; j < 256; j++, k += ki) {
             var re = afft.o_re[j], im = afft.o_im[j];
             var pwr = re*re + im*im;
             afft.pwr_dB[k] = afft.pwr_dB[k+1] = Math.round(255 + (10.0 * Math.log10(pwr * afft.scale + 1e-30)));
@@ -4887,11 +4932,12 @@ function modeset_update_ui(mode)
 	writeCookie('last_mode', mode);
 	freq_link_update();
 
-	// disable compression button in iq mode
-   var els = w3_els('id-button-compression');
-   for (var i = 0; i < els.length; i++) {
-	   w3_set_props(els[i], 'w3-disabled', (mode == 'iq'));
-	}
+	// disable compression button in iq or stereo modes
+	var disabled = ext_is_IQ_or_stereo_mode(mode);
+   w3_els('id-button-compression',
+      function(el) {
+	      w3_set_props(el, 'w3-disabled', disabled);
+      });
 }
 
 // delay the UI updates called from the audio path until the waterfall UI setup is done
@@ -4900,12 +4946,8 @@ function try_freqset_update_ui()
 	if (waterfall_setup_done) {
 		freqset_update_ui();
 		if (wf.audioFFT_active) {
-		
-         // if not already clearing then clear on iq mode change
-         var c_iq_drm_sas = ext_is_IQ_or_stereo_curmode()? 1:0;
-         var p_iq_drm_sas = ext_is_IQ_or_stereo_mode(wf.audioFFT_prev_mode)? 1:0;
-		   if (!wf.audioFFT_clear_wf && (c_iq_drm_sas ^ p_iq_drm_sas))
-		      wf.audioFFT_clear_wf = true;
+         if (cur_mode != wf.audioFFT_prev_mode)
+            wf.audioFFT_clear_wf = true;
 		   audioFFT_update();
 		   wf.audioFFT_prev_mode = cur_mode;
 		} else {
@@ -5120,9 +5162,10 @@ function special_step(b, sel, caller)
 {
 	var s = 'SPECIAL_STEP '+ caller +' sel='+ sel;
 	var step_Hz;
+   var cm = cur_mode.substr(0,2);
 
 	if (b != null && b.name == 'NDB') {
-		if (cur_mode == 'cw' || cur_mode == 'cwn') {
+		if (cm == 'cw') {
 			step_Hz = NDB_400_1000_mode;
 		} else {
 			step_Hz = -1;
@@ -5130,7 +5173,6 @@ function special_step(b, sel, caller)
 		s += ' NDB';
 	} else
 	if (b != null && (b.name == 'LW' || b.name == 'MW')) {
-	   var cm = cur_mode.substr(0,2);
 		var am_ssb_iq_drm = (cm == 'am' || cm == 'sa' || cm == 'qa' || cm == 'ls' || cm == 'us' || cm == 'iq' || cm == 'dr');
 		//console_log('special step', cm, am_ssb_iq_drm);
 		if (am_ssb_iq_drm) {
@@ -5241,7 +5283,7 @@ function band_info()
 {
 	var _9_10 = (+cfg.init.AM_BCB_chan)? 10:9;
 
-	var ITU_region = cfg.init.ITU_region + 1;
+	var ITU_region = cfg.init.ITU_region + 1;    // cfg.init.ITU_region = 0:R1, 1:R2, 2:R3
 	var LW_lo = 153-9/2, NDB_lo, NDB_hi, MW_hi;
 	
 	if (ITU_region == 1) {		// really 526.5 in UK?
@@ -5261,12 +5303,87 @@ function band_info()
 // augment bands[] found in the config.js configuration file
 function bands_init()
 {
-	var i, z;
+	var i, j, k, z;
+	owrx.nbands = [];
+
+	for (i=j=0; i < bands.length; i++) {
+		var b = bands[i];
+		
+		// apply some fixes to known deficiencies in the bands[] from the default config.js,
+		// but in a way that hopefully won't upset any customizations to config.js
+		// a user might have made (e.g. adjustment to freq ranges)
+		
+		if (b.name == 'LW' && b.region == 'E') b.region = '1';
+		if (b.name == 'LW' && b.region == '>') b.region = '23';
+
+      // not too important as LW/NDB/MW details are all custom fixed below
+		if (b.name == 'MW' && b.region == '3') b.region = '13';
+
+		if (b.name == 'NDB' && b.region == 'E') b.region = '1';
+		if (b.name == 'NDB' && b.region == 'U') b.region = '2';
+		if (b.name == 'NDB' && b.region == '>') b.region = '3';
+		
+      // ham band fixes
+		if (b.name == 'MF' && b.region == '>23') b.region = '*';
+		
+		// time freqs are really markers
+		if (b.name.startsWith('Time ') && b.region == '*') b.region = 'm';
+
+      // use kiwi_shallow_copy() so changing e.g. b2.itu will be private to b2 copy
+      // but b.s.svc.* and b2.s.svc.* will refer to the same 2nd level svc.* object
+      
+		if (b.region) {
+		   var len = b.region.length;
+		   if (len == 1) {
+            owrx.nbands[j] = kiwi_shallow_copy(b);
+            var b2 = owrx.nbands[j];
+            j++;
+            var c = b2.region.charAt(0);
+            if (c >= '1' && c <= '3')
+               b2.itu = c.charCodeAt(0) - '1'.charCodeAt(0) + 1;
+            else
+            if (c == 'm')
+               b2.itu = -1;
+            else
+            if (c == '-' || c == '*' || c == '>')
+               b2.itu = 0;
+            else {
+               b2.itu = -1;
+            }
+		   } else {
+            for (k = 0; k < len; k++) {
+               var c = b.region.charAt(k);
+               if (c == '>') continue;    // '>' alone is detected above in (len == 1)
+               owrx.nbands[j] = kiwi_shallow_copy(b);
+               var b2 = owrx.nbands[j];
+               j++;
+               if (c >= '1' && c <= '3')
+                  b2.itu = c.charCodeAt(0) - '1'.charCodeAt(0) + 1;
+               else {
+                  b2.itu = -1;
+               }
+            }
+         }
+		} else {
+		   // shouldn't happen but handle anyway
+		   owrx.nbands[j] = kiwi_shallow_copy(b);
+		   var b2 = owrx.nbands[j];
+		   b2.itu = 0;
+		   j++;
+		}
+	}
+	
+	bands = owrx.nbands;
+	for (i=0; i < bands.length; i++) {
+		var b = bands[i];
+		//console.log('bands_init '+ i +' R'+ b.itu +' '+ b.region +' '+ b.name);
+	}
 
 	var bi = band_info();
 
-	for (i=0; i < bands.length; i++) {
+	for (i=j=0; i < bands.length; i++) {
 		var b = bands[i];
+		
 		bands[i].chan = isUndefined(b.chan)? 0 : b.chan;
 		b.min -= b.chan/2; b.max += b.chan/2;
 		
@@ -5303,18 +5420,21 @@ function bands_init()
 		      b.sel = b.sel.replace('cw', 'cwn');
 		}
 	}
-
-	mkscale();
 }
 
 function find_band(freq)
 {
 	var b;
+	var ITU_region = cfg.init.ITU_region + 1;    // cfg.init.ITU_region = 0:R1, 1:R2, 2:R3
+   //console.log('find_band f='+ freq +' ITU_region=R'+ ITU_region);
+
 	for (var i=0; i < bands.length; i++) {
 		b = bands[i];
-		if (b.region != "-" && b.region != "*" && b.region.charAt(0) != '>') continue;
-		if (freq >= b.min && freq <= b.max)
+      if (!(b.itu == 0 || b.itu == ITU_region)) continue;
+		if (freq >= b.min && freq <= b.max) {
+		   //console.log('find_band FOUND itu=R'+ b.itu +' '+ b.min +' '+ freq +' '+ b.max);
 			return b;
+		}
 	}
 	return null;
 }
@@ -5347,10 +5467,12 @@ function mk_bands_scale()
 	band_ctx.globalAlpha = 1;
 	band_ctx.fillStyle = "White";
 	band_ctx.fillRect(0,band_canvas_top,tw,band_canvas_h);
+	var ITU_region = cfg.init.ITU_region + 1;    // cfg.init.ITU_region = 0:R1, 1:R2, 2:R3
 
 	for (i=0; i < bands.length; i++) {
 		var b = bands[i];
-		if (b.region != "-" && b.region != "*" && b.region.charAt(0) != '>') continue;
+		if (!(b.itu == 0 || b.itu == ITU_region)) continue;
+		//console.log('mk_bands_scale CONSIDER '+ b.name +' R'+ b.itu);
 		
 		// if bands[] hasn't been updated for freq offset then don't display
 		if (b.min < foff) break;
@@ -6331,9 +6453,13 @@ function smeter_dBm_biased_to_x(dBm_biased)
 	return Math.round(dBm_biased / SMETER_DISPLAY_RANGE * smeter_width);
 }
 
-function smeter_init()
+function smeter_init(force_no_agc_thresh_smeter)
 {
-	w3_innerHTML('id-control-smeter',
+   owrx.force_no_agc_thresh_smeter = force_no_agc_thresh_smeter;
+	var smeter_control = w3_el('id-control-smeter');
+	if (!smeter_control) return;
+	
+	w3_innerHTML(smeter_control,
 		'<canvas id="id-smeter-scale" class="class-smeter-scale" width="0" height="0"></canvas>',
 		w3_div('id-smeter-ovfl w3-hide', 'OV'),
 		w3_div('id-smeter-dbm-value'),
@@ -6343,10 +6469,14 @@ function smeter_init()
 	var sMeter_canvas = w3_el('id-smeter-scale');
 	smeter_ovfl = w3_el('smeter-ovfl');
 
-	smeter_width = divControl.activeWidth - SMETER_RHS - html_LR_border_pad(sMeter_canvas);   // less our own border/padding
+   var width = divControl? divControl.activeWidth : 350;
+   var canvas_LR_border_pad = html_LR_border_pad(sMeter_canvas);
+	smeter_width = width - SMETER_RHS - canvas_LR_border_pad;   // less our own border/padding
 	
 	var w = smeter_width, h = SMETER_SCALE_HEIGHT, y=h-8;
 	var tw = w + SMETER_RHS;
+	smeter_control.style.width = px(tw + canvas_LR_border_pad);
+	
 	sMeter_ctx = sMeter_canvas.getContext("2d");
 	sMeter_ctx.canvas.width = tw;
 	sMeter_ctx.canvas.height = h;
@@ -6367,7 +6497,8 @@ function smeter_init()
 	}
 
 	line_stroke(sMeter_ctx, 0, 5, "black", 0,y, w,y);
-	setInterval(update_smeter, 100);
+	kiwi_clearInterval(owrx.smeter_interval);
+	owrx.smeter_interval = setInterval(update_smeter, 100);
 }
 
 var sm_px = 0, sm_timeout = 0, sm_interval = 10;
@@ -6382,8 +6513,9 @@ function update_smeter()
 	sMeter_ctx.globalAlpha = 1;
 	line_stroke(sMeter_ctx, 0, 5, "lime", 0,y, x,y);
 
-   if (cfg.agc_thresh_smeter) {
-	   var x_thr = smeter_dBm_biased_to_x(-thresh);
+   if (cfg.agc_thresh_smeter && owrx.force_no_agc_thresh_smeter != true) {
+      var thold = (cur_mode && cur_mode.substr(0,2) == 'cw')? threshCW : thresh;
+	   var x_thr = smeter_dBm_biased_to_x(-thold);
 	   line_stroke(sMeter_ctx, 0, 2, "white", 0,y-3, w-x_thr,y-3);
 	   line_stroke(sMeter_ctx, 0, 2, "black", w-x_thr,y-3, w,y-3);
 	}
@@ -6574,7 +6706,6 @@ function keyboard_shortcut_url_keys()
 function keyboard_shortcut(key, mod, ctlAlt)
 {
    var action = true;
-   var mode = ext_get_mode();
    var dir = ctlAlt? -1 : 1;
    shortcut.nav_click = false;
    
@@ -6599,8 +6730,8 @@ function keyboard_shortcut(key, mod, ctlAlt)
    case 'P': passband_increment(true); break;
    
    // volume/mute
-   case 'v': setvolume(1, volume-10); toggle_or_set_mute(0); keyboard_shortcut_nav('audio'); break;
-   case 'V': setvolume(1, volume+10); toggle_or_set_mute(0); keyboard_shortcut_nav('audio'); break;
+   case 'v': setvolume(1, kiwi.volume-10); toggle_or_set_mute(0); keyboard_shortcut_nav('audio'); break;
+   case 'V': setvolume(1, kiwi.volume+10); toggle_or_set_mute(0); keyboard_shortcut_nav('audio'); break;
    case 'm':
    case ' ': toggle_or_set_mute(); shortcut.nav_click = true; break;
 
@@ -6776,6 +6907,32 @@ function extension_scroll(dir)
 var panel_margin = 10;
 var ac_play_button;
 
+function check_suspended_audio_state()
+{
+   // Because we don't know exactly when audio_init() will be called,
+   // we create a new audio context here and check for the suspended state
+   // if no-autoplay mode is in effect.
+   // That determines if the "click to start" overlay is displayed or not.
+   // If it is, then when it is clicked an attempt is made to resume() the
+   // audio context that has most likely been setup by audio_init()
+   // in the interim.
+   try {
+      window.AudioContext = window.AudioContext || window.webkitAudioContext;
+      ac_play_button = new AudioContext();
+      
+      // Safari has to play something before audioContext.state is valid
+      if (kiwi_isSafari()) {
+         var bufsrc = ac_play_button.createBufferSource();
+         bufsrc.connect(ac_play_button.destination);
+         try { bufsrc.start(0); } catch(ex) { bufsrc.noteOn(0); }
+      }
+      
+      setTimeout(test_audio_suspended, 500);    // check after a delay
+   } catch(e) {
+      console.log('#### no AudioContext?');
+   }
+}
+
 function test_audio_suspended()
 {
    //console.log('AudioContext.state='+ ac_play_button.state);
@@ -6787,11 +6944,37 @@ function test_audio_suspended()
                (kiwi_isMobile()? 'Tap to':'Click to') +' start OpenWebRX'
             )
          );
-      w3_appendElement('id-main-container', 'div', s);
+      w3_appendElement('id-kiwi-body', 'div', s);
       el = w3_el('id-play-button');
       el.style.marginTop = px(w3_center_in_window(el));
       //alert('state '+ ac_play_button.state);
    }
+}
+
+// Safari on iOS only plays webaudio after it has been started by clicking a button.
+// Same now for Chrome and Safari 12 on OS X.
+function play_button()
+{
+	try {
+	   if (kiwi_is_iOS()) {
+         var actx = audio_context;
+         var bufsrc = actx.createBufferSource();
+         bufsrc.connect(actx.destination);
+         try { bufsrc.start(0); } catch(ex) { bufsrc.noteOn(0); }
+	   } else {
+	      try {
+	         if (audio_context) audio_context.resume();
+	      } catch(ex) {
+	         console.log('#### audio_context.resume() FAILED');
+	      }
+      }
+   } catch(ex) { add_problem("audio start"); }
+
+   // CSS is setup so opacity fades
+	w3_el('id-play-button-container').style.opacity = 0;
+	setTimeout(function() { w3_hide('id-play-button-container'); }, 1100);
+	audio_reset();    // handle possible audio overflow condition during wait for button click
+   freqset_select();
 }
 
 // called from waterfall_init()
@@ -6835,28 +7018,7 @@ function panels_setup()
          )
       );
 
-   // Because we don't know exactly when audio_init() will be called,
-   // we create a new audio context here and check for the suspended state
-   // if no-autoplay mode is in effect.
-   // That determines if the "click to start" overlay is displayed or not.
-   // If it is, then when it is clicked an attempt is made to resume() the
-   // audio context that has most likely been setup by audio_init()
-   // in the interim.
-   try {
-      window.AudioContext = window.AudioContext || window.webkitAudioContext;
-      ac_play_button = new AudioContext();
-      
-      // Safari has to play something before audioContext.state is valid
-      if (kiwi_isSafari()) {
-         var bufsrc = ac_play_button.createBufferSource();
-         bufsrc.connect(ac_play_button.destination);
-         try { bufsrc.start(0); } catch(ex) { bufsrc.noteOn(0); }
-      }
-      
-      setTimeout(test_audio_suspended, 500);    // check after a delay
-   } catch(e) {
-      console.log('#### no AudioContext?');
-   }
+   check_suspended_audio_state();
 	
 	w3_el("id-control-freq2").innerHTML =
 	   w3_inline('w3-halign-space-between w3-margin-T-4/',
@@ -7097,13 +7259,13 @@ function panels_setup()
 		) +
 		w3_col_percent('id-vol w3-valign w3-margin-T-4 w3-hide/class-slider',
 			w3_text(optbar_prefix_color, 'Volume'), 17,
-			'<input id="id-input-volume" type="range" min="0" max="200" value="'+ volume +'" step="1" onchange="setvolume(1, this.value)" oninput="setvolume(0, this.value)">', 50,
+			'<input id="id-input-volume" type="range" min="0" max="200" value="'+ kiwi.volume +'" step="1" onchange="setvolume(1, this.value)" oninput="setvolume(0, this.value)">', 50,
          '&nbsp;', 8,
          w3_select('|color:red|title="de-emphasis selection"', '', 'de-emp', 'de_emphasis', de_emphasis, de_emphasis_s, 'de_emp_cb')
 		) +
 		w3_col_percent('id-vol-comp w3-valign w3-margin-T-4/class-slider',
 			w3_text(optbar_prefix_color, 'Volume'), 17,
-			'<input id="id-input-volume" type="range" min="0" max="200" value="'+ volume +'" step="1" onchange="setvolume(1, this.value)" oninput="setvolume(0, this.value)">', 40,
+			'<input id="id-input-volume" type="range" min="0" max="200" value="'+ kiwi.volume +'" step="1" onchange="setvolume(1, this.value)" oninput="setvolume(0, this.value)">', 40,
          w3_select('|color:red', '', 'de-emp', 'de_emphasis', de_emphasis, de_emphasis_s, 'de_emp_cb'), 28,
 		   w3_button('id-button-compression class-button w3-hcenter||title="compression"', 'Comp', 'toggle_or_set_compression')
 		) +
@@ -7145,7 +7307,7 @@ function panels_setup()
 
    // agc
 	w3_el('id-optbar-agc').innerHTML =
-		w3_col_percent('w3-valign/class-slider',
+		w3_col_percent('w3-valign w3-margin-B-4/class-slider',
 			'<div id="id-button-agc" class="class-button" onclick="toggle_agc(event)" onmousedown="cancelEvent(event)" onmouseover="agc_over(event)">AGC</div>', 13,
 			'<div id="id-button-hang" class="class-button" onclick="toggle_or_set_hang();">Hang</div>', 17,
 			w3_divs('w3-show-inline-block/id-label-man-gain cl-closer-spaced-label-text', 'Manual<br>gain'), 15,
@@ -7154,19 +7316,24 @@ function panels_setup()
 		) +
 		w3_div('',
 			w3_col_percent('w3-valign/class-slider',
-				w3_div('label-threshold w3-show-inline-block', 'Threshold'), 18,
+				w3_div('label-threshold w3-show-inline-block', 'Threshold'), 20,
 				'<input id="input-threshold" type="range" min="-130" max="0" value="'+ thresh +'" step="1" onchange="setThresh(1,this.value)" oninput="setThresh(0,this.value)">', 52,
-				w3_div('field-threshold w3-show-inline-block', thresh.toString()) +' dBm', 30
+				w3_div('field-threshold w3-show-inline-block', thresh.toString()) +' dBm'
 			),
 			w3_col_percent('w3-valign/class-slider',
-				w3_div('label-slope w3-show-inline-block', 'Slope'), 18,
+				w3_div('label-threshCW w3-show-inline-block', 'Thresh CW'), 20,
+				'<input id="input-threshCW" type="range" min="-130" max="0" value="'+ threshCW +'" step="1" onchange="setThreshCW(1,this.value)" oninput="setThreshCW(0,this.value)">', 52,
+				w3_div('field-threshCW w3-show-inline-block', threshCW.toString()) +' dBm'
+			),
+			w3_col_percent('w3-valign/class-slider',
+				w3_div('label-slope w3-show-inline-block', 'Slope'), 20,
 				'<input id="input-slope" type="range" min="0" max="10" value="'+ slope +'" step="1" onchange="setSlope(1,this.value)" oninput="setSlope(0,this.value)">', 52,
-				w3_div('field-slope w3-show-inline-block', slope.toString()) +' dB', 30
+				w3_div('field-slope w3-show-inline-block', slope.toString()) +' dB'
 			),
 			w3_col_percent('w3-valign/class-slider',
-				w3_div('label-decay w3-show-inline-block', 'Decay'), 18,
+				w3_div('label-decay w3-show-inline-block', 'Decay'), 20,
 				'<input id="input-decay" type="range" min="20" max="5000" value="'+ decay +'" step="1" onchange="setDecay(1,this.value)" oninput="setDecay(0,this.value)">', 52,
-				w3_div('field-decay w3-show-inline-block', decay.toString()) +' msec', 30
+				w3_div('field-decay w3-show-inline-block', decay.toString()) +' msec'
 			)
 		);
 	setup_agc(toggle_e.FROM_COOKIE | toggle_e.SET);
@@ -7530,7 +7697,7 @@ function wf_aper_cb(path, idx, first)
    writeCookie('last_aper', idx);
 
    var auto = (wf.aper == kiwi.aper_e.auto);
-   w3_set_innerHTML('id-wf-sliders', auto? wf.floor_ceil_sliders : wf.max_min_sliders);
+   w3_innerHTML('id-wf-sliders', auto? wf.floor_ceil_sliders : wf.max_min_sliders);
    w3_color('id-button-wf-autoscale', null, auto? w3_selection_green : '');
 
    if (auto) {
@@ -7704,7 +7871,7 @@ function setceildb(done, str)
    if (!input_ceil || !field_ceil) return;
 
 	var ceildb = parseFloat(str);
-   w3_set_innerHTML(field_ceil, ceildb.toFixed(0).positiveWithSign() + ' dB');
+   w3_innerHTML(field_ceil, ceildb.toFixed(0).positiveWithSign() + ' dB');
    wf.auto_ceil.val = ceildb;
 	set_ceilfloordb(done);
 }
@@ -7716,7 +7883,7 @@ function setfloordb(done, str)
    if (!input_floor || !field_floor) return;
 
 	var floordb = parseFloat(str);
-   w3_set_innerHTML(field_floor, floordb.toFixed(0).positiveWithSign() + ' dB');
+   w3_innerHTML(field_floor, floordb.toFixed(0).positiveWithSign() + ' dB');
    wf.auto_floor.val = floordb;
 	set_ceilfloordb(done);
 }
@@ -7778,18 +7945,15 @@ function toggle_or_set_spec_peak(set, val)
 ////////////////////////////////
 
 var muted_until_freq_set = true;
-var muted = false;
-var volume = 50;
-var f_volume = 0;
 var recording = false;
 
 function setvolume(done, str)
 {
-   volume = +str;
-   volume = Math.max(0, Math.min(200, volume));
-   f_volume = muted? 0 : volume/100;
+   kiwi.volume = +str;
+   kiwi.volume = Math.max(0, Math.min(200, kiwi.volume));
+   kiwi.volume_f = kiwi.muted? 0 : kiwi.volume/100;
    if (done) {
-      w3_set_value('id-input-volume', volume);
+      w3_set_value('id-input-volume', kiwi.volume);
       freqset_select();
    }
 }
@@ -7797,15 +7961,15 @@ function setvolume(done, str)
 function toggle_or_set_mute(set)
 {
 	if (isNumber(set))
-      muted = set;
+      kiwi.muted = set;
    else
-	   muted ^= 1;
-   //console.log('toggle_or_set_mute set='+ set +' muted='+ muted);
+	   kiwi.muted ^= 1;
+   //console.log('toggle_or_set_mute set='+ set +' muted='+ kiwi.muted);
 	if (!owrx.squelched_overload) {
-      w3_show_hide('id-mute-no', !muted);
-      w3_show_hide('id-mute-yes', muted);
+      w3_show_hide('id-mute-no', !kiwi.muted);
+      w3_show_hide('id-mute-yes', kiwi.muted);
    }
-   f_volume = muted? 0 : volume/100;
+   kiwi.volume_f = kiwi.muted? 0 : kiwi.volume/100;
    freqset_select();
 }
 
@@ -7829,7 +7993,7 @@ function setpan(done, str)
    if (pan > -0.1 && pan < +0.1) pan = 0;    // snap-to-zero interval
    w3_set_value('id-pan-value', pan);
    w3_color('id-pan-value', null, (pan < 0)? 'rgba(255,0,0,0.3)' : (pan? 'rgba(0,255,0,0.2)':''));
-   w3_set_innerHTML('id-pan-field', pan? ((Math.abs(pan)*100).toFixed(0) +' '+ ((pan < 0)? 'L':'R')) : 'L=R');
+   w3_innerHTML('id-pan-field', pan? ((Math.abs(pan)*100).toFixed(0) +' '+ ((pan < 0)? 'L':'R')) : 'L=R');
    audio_set_pan(pan);
    if (done) {
       writeCookie('last_pan', pan.toString());
@@ -7963,15 +8127,15 @@ function squelch_action(sq)
 {
    squelched = sq;
    //console.log('squelch_action squelched='+ (squelched? 1:0) +' sMeter_dBm='+ owrx.sMeter_dBm.toFixed(0));
-   var mute_color = squelched? 'white' : 'lime';
+   var mute_color = squelched? 'white' : kiwi.unmuted_color;
    var sq_color = mute_color;
 
    owrx.squelched_overload = (owrx.sMeter_dBm >= cfg.overload_mute);
    if (owrx.prev_squelched_overload != owrx.squelched_overload) {
       //console.log('squelched_overload='+ (owrx.squelched_overload? 1:0));
       w3_show_hide('id-mute-exclaim', owrx.squelched_overload);
-      w3_show_hide('id-mute-no', owrx.squelched_overload? false : !muted);
-      w3_show_hide('id-mute-yes', owrx.squelched_overload? false : muted);
+      w3_show_hide('id-mute-no', owrx.squelched_overload? false : !kiwi.muted);
+      w3_show_hide('id-mute-yes', owrx.squelched_overload? false : kiwi.muted);
       owrx.prev_squelched_overload = owrx.squelched_overload;
    }   
    
@@ -8002,10 +8166,9 @@ function squelch_setup(flags)
 	if (nbfm) {
 	   squelch_action(squelched);
    } else {
-      w3_color('id-mute-no', 'lime');
+      w3_color('id-mute-no', kiwi.unmuted_color);
    }
 
-   //w3_show_hide('id-sq-thresh', !nbfm);
    w3_show_hide('id-squelch_tail', !nbfm);
    w3_show_hide('id-squelch', cur_mode != 'drm');
 }
@@ -8095,13 +8258,12 @@ function toggle_or_set_compression(set, val)
 	else
 		btn_compression ^= 1;
 
-   var els = w3_els('id-button-compression');
-   for (var i = 0; i < els.length; i++) {
-      var el = els[i];
-      el.style.color = btn_compression? 'lime':'white';
-      el.style.visibility = 'visible';
-      freqset_select();
-   }
+   w3_els('id-button-compression',
+      function(el) {
+         el.style.color = btn_compression? 'lime':'white';
+         el.style.visibility = 'visible';
+         freqset_select();
+      });
 	writeCookie('last_compression', btn_compression.toString());
 	//console.log('SET compression='+ btn_compression.toFixed(0));
 	snd_send('SET compression='+ btn_compression.toFixed(0));
@@ -8114,7 +8276,13 @@ function toggle_or_set_compression(set, val)
 
 function set_agc()
 {
-	snd_send('SET agc='+ agc +' hang='+ hang +' thresh='+ thresh +' slope='+ slope +' decay='+ decay +' manGain='+ manGain);
+   var isCW = (cur_mode && cur_mode.substr(0,2) == 'cw');
+   //console.log('isCW='+ isCW +' agc='+ agc);
+   w3_color('label-threshold', (!isCW && agc)? 'orange' : 'white');
+   w3_color('label-threshCW',  ( isCW && agc)? 'orange' : 'white');
+   var thold = isCW? threshCW : thresh;
+   //console.log('AGC SET thresh='+ thold);
+	snd_send('SET agc='+ agc +' hang='+ hang +' thresh='+ thold +' slope='+ slope +' decay='+ decay +' manGain='+ manGain);
 }
 
 var agc = 0;
@@ -8138,7 +8306,8 @@ function agc_over(evt)
 var default_agc = 1;
 var default_hang = 0;
 var default_manGain = 50;
-var default_thresh = -130;
+var default_thresh = -100;
+var default_threshCW = -130;
 var default_slope = 6;
 var default_decay = 1000;
 
@@ -8148,6 +8317,7 @@ function setup_agc(toggle_flags)
 	hang = kiwi_toggle(toggle_flags, default_hang, hang, 'last_hang'); toggle_or_set_hang(hang);
 	manGain = kiwi_toggle(toggle_flags, default_manGain, manGain, 'last_manGain'); setManGain(true, manGain);
 	thresh = kiwi_toggle(toggle_flags, default_thresh, thresh, 'last_thresh'); setThresh(true, thresh);
+	threshCW = kiwi_toggle(toggle_flags, default_threshCW, threshCW, 'last_threshCW'); setThreshCW(true, threshCW);
 	slope = kiwi_toggle(toggle_flags, default_slope, slope, 'last_slope'); setSlope(true, slope);
 	decay = kiwi_toggle(toggle_flags, default_decay, decay, 'last_decay'); setDecay(true, decay);
 }
@@ -8162,10 +8332,10 @@ function toggle_or_set_agc(set)
 	html('id-button-agc').style.color = agc? 'lime':'white';
 	if (agc) {
 		html('id-label-man-gain').style.color = 'white';
-		html('id-button-hang').style.borderColor = html('label-threshold').style.color = html('label-slope').style.color = html('label-decay').style.color = 'orange';
+		html('id-button-hang').style.borderColor = html('label-slope').style.color = html('label-decay').style.color = 'orange';
 	} else {
 		html('id-label-man-gain').style.color = 'orange';
-		html('id-button-hang').style.borderColor = html('label-threshold').style.color = html('label-slope').style.color = html('label-decay').style.color = 'white';
+		html('id-button-hang').style.borderColor = html('label-slope').style.color = html('label-decay').style.color = 'white';
 	}
 	set_agc();
 	writeCookie('last_agc', agc.toString());
@@ -8211,6 +8381,18 @@ function setThresh(done, str)
    if (done) freqset_select();
 }
 
+var threshCW = 0;
+
+function setThreshCW(done, str)
+{
+   threshCW = parseFloat(str);
+   html('input-threshCW').value = threshCW;
+   html('field-threshCW').innerHTML = str;
+	set_agc();
+	writeCookie('last_threshCW', threshCW.toString());
+   if (done) freqset_select();
+}
+
 var slope = 0;
 
 function setSlope(done, str)
@@ -8251,38 +8433,13 @@ function users_setup()
             w3_div('id-optbar-user-'+ i +' w3-show-inline-block')
          );
 	}
-	w3_set_innerHTML('id-optbar-users', w3_div('w3-nowrap', s));
+	w3_innerHTML('id-optbar-users', w3_div('w3-nowrap', s));
 }
 
 
 ////////////////////////////////
 // control panel
 ////////////////////////////////
-
-// Safari on iOS only plays webaudio after it has been started by clicking a button.
-// Same now for Chrome and Safari 12 on OS X.
-function play_button()
-{
-	try {
-	   if (kiwi_is_iOS()) {
-         var actx = audio_context;
-         var bufsrc = actx.createBufferSource();
-         bufsrc.connect(actx.destination);
-         try { bufsrc.start(0); } catch(ex) { bufsrc.noteOn(0); }
-	   } else {
-	      try {
-	         if (audio_context) audio_context.resume();
-	      } catch(ex) {
-	         console.log('#### audio_context.resume() FAILED');
-	      }
-      }
-   } catch(ex) { add_problem("audio start"); }
-
-   // CSS is setup so opacity fades
-	w3_el('id-play-button-container').style.opacity = 0;
-	setTimeout(function() { w3_hide('id-play-button-container'); }, 1100);
-   freqset_select();
-}
 
 // icon callbacks
 function freq_up_down_cb(path, up)
@@ -8319,11 +8476,15 @@ function setup_band_menu()
 	var i, op=0, service = null;
 	var s="";
 	band_menu[op++] = null;		// menu title
+	var ITU_region = cfg.init.ITU_region + 1;    // cfg.init.ITU_region = 0:R1, 1:R2, 2:R3
+
 	for (i=0; i < bands.length; i++) {
 		var b = bands[i];
-		if (b.region != "*" && b.region.charAt(0) != '>' && b.region != 'm') continue;
+		//if (b.region != "*" && b.region.charAt(0) != '>' && b.region != 'm') continue;
+		if (b.region == '-') continue;
+		if (!(b.region == 'm' || b.itu == 0 || b.itu == ITU_region)) continue;
 
-		// FIXME: Add prefix to IBP names to differentiate from ham band names.
+		// Add prefix to IBP names to differentiate from ham band names.
 		// A software release can't modify bands[] definition in config.js so do this here.
 		// At some point config.js will be eliminated when admin page gets equivalent UI.
 		if ((b.s == svc.L || b.s == svc.X) && b.region == 'm') {
@@ -8600,8 +8761,8 @@ function panel_setup_control(el)
 	// make first line of controls full width less vis button
 	w3_el('id-control-freq1').style.width = px(el.activeWidth - visIcon - 6);
 	
-   w3_show_hide('id-mute-no', !muted);
-   w3_show_hide('id-mute-yes', muted);
+   w3_show_hide('id-mute-no', !kiwi.muted);
+   w3_show_hide('id-mute-yes', kiwi.muted);
 }
 
 function panel_set_vis_button(id)
@@ -8815,7 +8976,7 @@ function owrx_ws_open_wf(cb, cbp)
 
 function on_ws_error()
 {
-	divlog("WebSocket error.", 1);
+	console.log("WebSocket error");
 }
 
 function snd_send(s)

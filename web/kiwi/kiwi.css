@@ -43,12 +43,13 @@ hr
 {
 	position: relative;
 	float: left;	/* so background width tracks rendered text */
+	color: black;
 	/*background-color: lightSteelBlue;*/
 	background-color: #ccffff;
 	padding: 10px;
 	margin: 15px;
-	color: black;
-	font-size: 15px;
+	/*font-size: 15px;*/
+	font-size: 85%;
 	border-radius: 15px;
 	-moz-border-radius: 15px;
 }
@@ -373,6 +374,11 @@ hr
 {
 	top: 5%;
 	bottom: auto;
+}
+
+.fa-stack > .fa-nudge-up
+{
+	bottom: 3px;
 }
 
 
