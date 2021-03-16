@@ -196,34 +196,36 @@ void wdsp_SAM_demod(int rx_chan, int mode, int chan_null, int ns_out, TYPECPX *i
                     }
                 } else {
                     audio = corr[I];
-                    if (p5_f) audio *= p5_f;
+                    audio /= (p5_f? p5_f : 1.5);
                 }
                 break;
 
             case MODE_SAU:
                 audio = (ai_ps - bi_ps) + (aq_ps + bq_ps);  // usb
-                if (p6_f) audio *= p6_f;
+                //audio /= 2.25;
+                audio /= (p6_f? p6_f : 2.25);
                 break;
 
             case MODE_SAL:
                 audio = (ai_ps + bi_ps) - (aq_ps - bq_ps);  // lsb
-                if (p6_f) audio *= p6_f;
+                //audio /= 2.25;
+                audio /= (p6_f? p6_f : 2.25);
                 break;
 
             case MODE_SAS:
                 audio  = (ai_ps + bi_ps) - (aq_ps - bq_ps); // lsb
-                if (p6_f) audio *= p6_f;
+                //audio /= 2.25;
+                audio /= (p6_f? p6_f : 2.25);
                 audiou = (ai_ps - bi_ps) + (aq_ps + bq_ps); // usb
-                if (p6_f) audiou *= p6_f;
+                //audiou /= 2.25;
+                audiou /= (p6_f? p6_f : 2.25);
                 break;
 
             case MODE_QAM:  // C-QUAM
                 audio  = corr[I]/2 + corr[Q]/2; // L
-                audio *= 2;
-                if (p7_f) audio *= p7_f;
+                audio /= (p7_f? p7_f : 1);
                 audiou = corr[I]/2 - corr[Q]/2; // R
-                audiou *= 2;
-                if (p7_f) audiou *= p7_f;
+                audiou /= (p7_f? p7_f : 1);
                 break;
             
             default:

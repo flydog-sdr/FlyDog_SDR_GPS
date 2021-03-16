@@ -470,7 +470,8 @@ function webpage_html()
             'index_html_params.HTML_HEAD', 10, 100, 'webpage_string_cb', ''
          )
 		) +
-		'<hr>';
+		
+		w3_divs('w3-margin-bottom/w3-container', '');		// bottom gap for better scrolling look
 
    return w3_div('id-webpage w3-text-teal w3-hide', s1 + s2 + s3);
 }
@@ -760,8 +761,7 @@ function kiwi_reg_html()
 				)
 			),
          w3_input_get('', 'Coverage frequency high (kHz)', 'sdr_hu_hi_kHz', 'admin_int_cb')
-      ) +
-      '<hr>';
+      );
 
 	return w3_div('id-sdr_hu w3-text-teal w3-hide', s1 + s2);
 }

@@ -487,9 +487,7 @@ function w3_el(el_id)
 	return (el_id);
 }
 
-// for when there are multiple elements with the same "id-*"
-// returns element list and optionally calls iterates calling func()
-function w3_els(el_id, func)
+function w3_els(el_id)
 {
 	if (isString(el_id)) {
 	   if (el_id == '') return null;
@@ -505,12 +503,35 @@ function w3_els(el_id, func)
 				}
 			}
 		}
-      if (els && func) for (var i = 0; i < els.length; i++) {
-         func(els[i], i);
-      }
 		return els;
 	}
 	return (el_id);
+}
+
+// w3_el(), but silently failing if element doesn't exist
+function w3_el_softfail(id)
+{
+	var el = w3_el(id);
+	var debug;
+	try {
+		debug = el.innerHTML;
+	} catch(ex) {
+		console.log('w3_el_softfail("'+ id +'") SOFTFAIL');
+		/*
+		if (dbgUs && dbgUsFirst) {
+			kiwi_trace();
+			dbgUsFirst = false;
+		}
+		*/
+	}
+	if (el == null) {
+	   el = document.createElement('div');		// allow failures to proceed, e.g. assignments to innerHTML
+	   el.id = id;
+	   el.classList.add('NB-SOFTFAIL');
+	   el.style.display = 'none';
+	   document.body.appendChild(el);
+	}
+	return el;
 }
 
 // return id of element (i.e. 'id-*') if found
@@ -534,7 +555,18 @@ function w3_id(el_id)
 // assign innerHTML, silently failing if element doesn't exist
 function w3_innerHTML(id)
 {
-	//var el = w3_el_softfail(id);
+	var el = w3_el_softfail(id);
+	var s = '';
+	var narg = arguments.length;
+   for (var i=1; i < narg; i++) {
+      s += arguments[i];
+   }
+	el.innerHTML = s;
+	return el;
+}
+
+function w3_set_innerHTML(id)
+{
 	var el = w3_el(id);
 	if (!el) return null;
 	var s = '';
@@ -1361,24 +1393,17 @@ function w3int_link_click(ev, cb, cb_param)
 function w3_link(psa, url, inner, title, cb, cb_param)
 {
    var qual_url = url;
-   var target;
-   if (url.startsWith('javascript:')) {
-      target = '';
-   } else {
-      if (!url.startsWith('http://') && !url.startsWith('https://'))
-         qual_url = 'http://'+ url;
-      target = ' target="_blank"';
-   }
+   if (!url.startsWith('http://') && !url.startsWith('https://'))
+      qual_url = 'http://'+ url;
    inner = inner || '';
-   title = title || '';
-   if (title != '') title = ' title='+ dq(title);
+   title = (title && title != '')? (' title='+ dq(title)) : '';
 
    // by default use pointer cursor if there is a callback
 	var pointer = (cb && cb != '')? 'w3-pointer':'';
 	cb_param = cb_param || 0;
 	var onclick = cb? (' onclick="w3int_link_click(event, '+ sq(cb) +', '+ sq(cb_param) +')"') : '';
 
-	var p = w3_psa(psa, pointer, '', 'href='+ dq(qual_url) + target + title + onclick);
+	var p = w3_psa(psa, pointer, '', 'href='+ dq(qual_url) +' target="_blank"'+ title + onclick);
 	var s = '<a '+ p +'>'+ inner +'</a>';
 	//console.log(s);
 	return s;
@@ -2098,9 +2123,11 @@ function w3_select_enum(path, func)
 function w3_select_value(path, idx, opt)
 {
    if (w3_opt(opt, 'all')) {
-      w3_els(path, function(el) {
-         el.value = idx;
-      });
+      var els = w3_els(path);
+      if (!els) return;
+      for (var i = 0; i < els.length; i++) {
+         els[i].value = idx;
+      }
    } else {
       var el = w3_el(path);
       if (!el) return;

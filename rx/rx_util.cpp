@@ -124,7 +124,6 @@ int S_meter_cal, waterfall_cal;
 double ui_srate, freq_offset;
 int kiwi_reg_lo_kHz, kiwi_reg_hi_kHz;
 float max_thr;
-int n_camp;
 
 #define DC_OFFSET_DEFAULT -0.02F
 #define DC_OFFSET_DEFAULT_PREV 0.05F
@@ -780,10 +779,10 @@ char *rx_users(bool include_ip)
                 char *ext = ext_users[i].ext? kiwi_str_encode((char *) ext_users[i].ext->name) : NULL;
                 const char *ip = include_ip? c->remote_ip : "";
                 asprintf(&sb2, "%s{\"i\":%d,\"n\":\"%s\",\"g\":\"%s\",\"f\":%d,\"m\":\"%s\",\"z\":%d,\"t\":\"%d:%02d:%02d\","
-                    "\"rt\":%d,\"rn\":%d,\"rs\":\"%d:%02d:%02d\",\"e\":\"%s\",\"a\":\"%s\",\"c\":%.1f,\"fo\":%.0f,\"ca\":%d}",
+                    "\"rt\":%d,\"rn\":%d,\"rs\":\"%d:%02d:%02d\",\"e\":\"%s\",\"a\":\"%s\",\"c\":%.1f,\"fo\":%.0f}",
                     need_comma? ",":"", i, user? user:"", geo? geo:"", c->freqHz,
                     kiwi_enum2str(c->mode, mode_s, ARRAY_LEN(mode_s)), c->zoom, hr, min, sec,
-                    rtype, rn, r_hr, r_min, r_sec, ext? ext:"", ip, wdsp_SAM_carrier(i), freq_offset, rx->n_camp);
+                    rtype, rn, r_hr, r_min, r_sec, ext? ext:"", ip, wdsp_SAM_carrier(i), freq_offset);
                 if (user) free(user);
                 if (geo) free(geo);
                 if (ext) free(ext);
