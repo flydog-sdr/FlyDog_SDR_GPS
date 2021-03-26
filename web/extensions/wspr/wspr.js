@@ -508,9 +508,9 @@ function wspr_config_html()
                   'If Kiwi has been configured for a mix of channels with and without waterfalls then channels without waterfalls will be used first.<br><br>' +
                   
                   'Spot decodes are available in the Kiwi log (use "Log" tab above) and are listed on <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a><br>' +
-                  'The three fields above must be set to valid values for proper spot entry into the <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a> database.'),
+                  'The "Reporter" fields above must be set to valid values for proper spot entry into the <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a> database.'),
                w3_div('w3-text-red w3-margin-bottom',
-                  'Must restart the KiwiSDR server for changes to have effect. Unaffected by user enable setting above.'),
+                  'Must restart the KiwiSDR server for changes to have effect. Unaffected by "User enabled?" setting above.'),
                w3_div('id-wspr-admin-autorun')
             )
          )
@@ -565,11 +565,13 @@ function wspr_gps_info_cb(o)
    //console.log('wspr_gps_info_cb');
    if (!cfg.WSPR.GPS_update_grid && !wspr.single_shot_update) return;
    //console.log(o);
-   var wspr_gps = JSON.parse(o);
-   //console.log(wspr_gps);
-   kiwi.WSPR_rgrid = wspr_gps.grid;
-   w3_set_value('WSPR.grid', kiwi.WSPR_rgrid);
-   w3_input_change('WSPR.grid', 'wspr_input_grid_cb');
+   var wspr_gps = kiwi_JSON_parse('wspr_gps_info_cb', o);
+   if (wspr_gps) {
+      //console.log(wspr_gps);
+      kiwi.WSPR_rgrid = wspr_gps.grid;
+      w3_set_value('WSPR.grid', kiwi.WSPR_rgrid);
+      w3_input_change('WSPR.grid', 'wspr_input_grid_cb');
+   }
    wspr.single_shot_update = false;
 }
 

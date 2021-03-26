@@ -11,6 +11,7 @@
 
 #include "types.h"
 #include "kiwi.h"
+#include "kiwi_assert.h"
 #include "wdsp.h"
 #include "fir.h"
 
@@ -30,36 +31,34 @@ struct wdsp_SAM_t {
     f32_t dcu;
     f32_t dc_insertu;
 
-    f32_t a[3 * SAM_PLL_HILBERT_STAGES + 3];     // Filter a variables
-    f32_t b[3 * SAM_PLL_HILBERT_STAGES + 3];     // Filter b variables
-    f32_t c[3 * SAM_PLL_HILBERT_STAGES + 3];     // Filter c variables
-    f32_t d[3 * SAM_PLL_HILBERT_STAGES + 3];     // Filter d variables
+    #define SAM_array_dim(d,l) assert_array_dim(d,l)
+    #define ABCD_DIM (3 * SAM_PLL_HILBERT_STAGES + 3)
+    f32_t a[ABCD_DIM];     // Filter a variables
+    f32_t b[ABCD_DIM];     // Filter b variables
+    f32_t c[ABCD_DIM];     // Filter c variables
+    f32_t d[ABCD_DIM];     // Filter d variables
     f32_t dsI;             // delayed sample, I path
     f32_t dsQ;             // delayed sample, Q path
 
     f32_t SAM_carrier;
     f32_t SAM_lowpass;
-    
-    //CFir m_QAM_HPF_FIR[NIQ];
 };
 
 static wdsp_SAM_t wdsp_SAM[MAX_RX_CHANS];
 
-static const f32_t pll_fmax = +22000.0;
-static const int zeta_help = 65;
-static const f32_t zeta = (f32_t) zeta_help / 100.0; // PLL step response: smaller, slower response 1.0 - 0.1
-static const f32_t omegaN = 200.0; // PLL bandwidth 50.0 - 1000.0
-
 // pll
+static const f32_t pll_fmax = +22000.0;
 static f32_t omega_min;
 static f32_t omega_max;
+static f32_t zeta;          // PLL step response: smaller, slower response 1.0 - 0.1
+static f32_t omegaN;        // PLL bandwidth 50.0 - 1000.0
 static f32_t g1;
 static f32_t g2;
 
 // fade leveler
 #define FADE_LEVELER 1
-static const f32_t tauR = 0.02; // original 0.02;
-static const f32_t tauI = 1.4; // original 1.4;
+static const f32_t tauR = 0.02;
+static const f32_t tauI = 1.4;
 static f32_t mtauR;
 static f32_t onem_mtauR;
 static f32_t mtauI;
@@ -88,23 +87,49 @@ static const f32_t c1[SAM_PLL_HILBERT_STAGES] = {
     -0.999282492800792
 };
 
+
+// DX adjustments: zeta = 0.15, omegaN = 100.0
+// very stable, but does not lock very fast
+// standard settings: zeta = 1.0, omegaN = 250.0
+// maybe user can choose between slow (DX), medium, fast SAM PLL
+// zeta / omegaN
+// DX = 0.2, 70
+// medium 0.6, 200
+// fast 1.2, 500
+
+const int PLL_DX = 0, PLL_MED = 1, PLL_FAST = 2;
+
+void wdsp_SAM_PLL(int type)
+{
+    switch (type) {
+    
+    case PLL_DX:
+        zeta = 0.2;
+        omegaN = 70;
+        break;
+    
+    case PLL_MED:
+        zeta = 0.65;
+        omegaN = 200.0;
+        break;
+    
+    case PLL_FAST:
+        zeta = 1.0;
+        omegaN = 500;
+        break;
+    }
+
+    //printf("SAM_PLL zeta=%.2f omegaN=%.0f\n", zeta, omegaN);
+    g1 = 1.0 - expf(-2.0 * omegaN * zeta / snd_rate);
+    g2 = - g1 + 2.0 * (1 - expf(- omegaN * zeta / snd_rate) * cosf(omegaN / snd_rate * sqrtf(1.0 - zeta * zeta)));
+}
+
 void wdsp_SAM_demod_init()
 {
-    // DX adjustments: zeta = 0.15, omegaN = 100.0
-    // very stable, but does not lock very fast
-    // standard settings: zeta = 1.0, omegaN = 250.0
-    // maybe user can choose between slow (DX), medium, fast SAM PLL
-    // zeta / omegaN
-    // DX = 0.2, 70
-    // medium 0.6, 200
-    // fast 1.2, 500
-    //f32_t zeta = 0.8; // PLL step response: smaller, slower response 1.0 - 0.1
-    //f32_t omegaN = 250.0; // PLL bandwidth 50.0 - 1000.0
+    wdsp_SAM_PLL(PLL_MED);
 
     omega_min = K_2PI * (-pll_fmax) / snd_rate;
     omega_max = K_2PI * pll_fmax / snd_rate;
-    g1 = 1.0 - expf(-2.0 * omegaN * zeta / snd_rate);
-    g2 = - g1 + 2.0 * (1 - expf(- omegaN * zeta / snd_rate) * cosf(omegaN / snd_rate * sqrtf(1.0 - zeta * zeta)));
 
     mtauR = expf(-1 / (snd_rate * tauR));
     onem_mtauR = 1.0 - mtauR;
@@ -116,18 +141,13 @@ void wdsp_SAM_reset(int rx_chan)
 {
     wdsp_SAM_t *w = &wdsp_SAM[rx_chan];
     memset(w, 0, sizeof(wdsp_SAM_t));
-
-#if 0
-    float frate = ext_update_get_sample_rateHz(rx_chan);
-    int taps = w->m_QAM_HPF_FIR[I].InitHPFilter(0, 1.0, 50.0, 75.0, 25.0, frate);
-    w->m_QAM_HPF_FIR[Q].InitHPFilter(0, 1.0, 50.0, 75.0, 25.0, frate);
-    printf("QAM_HPF_FIR taps = %d\n", taps);
-#endif
 }
 
 f32_t wdsp_SAM_carrier(int rx_chan)
 {
-    return wdsp_SAM[rx_chan].SAM_carrier;
+    f32_t carrier = wdsp_SAM[rx_chan].SAM_carrier;
+    if (isnan(carrier)) carrier = 0;
+    return carrier;
 }
 
 void wdsp_SAM_demod(int rx_chan, int mode, int chan_null, int ns_out, TYPECPX *in, TYPEMONO16 *out)
@@ -137,7 +157,7 @@ void wdsp_SAM_demod(int rx_chan, int mode, int chan_null, int ns_out, TYPECPX *i
     f32_t ai_ps, bi_ps, bq_ps, aq_ps;
     bool isChanNull = (mode == MODE_SAM && chan_null != CHAN_NULL_NONE);
     bool need_ps = ((mode != MODE_SAM && mode != MODE_QAM) || isChanNull);
-    bool stereoMode = (mode == MODE_SAS || mode == MODE_QAM || isChanNull);
+    bool stereoMode_or_nulling = (mode == MODE_SAS || mode == MODE_QAM || isChanNull);
     
     for (u4_t i = 0; i < ns_out; i++) {
           
@@ -158,6 +178,7 @@ void wdsp_SAM_demod(int rx_chan, int mode, int chan_null, int ns_out, TYPECPX *i
 
             for (int j = 0; j < SAM_PLL_HILBERT_STAGES; j++) {
               int k = 3 * j;
+              SAM_array_dim(k+5, ABCD_DIM);
               w->a[k + 3] = c0[j] * (w->a[k] - w->a[k + 5]) + w->a[k + 2];
               w->b[k + 3] = c1[j] * (w->b[k] - w->b[k + 5]) + w->b[k + 2];
               w->c[k + 3] = c0[j] * (w->c[k] - w->c[k + 5]) + w->c[k + 2];
@@ -170,6 +191,8 @@ void wdsp_SAM_demod(int rx_chan, int mode, int chan_null, int ns_out, TYPECPX *i
             aq_ps = w->d[OUT_IDX];
 
             for (int j = OUT_IDX + 2; j > 0; j--) {
+                SAM_array_dim(j, ABCD_DIM);
+                SAM_array_dim(j-1, ABCD_DIM);
                 w->a[j] = w->a[j - 1];
                 w->b[j] = w->b[j - 1];
                 w->c[j] = w->c[j - 1];
@@ -237,14 +260,14 @@ void wdsp_SAM_demod(int rx_chan, int mode, int chan_null, int ns_out, TYPECPX *i
             audio = audio + w->dc_insert - w->dc;
         }
         
-        if (stereoMode) {
+        if (stereoMode_or_nulling) {
             if (FADE_LEVELER) {
                 w->dcu = mtauR * w->dcu + onem_mtauR * audiou;
                 w->dc_insertu = mtauI * w->dc_insertu + onem_mtauI * corr[I];
                 audiou = audiou + w->dc_insertu - w->dcu;
             }
             
-            if (isChanNull) {
+            if (isChanNull) {   // MODE_SAM
                 out[i] = audion;    // lsb or usb nulled
 
                 // also save lsb/usb for display purposes
@@ -286,7 +309,7 @@ void wdsp_SAM_demod(int rx_chan, int mode, int chan_null, int ns_out, TYPECPX *i
         static u4_t last;
         u4_t now = timer_sec();
         if (last != now) {
-            printf("car %.1f Hz, err %.3f rad\n", w->SAM_carrier, w->phzerror);
+            printf("car %.1f Hz, err %.3f rad, omega2 %f\n", w->SAM_carrier, w->phzerror, w->omega2);
             last = now;
         }
     #endif

@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 442
+VERSION_MIN = 445
 
 REPO_NAME = FlyDog_SDR_GPS
 DEBIAN_VER = 8.11
@@ -287,11 +287,9 @@ endif
 
 /usr/sbin/avahi-autoipd:
 	#-apt-get --no-install-recommends -y install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
-	-echo "Skipped"
 
 /usr/bin/upnpc:
 	#-apt-get --no-install-recommends -y install miniupnpc
-	-echo "Skipped"
 
 /usr/bin/dig:
 	-apt-get --no-install-recommends -y install dnsutils
@@ -301,7 +299,6 @@ endif
 
 /sbin/ethtool:
 	#-apt-get --no-install-recommends -y install ethtool
-	-echo "Skipped"
 
 /usr/bin/sshpass:
 	-apt-get --no-install-recommends -y install sshpass
@@ -311,7 +308,6 @@ endif
 
 /usr/bin/dtc:
 	#-apt-get --no-install-recommends -y install device-tree-compiler
-	-echo "Skipped"
 
 ifeq ($(BBAI),true)
 /usr/bin/cpufreq-info:
@@ -391,6 +387,7 @@ build_makefile_inc:
 	@echo $(VER)
 	@echo PLATFORMS = $(PLATFORMS)
 	@echo DEBUG = $(DEBUG)
+	@echo GDB = $(GDB)
 	@echo XC = $(XC)
 	@echo
 #
@@ -975,6 +972,13 @@ else
 	install -D -o root -g root FlyDogSDR.rx8.wf2.bit /usr/local/bin/FlyDogSDR.rx8.wf2.bit
 	install -D -o root -g root FlyDogSDR.rx3.wf3.bit /usr/local/bin/FlyDogSDR.rx3.wf3.bit
 	install -D -o root -g root FlyDogSDR.rx14.wf0.bit /usr/local/bin/FlyDogSDR.rx14.wf0.bit
+#
+	#install -o root -g root unix_env/kiwid /etc/init.d
+	#install -o root -g root -m 0644 unix_env/kiwid.service /etc/systemd/system
+	#install -D -o root -g root -m 0644 unix_env/$(CAPE).dts /lib/firmware/$(CAPE).dts
+	#install -D -o root -g root -m 0644 unix_env/$(SPI).dts /lib/firmware/$(SPI).dts
+	#install -D -o root -g root -m 0644 unix_env/$(PRU).dts /lib/firmware/$(PRU).dts
+#
 	install -D -o root -g root $(GEN_DIR)/noip2 /usr/local/bin/noip2
 #
 	install -D -o root -g root -m 0644 $(DIR_CFG_SRC)/frpc.template.ini $(DIR_CFG)/frpc.template.ini
@@ -1271,7 +1275,6 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 
 /usr/bin/xz: $(KEYRING)
 	#apt-get --no-install-recommends -y install xz-utils
-	echo "Skipped"
 
 #
 # DANGER: "count=1600M" below (i.e. 1.6 GB) must be larger than the partition size (currently ~1.4 GB)
