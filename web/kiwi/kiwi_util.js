@@ -318,19 +318,19 @@ Number.prototype.toUnits = function()
 {
 	var n = Number(this);
 	if (n < 1000) {
-		return n.toString();
+		return n.toString();             // nnn
 	} else
 	if (n < 1e6) {
-		return (n/1e3).toFixed(1)+'k';
+		return (n/1e3).toFixed(1)+'k';   // nnn.fk
 	} else
 	if (n < 1e9) {
-		return (n/1e6).toFixed(1)+'M';
+		return (n/1e6).toFixed(1)+'M';   // nnn.fM
 	} else {
-		return (n/1e9).toFixed(1)+'G';
+		return (n/1e9).toFixed(1)+'G';   // nnn.fG
 	}
 }
 
-// allow 'k' (1e3) and 'm' (1e6) suffix
+// allow 'k' (1e3) and 'M' (1e6) suffix
 String.prototype.parseFloatWithUnits = function(allowed_suffixes, adj) {
 	var s = String(this);
 	var v = parseFloat(s);
@@ -500,6 +500,33 @@ function kiwi_UTCdoyToDate(doy, year, hour, min, sec)
    return new Date(Date.UTC(year, 0, doy, hour, min, sec));    // yes, doy = 1..366 really works!
 }
 
+function kiwi_decodeURIComponent(tag, uri)
+{
+   var obj;
+   try {
+      obj = decodeURIComponent(uri);
+   } catch(ex) {
+      console.log('kiwi_decodeURIComponent('+ tag +'): decode URI component fail');
+      console.log(uri);
+      console.log(ex);
+      obj = null;
+   }
+   return obj;
+}
+
+function kiwi_JSON_parse(tag, json)
+{
+   var obj;
+   try {
+      obj = JSON.parse(json);
+   } catch(ex) {
+      console.log('kiwi_JSON_parse('+ tag +'): JSON parse fail');
+      console.log(json);
+      console.log(ex);
+      obj = null;
+   }
+   return obj;
+}
 
 
 ////////////////////////////////
