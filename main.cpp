@@ -89,9 +89,6 @@ int main(int argc, char *argv[])
 	#ifdef MULTI_CORE
 	    is_multi_core = true;
 	#endif
-	#ifdef CPU_BCM2837
-            is_multi_core = true;
-        #endif
 	
 	main_argv = argv;
 	

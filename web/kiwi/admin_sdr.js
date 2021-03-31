@@ -47,7 +47,7 @@ function config_html()
 				w3_select('', 'Colormap', '', 'init.colormap', init_colormap, kiwi.cmap_s, 'admin_select_cb'),
 				w3_select('', 'Aperture', '', 'init.aperture', init_aperture, kiwi.aper_s, 'admin_select_cb')
 			),
-			w3_input_get('', 'CW offset (Hz)', 'init.cw_offset', 'admin_int_cb')
+			w3_input_get('', 'CW offset (Hz, > 0)', 'init.cw_offset', 'config_cw_offset_cb')
 		) +
 
 		w3_third('w3-text-teal', 'w3-container',
