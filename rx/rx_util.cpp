@@ -157,6 +157,9 @@ void update_vars_from_config()
 
     int srate_idx = cfg_default_int("max_freq", -1, &update_cfg);
     switch(srate_idx) {
+        default:
+            ui_srate = 32*MHz;
+            break;
         case 0:
             ui_srate = 30*MHz;
             break;
@@ -168,9 +171,6 @@ void update_vars_from_config()
             break;
         case 3:
             ui_srate = 62*MHz;
-            break;
-        default:
-            ui_srate = fdsdr ? 54*MHz : 30*MHz;
             break;
     }
 
