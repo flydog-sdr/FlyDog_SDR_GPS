@@ -171,10 +171,13 @@ ifeq ($(ASAN),1)
         VIS_OPT += -fsanitize=address
         VIS_UNOPT += -fsanitize=address
     endif
-    CFLAGS += -fno-omit-frame-pointer
+
+    CFLAGS += -fno-omit-frame-pointer -fno-optimize-sibling-calls
+    CPP_FLAGS += -DDEBUG
+
+    LDFLAGS += -fsanitize=address,leak
     #LDFLAGS += -v -fsanitize=address,leak
-    #LDFLAGS += -fsanitize=address,leak
-    LDFLAGS += -fsanitize=address
+    #LDFLAGS += -fsanitize=address
 endif
 
 
