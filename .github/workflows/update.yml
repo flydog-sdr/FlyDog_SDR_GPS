@@ -1,0 +1,86 @@
+name: Update API server
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  coding-net:
+    runs-on: ubuntu-18.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@master
+
+      - name: Setup Environment
+        env:
+          DEPLOY_KEY_CODING_NET: ${{ secrets.DEPLOY_KEY_CODING_NET }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${DEPLOY_KEY_CODING_NET}" > ~/.ssh/id_rsa
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Setup Git
+        env:
+          USER_EMAIL: ${{ secrets.USER_EMAIL }}
+          USER_NAME: ${{ secrets.USER_NAME }}
+        run: |
+          git config --global user.email "${USER_EMAIL}"
+          git config --global user.name "${USER_NAME}"
+          ssh-keyscan e.coding.net >> ~/.ssh/known_hosts
+
+      - name: Update API
+        run: |
+          export DIR_TMP="$(mktemp -d)"
+          export VER=$(curl -s https://raw.githubusercontent.com/flydog-sdr/FlyDog_SDR_GPS/master/Makefile | \
+                              head -2 | cut -d " " -f3 | tr -d "\n")
+          git clone https://github.com/flydog-sdr/customised-scripts ${DIR_TMP}/customised-scripts
+          git clone -b master git@e.coding.net:bclswl0827/flydog-sdr/api.git ${DIR_TMP}/e.coding.net
+          rm -rf ${DIR_TMP}/e.coding.net/*
+          echo ${VER} > ${DIR_TMP}/e.coding.net/VER
+          mv ${DIR_TMP}/customised-scripts/* ${DIR_TMP}/e.coding.net
+          cd ${DIR_TMP}/e.coding.net
+          git add .
+          git commit -m "Scripts for Build.${VER}"
+          git push --force
+
+  github-com:
+    runs-on: ubuntu-18.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@master
+
+      - name: Setup Environment
+        env:
+          DEPLOY_KEY_GITHUB_COM: ${{ secrets.DEPLOY_KEY_GITHUB_COM }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${DEPLOY_KEY_GITHUB_COM}" > ~/.ssh/id_rsa
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Setup Git
+        env:
+          USER_EMAIL: ${{ secrets.USER_EMAIL }}
+          USER_NAME: ${{ secrets.USER_NAME }}
+        run: |
+          git config --global user.email "${USER_EMAIL}"
+          git config --global user.name "${USER_NAME}"
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Update API
+        run: |
+          export DIR_TMP="$(mktemp -d)"
+          export VER=$(curl -s https://raw.githubusercontent.com/flydog-sdr/FlyDog_SDR_GPS/master/Makefile | \
+                              head -2 | cut -d " " -f3 | tr -d "\n")
+          git clone https://github.com/flydog-sdr/customised-scripts ${DIR_TMP}/customised-scripts
+          git clone -b master git@github.com:flydog-sdr/docs.git ${DIR_TMP}/github.com
+          cd ${DIR_TMP}/customised-scripts
+          zip ${DIR_TMP}/github.com/docs/.vuepress/public/scripts.zip *
+          cd ${DIR_TMP}/github.com
+          git add .
+          git commit -m "Scripts for Build.${VER}"
+          git push --force
