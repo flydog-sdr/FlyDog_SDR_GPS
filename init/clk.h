@@ -27,7 +27,7 @@ Boston, MA  02110-1301, USA.
 // ADC clk generated from FPGA via multiplied GPS TCXO
 #define	GPS_CLOCK		    (16.368*MHz)		// 61.095 ns
 #define ADC_CLOCK_NOM	    (125.000000*MHz)		// 125.0000 MHz 15.0 ns
-#define ADC_CLOCK_TYP	    (124.998700*MHz)		// typical 20 degC value
+#define ADC_CLOCK_TYP	    (125.000000*MHz)		// typical 20 degC value
 #define ADC_CLOCK_PPM_TYP   50                  // XO spec
 #define ADC_CLOCK_PPM_LIMIT 100                 // max manual adjustment we allow
 
