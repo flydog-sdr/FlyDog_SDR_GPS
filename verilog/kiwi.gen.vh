@@ -13,12 +13,11 @@
 `define DEF_FPGA_VER
 	parameter FW_ID = 20480;    // DEFp 0x5000
 `define DEF_FW_ID
-	parameter ADC_BITS = 16;    // DEFp 0x10
+	parameter ADC_BITS = 16;    // DEFp 0xe
 `define DEF_ADC_BITS
 	parameter DEFAULT_NSYNC = 2;    // DEFp 0x2
 `define DEF_DEFAULT_NSYNC
-	parameter USE_GEN = 1;    // DEFp 0x1
-`define DEF_USE_GEN
+`define USE_GEN    // DEFh 0x1
 `define USE_LOGGER    // DEFh 0x1
 `define USE_CPU_CTR    // DEFh 0x1
 `define USE_DEBUG    // DEFh 0x1
@@ -55,13 +54,13 @@
 `define DEF_SPIBUF_B
 	parameter SPIBUF_BMAX = 4094;    // DEFp 0xffe
 `define DEF_SPIBUF_BMAX
-	parameter RX1_WIDE_DECIM = 1250;    // DEFp 0x4e2
+	parameter RX1_WIDE_DECIM = 823;    // DEFp 0x337
 `define DEF_RX1_WIDE_DECIM
-	parameter RX2_WIDE_DECIM = 5;    // DEFp 0x5
+	parameter RX2_WIDE_DECIM = 4;    // DEFp 0x4
 `define DEF_RX2_WIDE_DECIM
-	parameter RX1_STD_DECIM = 1488;    // DEFp 0x5d0
+	parameter RX1_STD_DECIM = 505;    // DEFp 0x1f9
 `define DEF_RX1_STD_DECIM
-	parameter RX2_STD_DECIM = 7;    // DEFp 0x7
+	parameter RX2_STD_DECIM = 11;    // DEFp 0xb
 `define DEF_RX2_STD_DECIM
 	parameter MAX_SND_RATE = 20250;    // DEFp 0x4f1a
 `define DEF_MAX_SND_RATE
@@ -73,13 +72,13 @@
 `define DEF_SND_RATE_8CH
 	parameter SND_RATE_14CH = 12000;    // DEFp 0x2ee0
 `define DEF_SND_RATE_14CH
-	parameter RX_DECIM_3CH = 6250;    // DEFp 0x186a
+	parameter RX_DECIM_3CH = 3292;    // DEFp 0xcdc
 `define DEF_RX_DECIM_3CH
-	parameter RX_DECIM_4CH = 10416;    // DEFp 0x28b0
+	parameter RX_DECIM_4CH = 5555;    // DEFp 0x15b3
 `define DEF_RX_DECIM_4CH
-	parameter RX_DECIM_8CH = 10416;    // DEFp 0x28b0
+	parameter RX_DECIM_8CH = 5555;    // DEFp 0x15b3
 `define DEF_RX_DECIM_8CH
-	parameter RX_DECIM_14CH = 10416;    // DEFp 0x28b0
+	parameter RX_DECIM_14CH = 5555;    // DEFp 0x15b3
 `define DEF_RX_DECIM_14CH
 	parameter RXBUF_SIZE_3CH = 16384;    // DEFp 0x4000
 `define DEF_RXBUF_SIZE_3CH

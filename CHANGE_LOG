@@ -2,6 +2,9 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.4511  April 15, 2021
+    CW(N) offest was fixed.
+
 v1.451  April 13, 2021
     Admin log tab:
         By request: add option to not log connections from local ip addresses.
