@@ -1224,7 +1224,7 @@ void c2s_admin(void *param)
 			i = strcmp(cmd, "SET reboot");
 			if (i == 0) {
 				clprintf(conn, "ADMIN: reboot requested by admin..\n");
-				system("reboot");
+				system("echo 128 > /proc/sys/kernel/sysrq; echo b > /proc/sysrq-trigger");
 				while (true)
 					kiwi_usleep(100000);
 			}
@@ -1232,7 +1232,7 @@ void c2s_admin(void *param)
 			i = strcmp(cmd, "SET power_off");
 			if (i == 0) {
 				clprintf(conn, "ADMIN: power off requested by admin..\n");
-				system("poweroff");
+				system("echo 128 > /proc/sys/kernel/sysrq; echo o > /proc/sysrq-trigger");
 				while (true)
 					kiwi_usleep(100000);
 			}
