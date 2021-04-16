@@ -214,9 +214,9 @@ function control_html()
 		w3_half('w3-valign', '',
          w3_div('',
             w3_div('',
-               w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'control_restart_cb')/*,
+               w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'control_restart_cb'),
                w3_button('w3-blue w3-margin', 'Beagle reboot', 'control_reboot_cb'),
-               w3_button('w3-red w3-margin', 'Beagle power off', 'control_power_off_cb')*/
+               w3_button('w3-red w3-margin', 'Beagle power off', 'control_power_off_cb')
             ),
             w3_div('id-confirm w3-valign w3-hide',
                w3_button('w3-green w3-margin', 'Confirm', 'control_confirm_cb'),

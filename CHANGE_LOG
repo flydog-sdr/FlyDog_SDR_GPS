@@ -2,6 +2,11 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.4512  April 16, 2021
+    Enable poweroff/restart in administration.
+        Commands such as poweroff, reboot are not allowed in container, use magic SysRq key instead.
+            See documentation: https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html#how-do-i-use-the-magic-sysrq-key
+
 v1.4511  April 15, 2021
     CW(N) offest was fixed.
 
@@ -234,7 +239,7 @@ v1.4292  January 24, 2021
 
 v1.4291  January 23, 2021
     Followed up the upstream.
-        github.com/jks-prv/Beagle_SDR_GPS
+        https://github.com/jks-prv/Beagle_SDR_GPS
 
 v1.429  January 16, 2021
     FAX: added Vanino Radio 6455 to Asia menu per forum user Fabrys.
