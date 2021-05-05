@@ -2,6 +2,9 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.452  May 4, 2021
+    Improvements to API to prevent abuse of disabled DRM mode.
+
 v1.4512  April 16, 2021
     Enable poweroff/restart in administration.
         Commands such as poweroff, reboot are not allowed in container, use magic SysRq key instead.

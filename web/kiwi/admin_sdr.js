@@ -168,7 +168,7 @@ function config_html()
 			w3_divs('w3-restart/w3-center w3-tspace-8',
 				w3_div('', '<b>External ADC clock?</b>'),
             w3_switch('', 'Yes', 'No', 'ext_ADC_clk', cfg.ext_ADC_clk, 'config_ext_clk_sel_cb'),
-				w3_text('w3-text-black w3-center', 'Set when external 66.666600 MHz (nominal) <br> clock connected to J5 connector/pad.')
+				w3_text('w3-text-black w3-center', 'Set when external 125.000000 MHz (nominal) <br> clock connected to J5 connector/pad.')
 			),
 			w3_divs('w3-restart/w3-tspace-8',
 		      w3_input('', 'External clock frequency (enter in MHz or Hz)', 'ext_ADC_freq', cfg.ext_ADC_freq, 'config_ext_freq_cb'),
@@ -249,6 +249,13 @@ function config_html()
 		'<hr>';
 
 	return w3_div('id-config w3-hide', s1 + s2 + s3 + s4 + s5 + s6);
+}
+
+function config_cw_offset_cb(path, val, first)
+{
+   val = +val;
+   if (val <= 0) val = Math.NAN;    // make admin_int_cb() return to previous value
+   admin_int_cb(path, val);
 }
 
 function config_wfmin_cb(path, val, first)
