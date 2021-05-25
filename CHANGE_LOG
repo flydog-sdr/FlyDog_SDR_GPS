@@ -2,6 +2,10 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.4541  May 25, 2021
+    Added "Backup" tab in administration with specialised configuration backup script.
+    Added "Prevent multiple connections from the same IP address?" switcher.
+
 v1.453,454  May 14, 2021
     Added default passband adjustment to admin page, config tab.
         As each passband parameter field is changed (low, high, center, width) the other

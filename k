@@ -28,9 +28,9 @@ if test ! -f /etc/dogtag; then
 	exit 0
 fi
 
-RPI=0
+RPI=$(grep -q -s "Raspberry Pi" /boot/issue.txt; echo $?)
 #echo "not RPI = ${RPI}"
-BBAI=1
+BBAI=$(grep -q -s "BeagleBoard" /etc/dogtag; echo $?)
 #echo "not BBAI = ${BBAI}"
 
 if [ "x${BBAI}" = "x0" ] ; then

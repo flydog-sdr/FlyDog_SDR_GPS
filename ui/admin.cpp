@@ -605,7 +605,7 @@ void c2s_admin(void *param)
 // backup
 ////////////////////////////////
 
-#define SD_CMD "cd /root/" REPO_NAME "/tools; ./kiwiSDR-make-microSD-flasher-from-eMMC.sh --called_from_kiwisdr_server"
+#define SD_CMD "/usr/local/bin/backup_sdr_config.sh"
 			i = strcmp(cmd, "SET microSD_write");
 			if (i == 0) {
 				mprintf_ff("ADMIN: received microSD_write\n");
