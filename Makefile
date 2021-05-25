@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 454
+VERSION_MIN = 4541
 
 REPO_NAME = FlyDog_SDR_GPS
 DEBIAN_VER = 8.11
@@ -992,6 +992,7 @@ else
 	#install -D -o root -g root -m 0644 unix_env/$(CAPE).dts /lib/firmware/$(CAPE).dts
 	#install -D -o root -g root -m 0644 unix_env/$(SPI).dts /lib/firmware/$(SPI).dts
 	#install -D -o root -g root -m 0644 unix_env/$(PRU).dts /lib/firmware/$(PRU).dts
+	install -D -o root -g root tools/backup_sdr_config.sh /usr/local/bin/backup_sdr_config.sh
 #
 	install -D -o root -g root $(GEN_DIR)/noip2 /usr/local/bin/noip2
 #
@@ -1008,6 +1009,7 @@ else
 	install -D -o root -g root -m 0644 $(DIR_CFG_SRC)/v.sed $(DIR_CFG)/v.sed
 #
 	rsync -av --delete $(DIR_CFG_SRC)/samples/ $(DIR_CFG)/samples
+	cat Makefile | head -2 | cut -d " " -f3 | tr -d "\n" > $(DIR_CFG)/_VER
 
 # only install post-customized config files if they've never existed before
 ifneq ($(EXISTS_BASHRC_LOCAL),true)

@@ -5,11 +5,11 @@
 # loaded only on the Beagle.
 #
 
-DEBIAN_DEVSYS = $(shell echo 2)
+DEBIAN_DEVSYS = $(shell grep -q -s Debian /etc/dogtag; echo $$?)
 
 #double check for RPI
 ifeq ($(DEBIAN_DEVSYS),2)
-	DEBIAN_DEVSYS = $(shell echo 0)
+	DEBIAN_DEVSYS = $(shell grep -q -s dtparam /boot/config.txt; echo $$?)
 endif
 
 DEBIAN = 0
@@ -46,11 +46,11 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
         # nfs doesn't see special files in /proc, so assume BBAI if running Debian 9
         HAS_PROC = $(shell test -d $(KIWI_XC_REMOTE_FS)/proc/device-tree && echo true)
         ifeq ($(HAS_PROC),true)
-            BBAI = $(shell cat $(KIWI_XC_REMOTE_FS)/proc/device-tree/model | grep -q -s "BeagleBone AI" && echo true)
-            RPI = $(shell echo true)
+            BBAI = $(shell grep -q -s "BeagleBoard" $(KIWI_XC_REMOTE_FS)/etc/dogtag && echo true)
+            RPI = $(shell grep -q -s "Raspberry Pi" $(KIWI_XC_REMOTE_FS)/boot/issue.txt && echo true)
         else
             BBAI = $(shell cat $(KIWI_XC_REMOTE_FS)/etc/debian_version | grep -q -s "9\." && echo true)
-            RPI = $(shell echo true)
+            RPI = $(shell cat $(KIWI_XC_REMOTE_FS)/etc/os-release | grep -q -s "raspbian" && echo true)
         endif
         DEBIAN_7 = $(shell cat $(KIWI_XC_REMOTE_FS)/etc/debian_version | grep -q -s "7\." && echo true)
         CC = clang
@@ -100,11 +100,12 @@ endif
 
 # Debian target
 ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
+	#CFLAGS += -mfloat-abi=softfp -mfpu=neon
 	CFLAGS +=  -mfpu=vfp -mfloat-abi=hard
 	CFLAGS += -DHOST
 
-	BBAI = $(shell cat /dev/null)
-	RPI = $(shell echo true)
+	BBAI = $(shell grep -q -s "BeagleBoard" /etc/dogtag && echo true)
+	RPI = $(shell grep -q -s "Raspberry Pi" /boot/issue.txt && echo true)
 	DEBIAN_7 = $(shell cat /etc/debian_version | grep -q -s "7\." && echo true)
 
 	ifeq ($(DEBIAN_7),true)

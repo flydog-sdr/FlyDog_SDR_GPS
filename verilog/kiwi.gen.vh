@@ -13,7 +13,7 @@
 `define DEF_FPGA_VER
 	parameter FW_ID = 20480;    // DEFp 0x5000
 `define DEF_FW_ID
-	parameter ADC_BITS = 16;    // DEFp 0xe
+	parameter ADC_BITS = 16;    // DEFp 0x10
 `define DEF_ADC_BITS
 	parameter DEFAULT_NSYNC = 2;    // DEFp 0x2
 `define DEF_DEFAULT_NSYNC
