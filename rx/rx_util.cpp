@@ -164,13 +164,13 @@ void update_vars_from_config()
             ui_srate = 32*MHz;
             break;
         case 0:
-            ui_srate = 30*MHz;
-            break;
-        case 1:
             ui_srate = 32*MHz;
             break;
+        case 1:
+            ui_srate = 42*MHz;
+            break;
         case 2:
-            ui_srate = 54*MHz;
+            ui_srate = 52*MHz;
             break;
         case 3:
             ui_srate = 62*MHz;
@@ -236,7 +236,7 @@ void update_vars_from_config()
     cfg_default_int("clk_adj", 0, &update_cfg);
     freq_offset = cfg_default_float("freq_offset", 0, &update_cfg);
     kiwi_reg_lo_kHz = cfg_default_int("sdr_hu_lo_kHz", 0, &update_cfg);
-    kiwi_reg_hi_kHz = cfg_default_int("sdr_hu_hi_kHz", 30000, &update_cfg);
+    kiwi_reg_hi_kHz = cfg_default_int("sdr_hu_hi_kHz", 32000, &update_cfg);
     cfg_default_bool("index_html_params.RX_PHOTO_LEFT_MARGIN", true, &update_cfg);
     cfg_default_string("index_html_params.HTML_HEAD", "", &update_cfg);
     cfg_default_bool("ext_ADC_clk", false, &update_cfg);
@@ -299,8 +299,18 @@ void update_vars_from_config()
         update_cfg = true;
     }
 
-    /* int dom_sel = */ cfg_default_int("sdr_hu_dom_sel", DOM_SEL_NAM, &update_cfg);
+    int _dom_sel = cfg_default_int("sdr_hu_dom_sel", DOM_SEL_NAM, &update_cfg);
 
+    #if 0
+        // try and get this Kiwi working with the proxy
+        //printf("serno=%d dom_sel=%d\n", serial_number, _dom_sel);
+	    if (serial_number == 1006 && _dom_sel == DOM_SEL_NAM) {
+            cfg_set_int("sdr_hu_dom_sel", DOM_SEL_REV);
+            update_cfg = true;
+            lprintf("######## FORCE DOM_SEL_REV serno=%d ########\n", serial_number);
+	    }
+    #endif
+    
     // remove old kiwisdr.example.com default
     cfg_default_string("server_url", "", &update_cfg);
     const char *server_url = cfg_string("server_url", NULL, CFG_REQUIRED);
@@ -308,6 +318,7 @@ void update_vars_from_config()
 	    cfg_set_string("server_url", "");
 	    update_cfg = true;
     }
+    
     // not sure I want to do this yet..
     #if 0
         // Strange problem where cfg.sdr_hu_dom_sel seems to get changed occasionally between modes

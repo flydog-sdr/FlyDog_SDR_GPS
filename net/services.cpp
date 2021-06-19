@@ -256,7 +256,7 @@ static void misc_NET(void *param)
     
     printf("vr=0x%x vc=0x%x\n", vr, vc);
     
-    #define KIWI_SURVEY
+    #undef KIWI_SURVEY
     #ifdef KIWI_SURVEY
     #define SURVEY_LAST 182
     bool need_survey = admcfg_int("survey", NULL, CFG_REQUIRED) != SURVEY_LAST;

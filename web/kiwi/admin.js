@@ -1019,14 +1019,14 @@ function backup_focus()
 	w3_el('id-output-msg').style.height = px(300);
 }
 
-var sd_progress, sd_progress_max = 6*60;		// measured estimate -- in secs (varies with SD card write speed)
+var sd_progress, sd_progress_max = 15;		// measured estimate -- in secs (varies with SD card write speed)
 var backup_sd_interval;
 var backup_refresh_icon = w3_icon('', 'fa-refresh fa-spin', 20);
 
 function backup_sd_write(id, idx)
 {
 	var el = w3_el('id-sd-status');
-	el.innerHTML = "writing the micro-SD card...";
+	el.innerHTML = "Backing up...";
 
 	w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '0%';
 
