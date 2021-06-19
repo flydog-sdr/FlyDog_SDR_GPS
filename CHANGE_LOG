@@ -2,6 +2,52 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.460  May 24, 2021
+    Fix needed by the KiwiSDR Android app (from the Google Play store).
+    Match frequency step amounts between "snap to nearest" mode and L/R arrow keys.
+
+v1.459  May 23, 2021
+    Waterfall / spectrum:
+        Fixed the CIC compensation added to the last release.
+
+        Added waterfall interpolation URL parameter "wfi=N" e.g. kiwi:8073/?spec&wfi=13
+        Also available as an API parameter on the waterfall web socket: "SET interp=N"
+        Value N below. Add 10 to enable the CIC filter compensation.
+        
+        The value below answers the question: "What to do when multiple FFT values
+        contribute to a single waterfall/spectrum pixel bin". In most cases the FFT
+        is larger than the 1024 display pixels of the waterfall (or external application).
+        
+        0 take max (old and continuing server default for kiwiclient, external apps etc.)
+        1 take min 
+        2 take last 
+        3 do drop sampling
+        4 take cumulative moving average of values
+        ...
+        13  drop sampling + CIC compensation (new Kiwi browser interface default)
+
+v1.457,458  May 21, 2021
+    Waterfall / spectrum:
+        Fixed low-level post-FFT artifacts spotted by Marco's SuperSDR app. Thanks Marco!
+        Added CIC filter compensation to better level spectrum at top end.
+    
+    FAX extension:
+        Added GM-11F Sevastopol 7090.9 kHz per fabrys on Kiwi forum. Thanks fabrys!
+
+v1.455,456  May 19, 2021
+    Admin page
+        Config tab: Added button to reset passband fields to default values.
+        Connect tab: Improved proxy setup UI.
+
+    Right-click menu: Added "snap to nearest" mode. Setting is remembered/restored per Kiwi
+        visited just like freq/mode etc. Waterfall cursor differs when snap mode active.
+        When snap is active the freq step keys (j/i, left/right arrow keys) are modified so
+        the ctrl/alt-key steps the smallest amount and the unmodified key steps the same
+        amount as the snap (e.g. 9/10 kHz on MW). Usually the unmodified key step the
+        smallest amount.
+
+    Changes to more easily support general (even non-SDR) FPGA development.
+
 v1.4541  May 25, 2021
     Added "Backup" tab in administration with specialised configuration backup script.
     Added "Prevent multiple connections from the same IP address?" switcher.

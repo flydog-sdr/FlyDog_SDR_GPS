@@ -1,13 +1,13 @@
 {
 "inactivity_timeout_mins":0,
-"status_msg":"Try other KiwiSDRs world-wide at <a href='http://rx.kiwisdr.com' target='_blank'>rx.kiwisdr.com</a>",
+"status_msg":"Try other SDRs world-wide at <a href='http://rx.kiwisdr.com' target='_blank'>rx.kiwisdr.com</a>",
 "index_html_params":{
-	"PAGE_TITLE":"KiwiSDR",
+	"PAGE_TITLE":"FlyDog SDR",
 	"RX_PHOTO_FILE":"kiwi/pcb.jpg",
 	"RX_PHOTO_HEIGHT":"350",
-	"RX_PHOTO_TITLE":"KiwiSDR: software-defined receiver",
-	"RX_PHOTO_DESC":"First production PCB",
-	"RX_TITLE":"KiwiSDR: Software-defined receiver",
+	"RX_PHOTO_TITLE":"FlyDog SDR: The 16-Bit ADC KiwiSDR derivation Wide-band SDR + GPS cape for Raspberry Pi",
+	"RX_PHOTO_DESC":"FlyDog SDR PCB",
+	"RX_TITLE":"FlyDog SDR: Software-defined receiver",
 	"RX_LOC":"Tauranga, New Zealand",
 	"RX_QRA":"RF82ci",
 	"RX_ASL":"30m",
@@ -16,8 +16,8 @@
 "init":{
     "cw_offset":500
 },
-"rx_name":"0-30 MHz SDR",
-"rx_device":"KiwiSDR on BeagleBone",
+"rx_name":"0-32 MHz SDR",
+"rx_device":"FlyDog SDR on Raspberry Pi",
 "rx_location":"Tauranga, New Zealand",
 "rx_grid":"RF82ci",
 "rx_asl":30,

@@ -44,7 +44,7 @@ var ITU_region_i = { 0:'R1: Europe, Africa', 1:'R2: North & South America', 2:'R
 
 var AM_BCB_chan_i = { 0:'9 kHz', 1:'10 kHz' };
 
-var max_freq_i = { 0:'30 MHz', 1:'32 MHz', 2:'54 MHz', 3:'62 MHz' };
+var max_freq_i = { 0:'32 MHz', 1:'42 MHz', 2:'52 MHz', 3:'62 MHz' };
 
 var SPI_clock_i = { 0:'48 MHz', 1:'24 MHz' };
 
@@ -141,11 +141,11 @@ function config_html()
 				)
 			),
 			w3_divs('w3-restart/w3-center w3-tspace-8',
-				w3_select('', 'Max receiver frequency', '', 'max_freq', max_freq, max_freq_i, 'admin_select_cb'),
+				w3_select('', 'Max receiver frequency', '', 'max_freq', max_freq, max_freq_i, 'admin_select_cb')/*,
 				w3_div('w3-text-black',
 				   '32 MHz necessary for some downconverters. But note <br>' +
 				   'there will be more spurs in the 30-32 MHz range.'
-				)
+				)*/
 			),
          w3_checkbox_get_param('w3-halign-center//w3-restart w3-label-inline', 'Show AGC threshold on S-meter', 'agc_thresh_smeter', 'admin_bool_cb', true)
 		) +
@@ -948,7 +948,7 @@ function kiwi_reg_html()
             w3_input_get('', 'Coverage frequency low (kHz)', 'sdr_hu_lo_kHz', 'admin_int_cb'),
 				w3_div('w3-text-black',
 				   'These two settings effect the frequency coverage label displayed on rx.kiwisdr.com <br>' +
-				   'e.g. when set to 0 and 30000 "HF" is shown. If you\'re using a transverter <br>' +
+				   'e.g. when set to 0 and 32000 "HF" is shown. If you\'re using a transverter <br>' +
 				   'then appropriate entries will cause "2m" or "70cm" to be shown. Other labels will be <br>' +
 				   'shown if you limit the range at HF due to antenna or filtering limitations.'
 				)

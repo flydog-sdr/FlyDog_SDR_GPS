@@ -50,6 +50,8 @@ Boston, MA  02110-1301, USA.
 #include <math.h>
 #include <fftw3.h>
 
+#ifdef USE_SDR
+
 //#define WF_INFO
 //#define TR_WF_CMDS
 #define SM_WF_DEBUG		false
@@ -64,6 +66,8 @@ Boston, MA  02110-1301, USA.
 
 #define WF_NSPEEDS 5
 static const int wf_fps[] = { WF_SPEED_OFF, WF_SPEED_1FPS, WF_SPEED_SLOW, WF_SPEED_MED, WF_SPEED_FAST };
+
+static const char *interp_s[] = { "max", "min", "last", "drop", "cma" };
 
 #ifdef WF_SHMEM_DISABLE
     static wf_shmem_t wf_shmem;
@@ -104,6 +108,7 @@ static str_hashes_t wf_cmd_hashes[] = {
     { "SET wf_sp", CMD_SET_WF_SPEED },
     { "SET send_", CMD_SEND_DB },
     { "SET ext_b", CMD_EXT_BLUR },
+    { "SET inter", CMD_INTERPOLATE },
     { 0 }
 };
 
@@ -162,6 +167,21 @@ void c2s_waterfall_init()
     	#endif
     }
     
+    // compensates for small droop at top end of waterfall/spectrum display
+    //real_printf("WF CIC_comp:\n");
+    for (i=0; i < WF_C_NSAMPS; i++) {
+
+        // CIC compensating filter
+        const TYPEREAL f = fabs(fmod(TYPEREAL(i)/WF_C_NSAMPS+0.5f, 1.0f) - 0.5f);
+        const TYPEREAL p1 = -2.969f;
+        const TYPEREAL p2 = 36.26f;
+        const TYPEREAL sincf = f ? MSIN(f*K_PI)/(f*K_PI) : 1.0f;
+        float cic_comp = pow(sincf, -5) + p1*exp(p2*(f-0.5f));
+        WF_SHMEM->CIC_comp[i] = 0.5 + cic_comp / 2.0;   // scaling value is empirical
+        //real_printf("[%.3f %.3f] ", cic_comp, WF_SHMEM->CIC_comp[i]);
+    }
+    //real_printf("\n\n");
+
 	WF_SHMEM->n_chunks = (int) ceilf((float) WF_C_NSAMPS / NWF_SAMPS);
 	
 	assert(WF_C_NSAMPS == WF_C_NFFT);
@@ -181,6 +201,7 @@ void c2s_waterfall_init()
 
 void c2s_waterfall_compression(int rx_chan, bool compression)
 {
+    //printf("WF%d: compression=%d\n", rx_chan, compression);
 	WF_SHMEM->wf_inst[rx_chan].compression = compression;
 }
 
@@ -248,12 +269,12 @@ void c2s_waterfall(void *param)
 		#error !((NWF_SAMPS * WF_IQ_T) <= SPIBUF_B)
 	#endif
 
-	//clprintf(conn, "W/F INIT conn: %p mc: %p %s:%d %s\n",
+	//clprintf(conn, "WF INIT conn: %p mc: %p %s:%d %s\n",
 	//	conn, conn->mc, conn->remote_ip, conn->remote_port, conn->mc->uri);
 
     #if 0
         if (strcmp(conn->remote_ip, "") == 0)
-            cprintf(conn, "W/F INIT conn: %p mc: %p %s:%d %s\n",
+            cprintf(conn, "WF INIT conn: %p mc: %p %s:%d %s\n",
                 conn, conn->mc, conn->remote_ip, conn->remote_port, conn->mc->uri);
     #endif
 
@@ -285,7 +306,7 @@ void c2s_waterfall(void *param)
     		
     		#if 0
                 if (strcmp(conn->remote_ip, "") == 0 /* && strcmp(cmd, "SET keepalive") != 0 */)
-                    cprintf(conn, "W/F <%s> cmd_recv 0x%x/0x%x\n", cmd, cmd_recv, CMD_ALL);
+                    cprintf(conn, "WF <%s> cmd_recv 0x%x/0x%x\n", cmd, cmd_recv, CMD_ALL);
 			#endif
 
 			// SECURITY: this must be first for auth check
@@ -294,9 +315,9 @@ void c2s_waterfall(void *param)
 			
 			#ifdef TR_WF_CMDS
 				if (tr_cmds++ < 32) {
-					clprintf(conn, "W/F #%02d <%s> cmd_recv 0x%x/0x%x\n", tr_cmds, cmd, cmd_recv, CMD_ALL);
+					clprintf(conn, "WF #%02d <%s> cmd_recv 0x%x/0x%x\n", tr_cmds, cmd, cmd_recv, CMD_ALL);
 				} else {
-					//cprintf(conn, "W/F <%s> cmd_recv 0x%x/0x%x\n", cmd, cmd_recv, CMD_ALL);
+					//cprintf(conn, "WF <%s> cmd_recv 0x%x/0x%x\n", cmd, cmd_recv, CMD_ALL);
 				}
 			#endif
 
@@ -396,7 +417,7 @@ void c2s_waterfall(void *param)
                         if (wf->isWF)
                             spi_set(CmdSetWFDecim, rx_chan, decim);
                     
-                        // We've seen cases where the w/f connects, but the sound never does.
+                        // We've seen cases where the wf connects, but the sound never does.
                         // So have to check for conn->other being valid.
                         conn_t *csnd = conn->other;
                         if (csnd && csnd->type == STREAM_SOUND && csnd->rx_channel == conn->rx_channel) {
@@ -426,7 +447,7 @@ void c2s_waterfall(void *param)
                     i_offset = -i_offset;
 
                     #ifdef WF_INFO
-                    if (!bg) cprintf(conn, "W/F z%d OFFSET %.3f kHz i_offset 0x%012llx\n",
+                    if (!bg) cprintf(conn, "WF z%d OFFSET %.3f kHz i_offset 0x%012llx\n",
                         zoom, off_freq/kHz, i_offset);
                     #endif
                 
@@ -476,7 +497,7 @@ void c2s_waterfall(void *param)
             case CMD_SET_APER:
                 if (sscanf(cmd, "SET aper=%d algo=%d param=%f", &aper, &algo, &aper_param) == 3) {
                     #ifdef WF_INFO
-                    printf("### W/F n/d/s=%d/%d/%d aper=%d algo=%d param=%f\n",
+                    printf("### WF n/d/s=%d/%d/%d aper=%d algo=%d param=%f\n",
                         wf->need_autoscale, wf->done_autoscale, wf->sent_autoscale, aper, algo, aper_param);
                     #endif
                     wf->aper = aper;
@@ -487,6 +508,19 @@ void c2s_waterfall(void *param)
                         wf->need_autoscale++;
                     }
                     did_cmd = true;
+                }
+                break;
+            
+            case CMD_INTERPOLATE:
+                if (sscanf(cmd, "SET interp=%d", &wf->interp) == 1) {
+                    if ((int) wf->interp >= WF_CIC_COMP) {
+                        wf->cic_comp = true;
+                        wf->interp = (wf_interp_t) ((int) wf->interp - WF_CIC_COMP);
+                    } else {
+                        wf->cic_comp = false;
+                    }
+                    cprintf(conn, "WF interp=%d(%s) cic_comp=%d\n", wf->interp, interp_s[wf->interp], wf->cic_comp);
+                    did_cmd = true;                
                 }
                 break;
 
@@ -522,7 +556,7 @@ void c2s_waterfall(void *param)
                 i = sscanf(cmd, "SET wf_speed=%d", &_speed);
                 if (i == 1) {
                     did_cmd = true;
-                    //printf("W/F wf_speed=%d\n", _speed);
+                    //printf("WF wf_speed=%d\n", _speed);
                     if (_speed == -1) _speed = WF_NSPEEDS-1;
                     if (_speed >= 0 && _speed < WF_NSPEEDS)
                         wf->speed = _speed;
@@ -535,7 +569,7 @@ void c2s_waterfall(void *param)
                 i = sscanf(cmd, "SET send_dB=%d", &wf->send_dB);
                 if (i == 1) {
                     did_cmd = true;
-                    //cprintf(conn, "W/F send_dB=%d\n", wf->send_dB);
+                    //cprintf(conn, "WF send_dB=%d\n", wf->send_dB);
                 }
                 break;
 
@@ -549,7 +583,7 @@ void c2s_waterfall(void *param)
                 break;
             
             default:
-                cprintf(conn, "#### W/F key=%d DEFAULT CASE <%s>\n", key, cmd);
+                cprintf(conn, "#### WF key=%d DEFAULT CASE <%s>\n", key, cmd);
                 did_cmd = true;     // force skip
                 break;
  
@@ -558,8 +592,8 @@ void c2s_waterfall(void *param)
 		    if (did_cmd) continue;
 
 			if (conn->mc != NULL) {
-                cprintf(conn, "#### W/F hash=0x%04x key=%d \"%s\"\n", wf_cmd_hash.cur_hash, key, cmd);
-			    cprintf(conn, "W/F BAD PARAMS: sl=%d %d|%d|%d [%s] ip=%s ####################################\n",
+                cprintf(conn, "#### WF hash=0x%04x key=%d \"%s\"\n", wf_cmd_hash.cur_hash, key, cmd);
+			    cprintf(conn, "WF BAD PARAMS: sl=%d %d|%d|%d [%s] ip=%s ####################################\n",
 			        strlen(cmd), cmd[0], cmd[1], cmd[2], cmd, conn->remote_ip);
 			    conn->unknown_cmd_recvd++;
 			}
@@ -592,7 +626,7 @@ void c2s_waterfall(void *param)
 		}
 
 		if (conn->stop_data) {
-			//clprintf(conn, "W/F stop_data rx_server_remove()\n");
+			//clprintf(conn, "WF stop_data rx_server_remove()\n");
 			rx_enable(rx_chan, RX_CHAN_FREE);
 			rx_server_remove(conn);
 			panic("shouldn't return");
@@ -604,12 +638,12 @@ void c2s_waterfall(void *param)
 		bool keepalive_expired = (conn->keep_alive > KEEPALIVE_SEC);
 		bool connection_hang = (conn->keepalive_count > 4 && cmd_recv != CMD_ALL);
 		if (keepalive_expired || connection_hang || conn->kick) {
-			//if (keepalive_expired) clprintf(conn, "W/F KEEP-ALIVE EXPIRED\n");
-			//if (connection_hang) clprintf(conn, "W/F CONNECTION HANG\n");
-			//if (conn->kick) clprintf(conn, "W/F KICK\n");
+			//if (keepalive_expired) clprintf(conn, "WF KEEP-ALIVE EXPIRED\n");
+			//if (connection_hang) clprintf(conn, "WF CONNECTION HANG\n");
+			//if (conn->kick) clprintf(conn, "WF KICK\n");
 		
 			// Ask sound task to stop (must not do while, for example, holding a lock).
-			// We've seen cases where the sound connects, then times out. But the w/f has never connected.
+			// We've seen cases where the sound connects, then times out. But the wf has never connected.
 			// So have to check for conn->other being valid.
 			conn_t *csnd = conn->other;
 			if (csnd && csnd->type == STREAM_SOUND && csnd->rx_channel == conn->rx_channel) {
@@ -618,7 +652,7 @@ void c2s_waterfall(void *param)
 				rx_enable(rx_chan, RX_CHAN_FREE);		// there is no SND, so free rx_chan[] now
 			}
 			
-			//clprintf(conn, "W/F rx_server_remove()\n");
+			//clprintf(conn, "WF rx_server_remove()\n");
 			rx_server_remove(conn);
 			panic("shouldn't return");
 		}
@@ -645,7 +679,7 @@ void c2s_waterfall(void *param)
 		
 		if (!conn->wf_cmd_recv_ok) {
 			#ifdef TR_WF_CMDS
-				clprintf(conn, "W/F cmd_recv ALL 0x%x/0x%x\n", cmd_recv, CMD_ALL);
+				clprintf(conn, "WF cmd_recv ALL 0x%x/0x%x\n", cmd_recv, CMD_ALL);
 			#endif
 			conn->wf_cmd_recv_ok = true;
 		}
@@ -684,7 +718,7 @@ void c2s_waterfall(void *param)
 			wf->fft_used_limit = 0;
 
 			if (wf->fft_used >= wf->plot_width) {
-				// >= FFT than plot
+				// FFT >= plot
 				#ifdef WF_FFT_UNWRAP_NEEDED
 					// IQ reverse unwrapping (X)
 					for (i=wf->fft_used/2,j=0; i<wf->fft_used; i++,j++) {
@@ -700,8 +734,13 @@ void c2s_waterfall(void *param)
 					}
 				#endif
 				//for (i=0; i<wf->fft_used; i++) printf("%d>%d ", i, wf->fft2wf_map[i]);
+				
+				for (i=0; i < wf->plot_width; i++) {
+				    if (i >= WF_WIDTH) break;
+				    wf->drop_sample[i] = roundf((float) wf->fft_used * i/wf->plot_width);
+				}
 			} else {
-				// < FFT than plot
+				// FFT < plot
 				#ifdef WF_FFT_UNWRAP_NEEDED
 					for (i=0; i<wf->plot_width_clamped; i++) {
 						int t = wf->fft_used * i/wf->plot_width;
@@ -719,9 +758,10 @@ void c2s_waterfall(void *param)
 			//printf("\n");
 			
 			#ifdef WF_INFO
-			if (!bg) cprintf(conn, "W/F NEW_MAP z%d fft_used %d/%d span %.1f disp_fs %.1f plot_width %d/%d %s FFT than plot\n",
-				zoom, wf->fft_used, WF_C_NFFT, span/kHz, disp_fs/kHz, wf->plot_width_clamped, wf->plot_width,
-				(wf->plot_width_clamped < wf->fft_used)? ">=":"<");
+            if (!bg)
+                cprintf(conn, "WF NEW_MAP z%d i%d cic%d fft_used %d/%d span %.1f disp_fs %.1f plot_width %d/%d FFT %s plot\n",
+                    zoom, wf->interp, wf->cic_comp, wf->fft_used, WF_C_NFFT, span/kHz, disp_fs/kHz, wf->plot_width_clamped, wf->plot_width,
+                    (wf->plot_width_clamped < wf->fft_used)? ">=":"<");
 			#endif
 			
 			//send_msg(conn, SM_NO_DEBUG, "MSG plot_width=%d", wf->plot_width);
@@ -763,10 +803,13 @@ void c2s_waterfall(void *param)
                         }
                     }
                     wf->fft_scale[i] = scale;
+                    wf->fft_scale_div2[i] = scale / 2;
                 }
 			} else {
-                for (i=0; i < wf->plot_width_clamped; i++)
+                for (i=0; i < wf->plot_width_clamped; i++) {
                     wf->fft_scale[i] = fft_scale;
+                    wf->fft_scale_div2[i] = fft_scale / 2;
+                }
 			}
 
 		    new_scale_mask = false;
@@ -1122,7 +1165,6 @@ void compute_frame(int rx_chan)
 	wf_inst_t *wf = &WF_SHMEM->wf_inst[rx_chan];
 	int i;
 	wf_pkt_t *out = &wf->out;
-	u1_t comp_in_buf[WF_WIDTH];
 	float pwr[MAX_FFT_USED];
     fft_t *fft = &WF_SHMEM->fft_inst[rx_chan];
     
@@ -1143,10 +1185,10 @@ void compute_frame(int rx_chan)
 			
 	if (!wf->fft_used_limit) wf->fft_used_limit = wf->fft_used;
 
-	// zero-out the DC component in bin zero/one (around -90 dBFS)
-	// otherwise when scrolling w/f it will move but then not continue at the new location
-	pwr[0] = 0;
-	pwr[1] = 0;
+	// zero-out the DC component in lowest bins (around -90 dBFS)
+	// otherwise when scrolling wf it will move but then not continue at the new location
+	#define BIN_DC_OFFSET 2
+	for (i = 0; i < BIN_DC_OFFSET; i++) pwr[i] = 0;
 	
 	#ifdef SHOW_MAX_MIN_PWR
         static void *FFT_state;
@@ -1165,16 +1207,35 @@ void compute_frame(int rx_chan)
             wf->new_map2 = false;
         }
 	#endif
-	
-	for (i=2; i < wf->fft_used_limit; i++) {
-		float re = fft->hw_fft[i][I], im = fft->hw_fft[i][Q];
-		pwr[i] = re*re + im*im;
 
-		#ifdef SHOW_MAX_MIN_PWR
-            //print_max_min_stream_f(&FFT_state, "FFT", i, 2, (double) re, (double) im);
-            //print_max_min_stream_f(&pwr_state, "pwr", i, 1, (double) pwr[i]);
-		#endif
-	}
+    if (wf->zoom <= 1) {    // don't apply compensation when CIC not in use
+        for (i = BIN_DC_OFFSET; i < wf->fft_used_limit; i++) {
+            float re = fft->hw_fft[i][I], im = fft->hw_fft[i][Q];
+            pwr[i] = re*re + im*im;
+
+            #ifdef SHOW_MAX_MIN_PWR
+                //print_max_min_stream_f(&FFT_state, "FFT", i, 2, (double) re, (double) im);
+                //print_max_min_stream_f(&pwr_state, "pwr", i, 1, (double) pwr[i]);
+            #endif
+        }
+    } else {
+        bool no_cic_comp = (wf->overlapped_sampling || !wf->cic_comp);
+        for (i = BIN_DC_OFFSET; i < wf->fft_used_limit; i++) {
+            float re, im;
+            if (no_cic_comp) {
+                re = fft->hw_fft[i][I]; im = fft->hw_fft[i][Q];
+            } else {
+                float comp = WF_SHMEM->CIC_comp[i];
+                re = ((float) fft->hw_fft[i][I]) * comp; im = ((float) fft->hw_fft[i][Q]) * comp;
+            }
+            pwr[i] = re*re + im*im;
+
+            #ifdef SHOW_MAX_MIN_PWR
+                //print_max_min_stream_f(&FFT_state, "FFT", i, 2, (double) re, (double) im);
+                //print_max_min_stream_f(&pwr_state, "pwr", i, 1, (double) pwr[i]);
+            #endif
+        }
+    }
 		
 	// fixme proper power-law scaling..
 	
@@ -1200,63 +1261,121 @@ void compute_frame(int rx_chan)
 	    float pix_per_dB = 255.0 / range_dB;
 	#endif
 
-	int bin=0, _bin=-1, bin2pwr[WF_WIDTH];
-	float p, dB, pwr_out_sum[WF_WIDTH], pwr_out_peak[WF_WIDTH];
+	int bin=0, _bin=-1;
+	float p, dB;
 
-    //#define WF_CMA
-    #ifndef WF_CMA
-	    memset(pwr_out_peak, 0, sizeof(pwr_out_peak));
-	#endif
+    float pwr_out[WF_WIDTH];
+    memset(pwr_out, 0, sizeof(pwr_out));
+
+    u1_t cma_avgs[WF_WIDTH];
+    if (wf->interp == WF_CMA) memset(cma_avgs, 0, sizeof(cma_avgs));
+	
+	#define LTRIG 0
+	//#define LTRIG 300
+	#if LTRIG
+	    static int dbg_bin;
+	    dbg_bin++;
+        if (dbg_bin == LTRIG) {
+            real_printf("bins:\n");
+            for (i=0; i<wf->fft_used_limit; i++)
+                real_printf("%d ", bin);
+            real_printf("\n");
+        }
+    #endif
 
 	if (wf->fft_used >= wf->plot_width) {
-		// >= FFT than plot
+		// FFT >= plot
 		
-		int avgs=0;
-		for (i=0; i<wf->fft_used_limit; i++) {
-			p = pwr[i];
-			bin = wf->fft2wf_map[i];
-			if (bin >= WF_WIDTH) {
-				if (wf->new_map) {
-				
-					#ifdef WF_INFO
-					if (!bg) printf(">= FFT: Z%d WF_C_NSAMPS %d i %d fft_used %d plot_width %d pix_per_dB %.3f range %.0f:%.0f\n",
-						wf->zoom, WF_C_NSAMPS, i, wf->fft_used, wf->plot_width, pix_per_dB, max_dB, min_dB);
-					#endif
-					wf->new_map = FALSE;
-				}
-				wf->fft_used_limit = i;		// we now know what the limit is
-				break;
-			}
-			
-			if (bin == _bin) {
-				#ifdef WF_CMA
-					pwr_out_cma[bin] = (pwr_out_cma[bin] * avgs) + p;
-					avgs++;
-					pwr_out_cma[bin] /= avgs;
-				#else
-					if (p > pwr_out_peak[bin]) pwr_out_peak[bin] = p;
-					pwr_out_sum[bin] += p;
-				#endif
-			} else {
-				#ifdef WF_CMA
-					avgs = 1;
-				#endif
-				pwr_out_peak[bin] = p;
-				pwr_out_sum[bin] = p;
-				_bin = bin;
-			}
-		}
+		if (wf->interp == WF_DROP) {
+            for (i=0; i < wf->plot_width_clamped; i++) {
+                pwr_out[i] = pwr[wf->drop_sample[i]];
+            }
+		} else {
+            for (i=0; i < wf->fft_used_limit; i++) {
+                p = pwr[i];
+                bin = wf->fft2wf_map[i];
+                if (bin >= WF_WIDTH) {
+                    if (wf->new_map) {
+                
+                        #ifdef WF_INFO
+                        if (!bg) printf(">= FFT: Z%d WF_C_NSAMPS %d i %d fft_used %d plot_width %d pix_per_dB %.3f range %.0f:%.0f\n",
+                            wf->zoom, WF_C_NSAMPS, i, wf->fft_used, wf->plot_width, pix_per_dB, max_dB, min_dB);
+                        #endif
+                        wf->new_map = FALSE;
+                    }
+                    wf->fft_used_limit = i;		// we now know what the limit is
+                    break;
+                }
+            
+                #if LTRIG
+                    if (dbg_bin == LTRIG)
+                        real_printf("%d:%.0f(%.1e) ", bin, 10.0 * log10f(p * wf->fft_scale[0] + 1e-30F) + wf->fft_offset, p);
+                #endif
+
+                if (bin == _bin) {
+
+                    // Using the max or min value when multiple FFT values per bin gives low-level artifacts!
+                    switch (wf->interp) {
+                        case WF_CMA:    pwr_out[bin] += p; cma_avgs[bin]++; break;
+                        case WF_MAX:    if (p > pwr_out[bin]) pwr_out[bin] = p; break; // gives dark lines
+                        case WF_MIN:    if (p < pwr_out[bin]) pwr_out[bin] = p; break; // gives bright lines
+                        case WF_LAST:   pwr_out[bin] = p; break;  // using last value (random min/max) seems okay
+                        default:        break;
+                    }
+                } else {
+                    if (wf->interp == WF_CMA) {
+                        pwr_out[bin] = p;
+                        cma_avgs[bin] = 1;
+                    } else {
+                        pwr_out[bin] = p;
+                    }
+                    _bin = bin;
+                }
+            }
+        }
 
 		#ifdef SHOW_MAX_MIN_DB
             float dBs_f[WF_WIDTH];
             int dBs[WF_WIDTH];
 		#endif
 
-		for (i=0; i<WF_WIDTH; i++) {
-			p = pwr_out_peak[i];
-			//p = pwr_out_sum[i];
+        #if LTRIG
+            if (dbg_bin == LTRIG) {
+                real_printf("\n\navgs:\n");
+                for (i=0; i<WF_WIDTH; i++)
+                    real_printf("%d ", cma_avgs[i]);
+                real_printf("\n\nout:\n");
+            }
+        #endif
 
-			dB = 10.0 * log10f(p * wf->fft_scale[i] + 1e-30F) + wf->fft_offset;
+		for (i=0; i<WF_WIDTH; i++) {
+            #if 0
+                if (dbg_bin == LTRIG)
+                    real_printf("%.6e ", wf->fft_scale[i]);
+            #endif
+
+            float scale;
+            if (wf->interp == WF_CMA) {
+			    // A fft2wf_map[] value causing two FFT values to average into one bin is common.
+			    // So we fold avgs == 2 into wf->fft_scale_div2 computed earlier and save the divide.
+			    int avgs = cma_avgs[i];
+			    scale = (avgs == 1)? wf->fft_scale[i] : ((avgs == 2)? wf->fft_scale_div2[i] : (wf->fft_scale[i] / avgs));
+                p = pwr_out[i];
+			} else {
+			    scale = wf->fft_scale[i];
+                p = pwr_out[i];
+			}
+
+			dB = 10.0 * log10f(p * scale + 1e-30F) + wf->fft_offset;
+
+            #if LTRIG
+                if (dbg_bin == LTRIG)
+                    real_printf("%d:%.0f ", i, dB);
+            #endif
+
+			#if 0
+                if (i >= 300 && i <= 400 && (i%5) == 0) dB = -110;
+            #endif
 			#if 0
                 if (i == 508) printf("Z%d ", wf->zoom);
                 if (i >= 509 && i <= 513) printf("%d ", (int) dB);
@@ -1266,7 +1385,7 @@ void compute_frame(int rx_chan)
                 //jks
                 if (i == 506) printf("Z%d ", wf->zoom);
                 if (i >= 507 && i <= 515) {
-                    float peak_dB = 10.0 * log10f(pwr_out_peak[i] * wf->fft_scale[i] + 1e-30F) + wf->fft_offset;
+                    float peak_dB = 10.0 * log10f(pwr_out[i] * wf->fft_scale[i] + 1e-30F) + wf->fft_offset;
                     printf("%d:%.1f|%.1f ", i, dB, peak_dB);
                 }
                 if (i == 516) printf("\n");
@@ -1296,6 +1415,11 @@ void compute_frame(int rx_chan)
 			#endif
 		}
 
+        #if LTRIG
+            if (dbg_bin == LTRIG)
+                real_printf("\n\n");
+        #endif
+
 		#ifdef SHOW_MAX_MIN_DB
             //jks
             printf("Z%d dB_f: ", wf->zoom);
@@ -1312,7 +1436,7 @@ void compute_frame(int rx_chan)
             print_max_min_i("dB", dBs, WF_WIDTH);
 		#endif
 	} else {
-		// < FFT than plot
+		// FFT < plot
 		if (wf->new_map) {
 			//printf("< FFT: Z%d WF_C_NSAMPS %d fft_used %d plot_width_clamped %d pix_per_dB %.3f range %.0f:%.0f\n",
 			//	wf->zoom, WF_C_NSAMPS, wf->fft_used, wf->plot_width_clamped, pix_per_dB, max_dB, min_dB);
@@ -1320,7 +1444,7 @@ void compute_frame(int rx_chan)
 		}
 
 		for (i=0; i<wf->plot_width_clamped; i++) {
-			p = pwr[wf->wf2fft_map[i]];
+			p = wf->wf2fft_map[i];
 			
 			dB = 10.0 * log10f(p * wf->fft_scale[i] + 1e-30F) + wf->fft_offset;
 			if (dB > 0) dB = 0;
@@ -1375,3 +1499,5 @@ void c2s_waterfall_shutdown(void *param)
     if (c && c->mc)
         rx_server_websocket(WS_MODE_CLOSE, c->mc);
 }
+
+#endif
