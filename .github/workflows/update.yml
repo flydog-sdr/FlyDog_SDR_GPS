@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@master
+        uses: actions/checkout@v2
 
       - name: Setup Environment
         env:
@@ -39,7 +39,7 @@ jobs:
           git clone https://github.com/flydog-sdr/customised-scripts ${DIR_TMP}/customised-scripts
           git clone -b master git@e.coding.net:bclswl0827/flydog-sdr/api.git ${DIR_TMP}/e.coding.net
           rm -rf ${DIR_TMP}/e.coding.net/*
-          echo ${VER} > ${DIR_TMP}/e.coding.net/VER
+          echo "${VER}" > ${DIR_TMP}/e.coding.net/VER
           mv ${DIR_TMP}/customised-scripts/* ${DIR_TMP}/e.coding.net
           cd ${DIR_TMP}/e.coding.net
           git add .
@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@master
+        uses: actions/checkout@v2
 
       - name: Setup Environment
         env:
@@ -77,7 +77,8 @@ jobs:
           export VER=$(curl -s https://raw.githubusercontent.com/flydog-sdr/FlyDog_SDR_GPS/master/Makefile | \
                               head -2 | cut -d " " -f3 | tr -d "\n")
           git clone https://github.com/flydog-sdr/customised-scripts ${DIR_TMP}/customised-scripts
-          git clone -b master git@github.com:flydog-sdr/docs.git ${DIR_TMP}/github.com
+          git clone git@github.com:flydog-sdr/docs.git ${DIR_TMP}/github.com
+          echo "${VER}" > ${DIR_TMP}/customised-scripts/VER
           cd ${DIR_TMP}/customised-scripts
           zip ${DIR_TMP}/github.com/docs/.vuepress/public/scripts.zip *
           cd ${DIR_TMP}/github.com
