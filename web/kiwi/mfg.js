@@ -21,8 +21,8 @@ function mfg_draw()
 		);
 	
 	s += ver_maj?
-		w3_div('|color:lime', '<h2>OKAY to make customer SD cards using this.</h2>') :
-		w3_div('|color:red"', '<h2>WARNING: Use for testing only!<br>Do not make customer SD cards with this yet.</h2>');
+		w3_div('|color:lime', '<h2>Everything gets ready.</h2>') :
+		w3_div('|color:red"', '<h2>WARNING: Use for testing only!</h2>');
 
 	s +=
 		w3_div('',
@@ -67,7 +67,7 @@ function mfg_draw()
 	);
 	el.style.top = el.style.left = '10px';
 
-	var el2 = w3_innerHTML('id-sd-write', 'click to write<br>micro-SD card');
+	var el2 = w3_innerHTML('id-sd-write', 'click to backup');
 
 	el2 = w3_innerHTML('id-power-off', 'click to halt<br>and power off');
 
@@ -149,16 +149,16 @@ function mfg_seq_set()
 	}
 }
 
-var sd_progress, sd_progress_max = 4*60;		// measured estimate -- in secs (varies with SD card write speed)
+var sd_progress, sd_progress_max = 10;		// measured estimate -- in secs (varies with SD card write speed)
 var mfg_sd_interval;
 var refresh_icon = '<i class="fa fa-refresh fa-spin" style="font-size:24px"></i>';
 
 function mfg_sd_write()
 {
-	var el = w3_innerHTML('id-sd-write', 'writing the<br>micro-SD card...');
+	var el = w3_innerHTML('id-sd-write', 'Backup in<br>progress...');
 	w3_add(el, 'w3-override-yellow');
 
-	el = w3_innerHTML('id-sd-status', 'writing micro-SD card...');
+	el = w3_innerHTML('id-sd-status', 'Backup in progress...');
 	w3_color(el, 'white');
 
 	w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '0%';
@@ -186,12 +186,12 @@ function mfg_sd_progress()
 
 function mfg_sd_write_done(err)
 {
-	var el = w3_innerHTML('id-sd-write', 'click to write<br>micro-SD card');
+	var el = w3_innerHTML('id-sd-write', 'click to backup');
 	w3_remove(el, 'w3-override-yellow');
 
 	var msg = err? ('FAILED error '+ err.toString()) : 'WORKED';
-	if (err == 1) msg += '<br>No SD card inserted?';
-	if (err == 15) msg += '<br>rsync I/O error';
+	if (err == 1) msg += '<br>Internet is not connected';
+	if (err == 15) msg += '<br>Failed to upload archive';
 	var el = w3_innerHTML('id-sd-status', msg);
 	w3_color(el, err? 'red':'lime');
 

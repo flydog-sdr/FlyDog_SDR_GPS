@@ -1,10 +1,10 @@
 VERSION_MAJ = 1
-VERSION_MIN = 460
+VERSION_MIN = 4601
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
 REPO_NAME = FlyDog_SDR_GPS
-REPO = https://github.com/jks-prv/$(REPO_NAME).git
+REPO = https://github.com/flydog-sdr/$(REPO_NAME).git
 DEBIAN_VER = 8.11
 
 #

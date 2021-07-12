@@ -986,7 +986,7 @@ function backup_html()
 	var s =
 	w3_div('id-backup w3-hide',
 		'<hr>',
-		w3_div('w3-section w3-text-teal w3-bold', 'Backup configurations of FlyDog SDR by uploading configuration archive to transfer.sh'),
+		w3_div('w3-section w3-text-teal w3-bold', 'Backup configuration by uploading archive to <a href="https://transfer.sh" target="_blank">Transfer.sh</a>'),
 		//w3_div('w3-container w3-text w3-red', 'WARNING: after SD card is written immediately remove from Beagle.<br>Otherwise on next reboot Beagle will be re-flashed from SD card.'),
 		'<hr>',
 		w3_third('w3-container', 'w3-valign',
@@ -1019,14 +1019,14 @@ function backup_focus()
 	w3_el('id-output-msg').style.height = px(300);
 }
 
-var sd_progress, sd_progress_max = 15;		// measured estimate -- in secs (varies with SD card write speed)
+var sd_progress, sd_progress_max = 10;		// measured estimate -- in secs (varies with SD card write speed)
 var backup_sd_interval;
 var backup_refresh_icon = w3_icon('', 'fa-refresh fa-spin', 20);
 
 function backup_sd_write(id, idx)
 {
 	var el = w3_el('id-sd-status');
-	el.innerHTML = "Backing up...";
+	el.innerHTML = "Backup in progress...";
 
 	w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '0%';
 
@@ -1055,8 +1055,8 @@ function backup_sd_write_done(err)
 {
 	var el = w3_el('id-sd-status');
 	var msg = err? ('FAILED error '+ err.toString()) : 'WORKED';
-	if (err == 1) msg += '<br>No SD card inserted?';
-	if (err == 15) msg += '<br>rsync I/O error';
+	if (err == 1) msg += '<br>Internet is not connected';
+	if (err == 15) msg += '<br>Failed to upload archive';
 	el.innerHTML = msg;
 	el.style.color = err? 'red':'lime';
 
@@ -1101,7 +1101,7 @@ function network_html()
 		w3_div('id-net-reboot',
 			w3_inline('w3-halign-space-around w3-margin-bottom w3-text-teal/',
 			   w3_divs('w3-valign w3-flex-col w3-restart/w3-tspace-6',
-					//w3_input_get('', 'Internal port', 'adm.port', 'admin_int_cb'),
+					w3_input_get('', 'Internal port', 'adm.port', 'admin_int_cb'),
 					w3_input_get('', 'External port', 'adm.port_ext', 'admin_int_cb')
 				),
 				/*w3_divs('w3-center w3-restart',
@@ -1111,12 +1111,12 @@ function network_html()
 				w3_div('w3-center',
 						'<b>IP address<br>(only static IPv4 for now)</b><br> ' +
 						w3_switch_get_param('w3-margin-T-8', 'DHCP', 'Static', 'adm.ip_address.use_static', 0, false, 'network_use_static_cb')
-				),
+				),*/
             w3_divs('w3-center/',
                w3_select('', 'Ethernet interface speed', '', 'ethernet_speed', cfg.ethernet_speed, network.ethernet_speed_s, 'network_ethernet_speed'),
                w3_div('w3-text-black',
                   'Select 10 Mbps to reduce Ethernet spurs. <br> Try changing while looking at waterfall.')
-            ),*/
+            ),
             w3_divs('w3-center/',
                w3_select('', 'Ethernet interface MTU', '', 'ethernet_mtu', cfg.ethernet_mtu, network.ethernet_mtu_s, 'network_ethernet_mtu'),
                w3_div('w3-text-black',
@@ -1186,22 +1186,22 @@ function network_html()
    var s3 =
 		'<hr>' +
       w3_div('w3-container w3-text-teal',
-         //w3_textarea_get_param('w3-input-any-change|width:100%',
+         w3_textarea_get_param('w3-input-any-change|width:100%',
             w3_inline('',
-               /*w3_label('w3-show-inline-block w3-bold w3-text-teal', 'IP address blacklist'),
+               w3_label('w3-show-inline-block w3-bold w3-text-teal', 'IP address blacklist'),
                w3_text('w3-text-black|margin-left: 32px',
                   'IP addresses/ranges listed here are blocked from accessing your<br>' +
                   'Kiwi (via Linux iptables). 47.88.219.24/24 is a currently active bot.<br>' +
-                  'Use CIDR notation for ranges, e.g. CIDR "ip/24" equivalent to netmask "255.255.255.0"'),*/
+                  'Use CIDR notation for ranges, e.g. CIDR "ip/24" equivalent to netmask "255.255.255.0"'),
                w3_div('w3-center|margin-left: 32px',
                   '<b>Prevent multiple connections from<br>the same IP address?</b><br>',
                   w3_switch('w3-margin-T-8 w3-margin-B-8', 'Yes', 'No', 'adm.no_dup_ip', adm.no_dup_ip, 'admin_radio_YN_cb')
                )
-            )/*,
+            ),
             'adm.ip_blacklist', 3, 100, 'network_ip_blacklist_cb', ''
          ),
          w3_label('w3-show-inline-block w3-margin-R-16 w3-margin-T-8 w3-text-teal', 'Status:') +
-         w3_div('id-ip-blacklist-status w3-show-inline-block w3-text-black w3-background-pale-aqua', '')*/
+         w3_div('id-ip-blacklist-status w3-show-inline-block w3-text-black w3-background-pale-aqua', '')
       ) +
 
     '<hr>' +

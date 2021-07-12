@@ -2,6 +2,10 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.4601  July 12, 2021
+    Minor improvements on Backup tab and backup script.
+    Ready for Manufacturing interface.
+
 v1.460  May 24, 2021
     Fix needed by the KiwiSDR Android app (from the Google Play store).
     Match frequency step amounts between "snap to nearest" mode and L/R arrow keys.
