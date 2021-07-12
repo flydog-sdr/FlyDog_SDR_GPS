@@ -1,37 +1,59 @@
 #!/usr/bin/env bash
 
 # Define basic variables
-NETWORK_CHECK_RESPONSE="405"
 DIR_TMP="$(mktemp -d)"
 
-hello_message() {
-  echo -e "This script will backup your configuration and generate a"
-  echo -e "download URL so that you can download them to local PC."
-}
+# Define font colour
+Green_font_prefix="\033[32m"
+Red_font_prefix="\033[31m"
+Green_background_prefix="\033[42;37m"
+Red_background_prefix="\033[41;37m"
+Font_color_suffix="\033[0m"
 
-check_internet_connectivity() {
-  if [[ $(curl -I -s transfer.sh -w %{http_code} | tail -n1) != ${NETWORK_CHECK_RESPONSE} ]]; then
-    echo "Internet is not connected, exiting..."
+# Define log colour
+INFO="${Green_font_prefix}[INFO]${Font_color_suffix}"
+ERROR="${Red_font_prefix}[ERROR]${Font_color_suffix}"
+TIP="${Green_font_prefix}[TIP]${Font_color_suffix}"
+
+# Check connectivity
+check_net() {
+  if [[ "$(curl -fsSIL fast.com -w %{http_code} | tail -n1)" != "200" ]]; then
+    echo -e "${ERROR} Internet is not connected, exiting..."
+    err=1
+    sleep 3s
     exit 1
   fi
 }
 
-archiving_configuration() {
-  cd /root
+archive_conf() {
+  echo -e "${INFO} Compressing files, please wait..."
+  cp -r /root/kiwi.config ${DIR_TMP}
+  rm -rf ${DIR_TMP}/kiwi.config/_VER
+  cd ${DIR_TMP}
   tar -zcf ${DIR_TMP}/config.tar.gz kiwi.config
 }
 
-upload_configuration() {
-  echo -e "Uploading your configuration..."
-  curl --silent --upload-file ${DIR_TMP}/config.tar.gz https://transfer.sh/config.tar.gz
-  echo -e "\n\nSuccess! You can download your configuration via the link above."
-  rm -rf ${DIR_TMP}
+upload_conf() {
+  echo -e "${INFO} Uploading configuration, please wait..."
+  curl -H "Max-Downloads: 1" -H "Max-Days: 1" -fsSL transfer.sh/config.tar.gz --upload-file ${DIR_TMP}/config.tar.gz -o ${DIR_TMP}/url.txt
+  if [[ "$?" != "0" ]]; then
+    echo -e "${ERROR} Failed to upload archive, exiting..."
+    err=15
+    sleep 3s
+    exit 1
+  else
+    DOWNLOAD_URL="$(cat ${DIR_TMP}/url.txt)"
+    echo; echo -e "${TIP} Please download the files via the following link:"
+    echo -e "${TIP} ${DOWNLOAD_URL}"
+    echo; echo -e "${INFO} Backup finished, exiting..."
+    sleep 3s
+  fi
 }
 
 main() {
-  hello_message
-  check_internet_connectivity
-  archiving_configuration
-  upload_configuration
+  check_net
+  archive_conf
+  upload_conf
+  rm -rf ${DIR_TMP}
 }
 main "$@"

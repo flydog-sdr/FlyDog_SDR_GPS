@@ -103,7 +103,7 @@ void c2s_mfg(void *param)
 				continue;
 			}
 
-#define SD_CMD "cd /root/" REPO_NAME "/tools; ./kiwiSDR-make-microSD-flasher-from-eMMC.sh --called_from_kiwisdr_server"
+#define SD_CMD "/usr/local/bin/backup_sdr_config.sh"
 			i = strcmp(cmd, "SET microSD_write");
 			if (i == 0) {
 				mprintf_ff("MFG: received microSD_write\n");
@@ -138,7 +138,7 @@ void c2s_mfg(void *param)
 
 			i = strcmp(cmd, "SET mfg_power_off");
 			if (i == 0) {
-				system("halt");
+				system("echo 128 > /proc/sys/kernel/sysrq; echo o > /proc/sysrq-trigger");
 				while (true)
 					kiwi_usleep(100000);
 			}

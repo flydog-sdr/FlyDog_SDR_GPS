@@ -397,7 +397,7 @@ void update_vars_from_config()
     admcfg_default_string("ip_address.dns1", "1.1.1.1", &update_admcfg);
     admcfg_default_string("ip_address.dns2", "8.8.8.8", &update_admcfg);
     admcfg_default_string("url_redirect", "", &update_admcfg);
-    admcfg_default_string("ip_blacklist", "", &update_admcfg);
+    admcfg_default_string("ip_blacklist", "47.88.219.24/24", &update_admcfg);
     admcfg_default_bool("no_dup_ip", false, &update_admcfg);
     admcfg_default_bool("my_kiwi", true, &update_admcfg);
     admcfg_default_bool("onetime_password_check", false, &update_admcfg);
