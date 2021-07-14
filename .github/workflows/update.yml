@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
 
 jobs:
   coding-net:
@@ -75,7 +76,7 @@ jobs:
         run: |
           export DIR_TMP="$(mktemp -d)"
           export VER=$(curl -s https://raw.githubusercontent.com/flydog-sdr/FlyDog_SDR_GPS/master/Makefile | \
-                              head -2 | cut -d " " -f3 | tr -d "\n")
+          head -2 | cut -d " " -f3 | tr -d "\n")
           git clone https://github.com/flydog-sdr/customised-scripts ${DIR_TMP}/customised-scripts
           git clone git@github.com:flydog-sdr/docs.git ${DIR_TMP}/github.com
           echo "${VER}" > ${DIR_TMP}/customised-scripts/VER

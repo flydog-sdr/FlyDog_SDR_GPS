@@ -1,0 +1,50 @@
+name: Build latest Docker image
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+  
+env:
+  DOCKER_CLI_EXPERIMENTAL: enabled
+ 
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Setup Environment
+      run: |
+        docker buildx create --name arm_builder --driver docker-container
+        docker buildx use arm_builder
+        docker run --rm --privileged tonistiigi/binfmt --install all
+
+    - name: Build Docker image
+      id: build
+      run: |
+        export DIR_TMP="$(mktemp -d)"
+        git clone -b master https://github.com/flydog-sdr/docker-builder ${DIR_TMP}/docker-builder
+        cd ${DIR_TMP}/docker-builder/flydog-sdr
+        docker buildx build --platform linux/arm/v7 -t flydog-sdr -o type=docker -f ./Dockerfile .
+        echo "::set-output name=status::success"
+
+    - name: Push to registry
+      if: steps.build.outputs.status == 'success'
+      env:
+          REGISTRY_URL_DOCKERHUB: ${{ secrets.REGISTRY_URL_DOCKERHUB }}
+          REGISTRY_URL_ALIYUN: ${{ secrets.REGISTRY_URL_ALIYUN }}
+          REGISTRY_USERNAME_DOCKERHUB: ${{ secrets.REGISTRY_USER_DOCKERHUB }}
+          REGISTRY_USERNAME_ALIYUN: ${{ secrets.REGISTRY_USER_ALIYUN }}
+          REGISTRY_PASSWORD_DOCKERHUB: ${{ secrets.REGISTRY_PASSWORD_DOCKERHUB }}
+          REGISTRY_PASSWORD_ALIYUN: ${{ secrets.REGISTRY_PASSWORD_ALIYUN }}
+      run: |
+        docker tag flydog-sdr ${REGISTRY_USERNAME_DOCKERHUB}/flydog-sdr:latest
+        docker tag flydog-sdr ${REGISTRY_URL_ALIYUN}/flydog-sdr/flydog-sdr:latest
+        echo ${REGISTRY_PASSWORD_DOCKERHUB} | docker login --username ${REGISTRY_USERNAME_DOCKERHUB} ${REGISTRY_URL_DOCKERHUB} --password-stdin
+        echo ${REGISTRY_PASSWORD_ALIYUN} | docker login --username ${REGISTRY_USERNAME_ALIYUN} ${REGISTRY_URL_ALIYUN} --password-stdin
+        docker push ${REGISTRY_USERNAME_DOCKERHUB}/flydog-sdr:latest
+        docker push ${REGISTRY_URL_ALIYUN}/flydog-sdr/flydog-sdr:latest
