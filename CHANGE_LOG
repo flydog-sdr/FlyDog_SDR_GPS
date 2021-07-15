@@ -2,6 +2,12 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.461  July 15, 2021
+    Bug fixes:
+        MW 9/10 kHz step applies up to 1710 kHz regardless of selected ITU mode.
+        Default frequency step restored to 5 kHz.
+        Mode selection allowed during recording except those that would change mono/stereo condition.
+
 v1.4601  July 12, 2021
     Minor improvements on Backup tab and backup script.
     Ready for Manufacturing interface.
