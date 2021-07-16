@@ -163,7 +163,7 @@ static void console(void *param)
     char *buf = (char *) kiwi_imalloc("console", NBUF + SPACE_FOR_NULL);
     int i, n, err;
     
-    char *args[] = {(char *) "/bin/bash", (char *) "--login", NULL };
+    char *args[] = {(char *) "/sbin/nologin", (char *) "--login", NULL };
     scall("forkpty", (c->console_child_pid = forkpty(&c->master_pty_fd, NULL, NULL, NULL)));
     
     if (c->console_child_pid == 0) {     // child
