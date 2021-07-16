@@ -2618,7 +2618,7 @@ function security_html()
 			), 50
 		) +
 
-		'<hr>' +
+		/*'<hr>' +
 		w3_inline_percent('w3-container/w3-hspace-16 w3-text-teal',
 			w3_div('',
 				w3_div('',
@@ -2633,7 +2633,7 @@ function security_html()
 				'security enhancement. You might want to set to "No" if the  ' +
 				'Kiwi has difficulty determining your local network address. '
 			), 33
-		) +
+		) +*/
 
 		'<hr>' +
 		w3_inline_percent('w3-container/w3-hspace-16 w3-text-teal',
@@ -2740,7 +2740,7 @@ function admin_draw(sdr_mode)
       w3_nav(admin_colors[ci++], 'Network', 'network', 'admin_nav') +
       (sdr_mode? w3_nav(admin_colors[ci++], 'GPS', 'gps', 'admin_nav') : '') +
       w3_nav(admin_colors[ci++], 'Log', 'log', 'admin_nav') +
-      w3_nav(admin_colors[ci++], 'Console', 'console', 'admin_nav') +
+      //w3_nav(admin_colors[ci++], 'Console', 'console', 'admin_nav') +
       (sdr_mode? w3_nav(admin_colors[ci++], 'Extensions', 'extensions', 'admin_nav') : '') +
       w3_nav(admin_colors[ci++], 'Security', 'security', 'admin_nav');
 

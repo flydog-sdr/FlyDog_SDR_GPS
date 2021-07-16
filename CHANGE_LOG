@@ -2,6 +2,10 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.4611  July 17, 2021
+    Disable Console tab in admin page in order to prevent being used for malicious intrusion.
+        Read this post: https://arstechnica.com/gadgets/2021/07/for-years-a-backdoor-in-popular-kiwisdr-product-gave-root-to-project-developer/
+
 v1.461  July 15, 2021
     Bug fixes:
         MW 9/10 kHz step applies up to 1710 kHz regardless of selected ITU mode.
