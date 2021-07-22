@@ -21,7 +21,7 @@ typedef TNT::Array2D<double> mat_type;
 typedef PosSolver::LonLatAlt LonLatAlt;
 
 const double C = 2.99792458e8;    // Speed of light (m/s)
-const double F0 = 66.66e6;        // nominal ADC clock speed (Hz)
+const double F0 = 125.00e6;        // nominal ADC clock speed (Hz)
 
 const double uere = 6.0; // [m]
 
