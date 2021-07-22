@@ -4,7 +4,7 @@ CONFIG.Amplitude_Mode               string  false      Full_Range
 CONFIG.Channels                     string  false      1
 CONFIG.Component_Name               string  false      ipcore_dds_sin_cos_13b_15b_48b
 CONFIG.DATA_Has_TLAST               string  false      Not_Required
-CONFIG.DDS_Clock_Rate               string  false      66.6666
+CONFIG.DDS_Clock_Rate               string  false      125.0000
 CONFIG.DSP48_Use                    string  false      Minimal
 CONFIG.Frequency_Resolution         string  false      0.4
 CONFIG.GUI_Behaviour                string  false      Coregen

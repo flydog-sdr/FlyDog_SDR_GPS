@@ -571,7 +571,7 @@ used by rx/{iq_mixer.v, gen.v}:
             > phase generator and sin cos lut
         System Requirements
             System Clock
-                > 66.6666
+                > 125.0000
             Number of Channels
                 > 1
             Mode of Operation
@@ -627,13 +627,13 @@ used by rx/{iq_mixer.v, gen.v}:
 	Summary (if anything here is different you configured something incorrectly)
         Output Width = 15 Bits
         Channels = 1
-        System Clock = 66.6666 MHz
-        Frequency per Channel (Fs) = 66.666600000000003 MHz
+        System Clock = 125.0000 MHz
+        Frequency per Channel (Fs) = 125.0 MHz
         Noise Shaping = Phase Dithering
         Memory Type = Block ROM
         Optimization Goal = Area
         Phase Width = 32 bits
-        Frequency Resolution = 0.015522027388315065 Hz
+        Frequency Resolution = 0.029103830456733704 Hz
         Phase Angle Width = 13 Bits
         Spurious Free Dynamic Range = 90 dB
         Latency = 8
@@ -648,7 +648,7 @@ used by rx/iq_mixer_48b.v:
             > phase generator and sin cos lut
         System Requirements
             System Clock
-                > 66.6666
+                > 125.0000
             Number of Channels
                 > 1
             Mode of Operation
@@ -704,13 +704,13 @@ used by rx/iq_mixer_48b.v:
 	Summary (if anything here is different you configured something incorrectly)
         Output Width = 15 Bits
         Channels = 1
-        System Clock = 66.6666 MHz
-        Frequency per Channel (Fs) = 66.666600000000003 MHz
+        System Clock = 125.0000 MHz
+        Frequency per Channel (Fs) = 125.0 MHz
         Noise Shaping = Phase Dithering
         Memory Type = Block ROM
         Optimization Goal = Area
         Phase Width = 48 bits
-        Frequency Resolution = 2.368...e-07 Hz
+        Frequency Resolution = 4.440...e-07 Hz
         Phase Angle Width = 13 Bits
         Spurious Free Dynamic Range = 90 dB
         Latency = 8

@@ -3,7 +3,7 @@
 
 int main()
 {
-	double clk = 66666600, out = 8250;
+	double clk = 125000000, out = 8250;
 	int start = 1024;
 	int i, least_i;
 	double ratio = clk/out, re, diff, least_diff = 1e9;

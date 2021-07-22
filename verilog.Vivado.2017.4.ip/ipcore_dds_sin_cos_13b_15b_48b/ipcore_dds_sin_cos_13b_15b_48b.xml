@@ -2677,7 +2677,7 @@
     <spirit:parameter>
       <spirit:name>DDS_Clock_Rate</spirit:name>
       <spirit:displayName>System Clock</spirit:displayName>
-      <spirit:value spirit:format="float" spirit:resolve="user" spirit:id="PARAM_VALUE.DDS_Clock_Rate" spirit:order="3" spirit:minimum="0.01" spirit:maximum="1000">66.6666</spirit:value>
+      <spirit:value spirit:format="float" spirit:resolve="user" spirit:id="PARAM_VALUE.DDS_Clock_Rate" spirit:order="3" spirit:minimum="0.01" spirit:maximum="1000">125.0000</spirit:value>
     </spirit:parameter>
     <spirit:parameter>
       <spirit:name>Channels</spirit:name>
@@ -2839,7 +2839,7 @@
     </spirit:parameter>
     <spirit:parameter>
       <spirit:name>Output_Frequency1</spirit:name>
-      <spirit:value spirit:format="float" spirit:resolve="user" spirit:id="PARAM_VALUE.Output_Frequency1" spirit:order="32" spirit:minimum="0" spirit:maximum="66.6666">0</spirit:value>
+      <spirit:value spirit:format="float" spirit:resolve="user" spirit:id="PARAM_VALUE.Output_Frequency1" spirit:order="32" spirit:minimum="0" spirit:maximum="125.0000">0</spirit:value>
     </spirit:parameter>
     <spirit:parameter>
       <spirit:name>PINC1</spirit:name>

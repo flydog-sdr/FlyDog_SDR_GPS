@@ -4,7 +4,7 @@
 int main()
 {
 	//double clk = 66666600, cdiv = 6944;
-	double clk = 66666070, cdiv = 6944;
+	double clk = 125000000, cdiv = 6944;
 	double srate_f = clk / cdiv;
 	
 	#define NFFT 1024

@@ -86,7 +86,7 @@ namespace eval kiwi {
 #                        CONFIG.Channels                     {1} \
 #                        CONFIG.Component_Name               "${module_name}" \
 #                        CONFIG.DATA_Has_TLAST               {Not_Required} \
-#                        CONFIG.DDS_Clock_Rate               {66.6666} \
+#                        CONFIG.DDS_Clock_Rate               {125.0000} \
 #                        CONFIG.DSP48_Use                    {Minimal} \
 #                        CONFIG.Frequency_Resolution         {0.4} \
 #                        CONFIG.GUI_Behaviour                {Coregen} \

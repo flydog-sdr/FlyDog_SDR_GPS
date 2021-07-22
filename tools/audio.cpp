@@ -93,14 +93,14 @@ int main()
 
 #if 0
 	printf("\nDDC decim1/decim2 for exact AUDIO net_rate\n");
-	#define ADC_CLOCK 66666600
+	#define ADC_CLOCK 125000000
 	//#define ADC_CLOCK 66665900
 	#define AUDIO_RATE 20250
 	decim_2stage(ADC_CLOCK, AUDIO_RATE, 0.01);
 	printf("WSPR integer decim %.2f\n", (float) AUDIO_RATE / WSPR_RATE);
 
 	printf("\nDDC decim1/decim2 for exact AUDIO net_rate\n");
-	#define ADC_CLOCK 66666600
+	#define ADC_CLOCK 125000000
 	//#define ADC_CLOCK 66665900
 	#undef AUDIO_RATE
 	#define AUDIO_RATE 12000
@@ -110,7 +110,7 @@ int main()
 
 #if 0
 	printf("\nDDC decim1/decim2 for exact AUDIO net_rate (WSPR)\n");
-	#define ADC_CLOCK 66666600
+	#define ADC_CLOCK 125000000
 	int audio_rate;
 	for (audio_rate = 19000/WSPR_RATE*WSPR_RATE; audio_rate <= 21000 ; audio_rate += WSPR_RATE) {
 		decim_2stage(ADC_CLOCK, audio_rate, 0.01);
