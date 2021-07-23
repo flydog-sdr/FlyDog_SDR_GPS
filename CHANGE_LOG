@@ -2,6 +2,9 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.4613  July 23, 2021
+    Fixed audio bursting when the signal is overloaded.
+
 v1.4612  July 22, 2021
     Removed the FAX extension.
     Minor fixes on ADC clock.

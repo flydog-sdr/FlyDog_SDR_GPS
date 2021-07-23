@@ -57,13 +57,13 @@
 `define DEF_SPIBUF_B
 	parameter SPIBUF_BMAX = 4094;    // DEFp 0xffe
 `define DEF_SPIBUF_BMAX
-	parameter RX1_WIDE_DECIM = 1250;    // DEFp 0x4e2
+	parameter RX1_WIDE_DECIM = 1543;    // DEFp 0x607
 `define DEF_RX1_WIDE_DECIM
-	parameter RX2_WIDE_DECIM = 5;    // DEFp 0x5
+	parameter RX2_WIDE_DECIM = 4;    // DEFp 0x4
 `define DEF_RX2_WIDE_DECIM
-	parameter RX1_STD_DECIM = 1488;    // DEFp 0x5d0
+	parameter RX1_STD_DECIM = 947;    // DEFp 0x3b3
 `define DEF_RX1_STD_DECIM
-	parameter RX2_STD_DECIM = 7;    // DEFp 0x7
+	parameter RX2_STD_DECIM = 11;    // DEFp 0xb
 `define DEF_RX2_STD_DECIM
 	parameter MAX_SND_RATE = 20250;    // DEFp 0x4f1a
 `define DEF_MAX_SND_RATE
@@ -75,13 +75,13 @@
 `define DEF_SND_RATE_8CH
 	parameter SND_RATE_14CH = 12000;    // DEFp 0x2ee0
 `define DEF_SND_RATE_14CH
-	parameter RX_DECIM_3CH = 6250;    // DEFp 0x186a
+	parameter RX_DECIM_3CH = 6172;    // DEFp 0x181c
 `define DEF_RX_DECIM_3CH
-	parameter RX_DECIM_4CH = 10416;    // DEFp 0x28b0
+	parameter RX_DECIM_4CH = 10417;    // DEFp 0x28b1
 `define DEF_RX_DECIM_4CH
-	parameter RX_DECIM_8CH = 10416;    // DEFp 0x28b0
+	parameter RX_DECIM_8CH = 10417;    // DEFp 0x28b1
 `define DEF_RX_DECIM_8CH
-	parameter RX_DECIM_14CH = 10416;    // DEFp 0x28b0
+	parameter RX_DECIM_14CH = 10417;    // DEFp 0x28b1
 `define DEF_RX_DECIM_14CH
 	parameter RXBUF_SIZE_3CH = 16384;    // DEFp 0x4000
 `define DEF_RXBUF_SIZE_3CH
