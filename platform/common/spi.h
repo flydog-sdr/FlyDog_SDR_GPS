@@ -33,6 +33,7 @@ typedef enum { // Embedded CPU commands, order must match 'Commands:' table in .
     CmdCPUCtrClr,
     CmdGetCPUCtr,
     CmdCtrlClrSet,
+    CmdCtrlPulse,
     CmdCtrlGet,
 	CmdGetMem,
 	CmdGetStatus,
@@ -127,6 +128,7 @@ static const char *cmds[] = {
     "CmdCPUCtrClr",
     "CmdGetCPUCtr",
     "CmdCtrlClrSet",
+    "CmdCtrlPulse",
     "CmdCtrlGet",
     "CmdGetMem",
 	"CmdGetStatus",
@@ -191,6 +193,7 @@ extern spi_t spi;
 #define DMA_ALIGNMENT __attribute__ ((aligned(256)))
 #define	PAD_FRONT u4_t pad_front[256/4]
 #define	PAD_BACK u4_t pad_back[256/4]
+#define N_SPI_TX 8
 
 #ifdef SPI_8
 	#define SPI_T		char

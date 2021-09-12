@@ -1,4 +1,4 @@
-parameter RX_CFG = 4; // Available values: 4, 3, 8, 14
+localparam RX_CFG = 4; // Available values: 4, 3, 8, 14
 `define USE_WF
 
 // In case RX_CFG is set to 4, the generated bitstream should be named KiwiSDR.rx4.wf4.bit

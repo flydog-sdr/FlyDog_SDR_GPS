@@ -104,7 +104,6 @@ create_clock -period 61.095 -name GPS_TCXO -waveform {0.000 30.548} [get_ports G
 
 # 125 MHz
 create_clock -period 8.000 -name ADC_CLKIN -waveform {0.000 4.000} [get_ports ADC_CLKIN]
-
 set_input_delay -clock [get_clocks ADC_CLKIN] -min -add_delay 1.300 [get_ports {ADC_DATA[*]}]
 set_input_delay -clock [get_clocks ADC_CLKIN] -max -add_delay 4.000 [get_ports {ADC_DATA[*]}]
 set_input_delay -clock [get_clocks ADC_CLKIN] -min -add_delay 1.300 [get_ports ADC_OVFL]
@@ -135,10 +134,9 @@ set_false_path -from [get_ports {BBB_CS_N[0] BBB_CS_N[1]}] -to [get_clocks BBB_S
 set_false_path -rise_from [get_clocks BBB_SCLK] -to [get_ports BBB_MISO]
 
 # define async clock domains
-set_clock_groups -asynchronous -group [get_clocks GPS_TCXO] -group [get_clocks ADC_CLKIN]
-set_clock_groups -asynchronous -group [get_clocks ADC_CLKIN] -group [get_clocks GPS_TCXO]
-set_clock_groups -asynchronous -group [get_clocks GPS_TCXO] -group [get_clocks BBB_SCLK]
-set_clock_groups -asynchronous -group [get_clocks BBB_SCLK] -group [get_clocks GPS_TCXO]
+set_clock_groups -asynchronous -group [get_clocks ADC_CLKIN]
+set_clock_groups -asynchronous -group [get_clocks GPS_TCXO]
+set_clock_groups -asynchronous -group [get_clocks BBB_SCLK]
 
 # config
 set_property CONFIG_VOLTAGE 3.3 [current_design]
