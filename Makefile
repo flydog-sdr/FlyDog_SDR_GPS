@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 463
+VERSION_MIN = 464
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
@@ -153,7 +153,7 @@ else
 endif
 
 PKGS = 
-PKGS_O3 = pkgs/mongoose pkgs/jsmn pkgs/sha256 pkgs/TNT_JAMA
+PKGS_O3 = pkgs/utf8 pkgs/mongoose pkgs/jsmn pkgs/sha256 pkgs/TNT_JAMA
 
 # Each extension can have an optional Makefile:
 # The extension can opt-out of being included via EXT_SKIP (e.g. BBAI only, not Debian 7 etc.)
@@ -446,7 +446,7 @@ pru/pru_realtime.bin: pas pru/pru_realtime.p pru/pru_realtime.h pru/pru_realtime
 ################################
 # FPGA embedded CPU
 ################################
-$(GEN_ASM): kiwi.config $(wildcard e_cpu/asm/*)
+$(GEN_ASM): kiwi.config verilog/kiwi.inline.vh $(wildcard e_cpu/asm/*)
 	(cd e_cpu; make)
 $(GEN_OTHER_ASM): other.config $(wildcard e_cpu/asm/*)
 	(cd e_cpu; make gen_other)

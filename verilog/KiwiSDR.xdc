@@ -104,6 +104,7 @@ create_clock -period 61.095 -name GPS_TCXO -waveform {0.000 30.548} [get_ports G
 
 # 125 MHz
 create_clock -period 8.000 -name ADC_CLKIN -waveform {0.000 4.000} [get_ports ADC_CLKIN]
+
 set_input_delay -clock [get_clocks ADC_CLKIN] -min -add_delay 1.300 [get_ports {ADC_DATA[*]}]
 set_input_delay -clock [get_clocks ADC_CLKIN] -max -add_delay 4.000 [get_ports {ADC_DATA[*]}]
 set_input_delay -clock [get_clocks ADC_CLKIN] -min -add_delay 1.300 [get_ports ADC_OVFL]
