@@ -7,13 +7,14 @@
 function isUndefined(v) { return (typeof(v) === 'undefined'); }
 function isDefined(v) { return (typeof(v) !== 'undefined'); }
 function isNull(v) { return (v === null); }
-function isNumber(v) { return (typeof(v) === 'number'); }
+function isNumber(v) { return (typeof(v) === 'number' && !isNaN(v)); }
 function isBoolean(v) { return (typeof(v) === 'boolean'); }
 function isString(v) { return (typeof(v) === 'string'); }
 function isArray(v) { return (Array.isArray(v)); }
 function isFunction(v) { return (typeof(v) === 'function'); }
 function isObject(v) { return (typeof(v) === 'object'); }
 function isArg(v) { return (isUndefined(v) || isNull(v))? false:true; }
+function kiwi_typeof(v) { return isNull(v)? 'null' : (isArray(v)? 'array' : typeof(v)); }
 
 // browsers have added includes() only relatively recently
 try {
@@ -189,6 +190,11 @@ function arrayBufferToStringLen(buf, len)
 	return output;
 }
 
+function kiwi_dup_array(a)
+{
+   return a.slice();
+}
+
 function kiwi_shallow_copy(obj)
 {
    return Object.assign({}, obj);
@@ -298,6 +304,8 @@ String.prototype.positiveWithSign = function()
 	return (n <= 0)? s : ('+'+ s);
 }
 
+function isHexDigit(c) { return ('0123456789ABCDEFabcdef'.indexOf(c) > -1); }
+
 // pad with left zeros to 'digits' length
 // +digits: add leading '0x'
 // -digits: no leading '0x'
@@ -311,6 +319,16 @@ Number.prototype.toHex = function(digits)
 	var s = n.toString(16);
 	while (s.length < digits) s = '0'+ s;
 	if (add_0x) s = '0x'+ s;
+	return s;
+}
+
+Number.prototype.toFixedNZ = function(d)
+{
+	var n = Number(this);
+	var s = n.toFixed(d);
+	while (s.endsWith('0'))
+	   s = s.slice(0, -1);
+	if (s.endsWith('.')) s = s.slice(0, -1);   // nnn.0 => nnn. => nnn
 	return s;
 }
 
@@ -500,17 +518,53 @@ function kiwi_UTCdoyToDate(doy, year, hour, min, sec)
    return new Date(Date.UTC(year, 0, doy, hour, min, sec));    // yes, doy = 1..366 really works!
 }
 
-function kiwi_decodeURIComponent(tag, uri)
+function kiwi_decodeURIComponent(id, uri)
 {
-   var obj;
-   try {
-      obj = decodeURIComponent(uri);
-   } catch(ex) {
-      console.log('kiwi_decodeURIComponent('+ tag +'): decode URI component fail');
-      console.log(uri);
-      console.log(ex);
-      obj = null;
+   var obj = null, double_fail = false;
+   
+   while (obj == null) {
+      try {
+         obj = decodeURIComponent(uri);
+      } catch(ex) {
+         console.log('$kiwi_decodeURIComponent('+ id +'): decode fail');
+         console.log(uri);
+      
+         if (double_fail) {
+            console.log('kiwi_decodeURIComponent('+ id +'): DOUBLE DECODE FAIL');
+            console.log(uri);
+            console.log(ex);
+            return null;
+         }
+
+	      // v1.464
+         // Recover from broken UTF-8 sequences stored in cfg.
+         // Remove all "%xx" sequences, for xx >= 0x80, whenever decodeURIComponent() fails.
+         // User will have to manually repair UTF-8 sequences since information has been lost.
+         //
+         // NB: If a cfg field contains only valid UTF-8 sequences then the decodeURIComponent() will not fail
+         // and this code will not be triggered. That way corrections made to broken fields will persist in the cfg.
+         // This is why bulk removal of >= %80 sequences cannot be done in _cfg_load_json() on the server side.
+         // Doing that would always eliminate *any* UTF-8 sequence. Even valid ones.
+         for (var i = 0; i < uri.length - 2; i++) {
+            var c1 = uri.charAt(i+1);
+            var c2 = uri.charAt(i+2);
+            if (uri.charAt(i) == '%' && isHexDigit(c1) && isHexDigit(c2)) {
+               //console.log(c1 +' '+ ((c1 >= '8')? 'T':'F'));
+               if (c1 >= '8') {
+                  var x0 = uri.charAt(i-1);
+                  x0 = x0.charCodeAt(0);
+                  uri = uri.substr(0,i) + uri.substr(i+3);
+                  i = 0;
+                  //console.log('FIX <'+ uri +'>');
+                  double_fail = true;
+               }
+            }
+         }
+
+         obj = null;
+      }
    }
+   
    return obj;
 }
 
@@ -559,6 +613,18 @@ function kiwi_url_origin()
 		host = host.split('?')[0];
 	}
 	return host;
+}
+
+// host{:port}
+function kiwi_host_port()
+{
+   return window.location.host;
+}
+
+// host (no port)
+function kiwi_host()
+{
+   return window.location.hostname;
 }
 
 // pnames can be: 'string' or [ 'string1', 'string2', ... ]
@@ -645,6 +711,11 @@ function px(s)
       return '0';
    }
 	return num.toFixed(0) +'px';
+}
+
+function unpx(s)
+{
+   return parseFloat(s);   // parseFloat() because s = "nnnpx"
 }
 
 function css_style(el, prop)
@@ -1084,14 +1155,7 @@ function kiwi_ajax_prim(method, data, url, callback, cb_param, timeout, progress
                   obj = { AJAX_error:'JSON prefix', response:response };
                } else {
                   try {
-                     // remove comments from JSON consisting of line beginning with '//' in column 1
-                     var decmt = false;
-                     while ((cb = response.indexOf('\n//')) != -1) {
-                        ce = response.indexOf('\n', cb+3);
-                        response = response.slice(0, cb) + response.slice(ce);
-                        decmt = true;
-                     }
-                     //if (decmt) console.log(response);
+                     response = kiwi_remove_cjson_comments(response);
                      obj = JSON.parse(response);		// response can be empty
                      dbug('AJAX JSON response:');
                      dbug(response);
@@ -1121,11 +1185,28 @@ function kiwi_ajax_prim(method, data, url, callback, cb_param, timeout, progress
 	}
 
    if (timeout >= 0) {     // timeout < 0 is test mode
+      // DANGER: some URLs are relative e.g. /VER
+      //if (!url.startsWith('http://') && !url.startsWith('https://'))
+      //   url = 'http://'+ url;
       ajax.open(method, url, /* async */ true);
       dbug('AJAX SEND id='+ ajax_id +' url='+ url);
       ajax.send(data);
    }
 	return true;
+}
+
+// remove comments from JSON consisting of line beginning with '//' in column 1
+function kiwi_remove_cjson_comments(s)
+{
+   var removed = false;
+   var c_begin, c_end;
+   while ((c_begin = s.indexOf('\n//')) != -1) {
+      c_end = s.indexOf('\n', c_begin+3);
+      s = s.slice(0, c_begin) + s.slice(c_end);
+      removed = true;
+   }
+   //if (removed) console.log(s);
+   return s;
 }
 
 function kiwi_scrollbar_width()

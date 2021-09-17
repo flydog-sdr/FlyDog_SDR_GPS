@@ -28,6 +28,7 @@ Boston, MA  02110-1301, USA.
 #include "coroutines.h"
 #include "jsmn.h"
 #include "cfg.h"
+#include "utf8.h"
 
 #ifdef USE_SDR
  #include "dx.h"
@@ -46,68 +47,103 @@ Boston, MA  02110-1301, USA.
 #define ADM_FN	DIR_CFG "/" CFG_PREFIX "admin.json"
 #define DX_FN	DIR_CFG "/" CFG_PREFIX "dx.json";
 
-#define SPACE_FOR_CLOSE_BRACE				1
-#define SPACE_FOR_POSSIBLE_COMMA			1
-#define	SLEN_QUOTE_COLON					2
-#define	SLEN_3QUOTES_COLON					4
-#define JSON_FIRST_QUOTE					1
+#define SPACE_FOR_CLOSE_BRACE       1
+#define SPACE_FOR_POSSIBLE_COMMA    1
+#define	SLEN_NOTHING_ELSE           0
+#define	SLEN_2QUOTES                2
+#define JSON_ID_FIRST_QUOTE         1
+#define JSON_ID_QUOTE_COLON         2
+
+static bool _cfg_parse_json(cfg_t *cfg, bool doPanic);
+
+//#define CFG_TEST
+#ifdef CFG_TEST
 
 static void cfg_test()
 {
 	cfg_t cfgx;
 	char *buf;
-
-	printf("\n");
-	printf("test 4 basic cut/ins cases:\n");
-	buf = (char *) "{\"L\":1,\"foo\":123,\"R\":2}";
-	json_init(&cfgx, buf);
-	json_set_int(&cfgx, "foo", 9999);
-
-	printf("\n");
-	buf = (char *) "{\"foo\":123,\"R\":2}";
-	json_init(&cfgx, buf);
-	json_set_int(&cfgx, "foo", 9999);
 	
-	printf("\n");
-	buf = (char *) "{\"foo\":123}";
-	json_init(&cfgx, buf);
+	real_printf("\n");
+	real_printf("test 4 basic cut/ins cases:\n");
+	buf = (char *) "{\"L\": 1, \"foo\": 123, \"R\": 2}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
 	json_set_int(&cfgx, "foo", 9999);
+	_cfg_parse_json(&cfgx, false);
 
-	printf("\n");
-	buf = (char *) "{\"L\":1,\"foo\":123}";
-	json_init(&cfgx, buf);
+	real_printf("\n");
+	buf = (char *) "{\"foo\": 123, \"R\": 2}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
 	json_set_int(&cfgx, "foo", 9999);
+	_cfg_parse_json(&cfgx, false);
+	
+	real_printf("\n");
+	buf = (char *) "{\"foo\": 123}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
+	json_set_int(&cfgx, "foo", 9999);
+	_cfg_parse_json(&cfgx, false);
 
-	printf("\n");
-	printf("test 2 new creation cases:\n");
+	real_printf("\n");
+	buf = (char *) "{\"L\": 1, \"foo\": 123}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
+	json_set_int(&cfgx, "foo", 9999);
+	_cfg_parse_json(&cfgx, false);
+
+	real_printf("\n");
+	real_printf("test 2 new creation cases:\n");
 	buf = (char *) "{}";
-	json_init(&cfgx, buf);
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
 	json_set_int(&cfgx, "foo", 9999);
+	_cfg_parse_json(&cfgx, false);
 
-	printf("\n");
-	buf = (char *) "{\"L\":1}";
-	json_init(&cfgx, buf);
+	real_printf("\n");
+	buf = (char *) "{\"L\": 1}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
 	json_set_int(&cfgx, "foo", 9999);
+	_cfg_parse_json(&cfgx, false);
 
-	printf("\n");
-	printf("test cut/ins of other types:\n");
-	buf = (char *) "{\"L\":1,\"foo\":1.234,\"R\":2}";
-	json_init(&cfgx, buf);
+	real_printf("\n");
+	real_printf("test cut/ins of other types:\n");
+	buf = (char *) "{\"L\": 1, \"foo\": 1.234, \"R\": 2}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
 	json_set_float(&cfgx, "foo", 5.678);
+	_cfg_parse_json(&cfgx, false);
 
-	printf("\n");
-	buf = (char *) "{\"L\":1,\"foo\":false,\"R\":2}";
-	json_init(&cfgx, buf);
+	real_printf("\n");
+	buf = (char *) "{\"L\": 1, \"foo\": false, \"R\": 2}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
 	json_set_bool(&cfgx, "foo", true);
+	_cfg_parse_json(&cfgx, false);
 
-	printf("\n");
-	buf = (char *) "{\"L\":1,\"foo\":\"bar\",\"R\":2}";
-	json_init(&cfgx, buf);
+	real_printf("\n");
+	buf = (char *) "{\"L\": 1, \"foo\": \"bar\", \"R\": 2}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
 	json_set_string(&cfgx, "foo", "baz");
+	_cfg_parse_json(&cfgx, false);
+
+	real_printf("\n");
+	real_printf("newline cases and space after id:\n");
+	buf = (char *) "{\"L\": \"Ld\", \n  \"foo\": \"bar\", \n  \"R\": \"Rd\"}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
+	json_rem_string(&cfgx, "foo");
+	_cfg_parse_json(&cfgx, false);
+
+	real_printf("\n");
+	buf = (char *) "{\"foo\": \"bar\",\n  \"R\": \"Rd\"}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
+	json_rem_string(&cfgx, "foo");
+	_cfg_parse_json(&cfgx, false);
+
+	real_printf("\n");
+	buf = (char *) "{\"L\": \"Ld\",\n  \"foo\": \"bar\"}";
+	json_init_flags(&cfgx, CFG_DEBUG, buf);
+	json_rem_string(&cfgx, "foo");
+	_cfg_parse_json(&cfgx, false);
 
 	//_cfg_walk(&cfgx, NULL, cfg_print_tok, NULL);
 	kiwi_exit(0);
 }
+#endif
 
 int serial_number;
 
@@ -116,7 +152,9 @@ void cfg_reload()
 	cfg_init();
 	admcfg_init();
 
-    //cfg_test();
+    #ifdef CFG_TEST
+        cfg_test();
+    #endif
     
     if ((serial_number = cfg_int("serial_number", NULL, CFG_OPTIONAL)) > 0) {
         lprintf("serial number override from configuration: %d\n", serial_number);
@@ -146,12 +184,12 @@ char *_cfg_get_json(cfg_t *cfg, int *size)
 
 char *_cfg_realloc_json(cfg_t *cfg, int new_size, u4_t flags);
 static bool _cfg_load_json(cfg_t *cfg);
-static bool _cfg_parse_json(cfg_t *cfg, bool doPanic);
 
 bool _cfg_init(cfg_t *cfg, int flags, char *buf)
 {
 	if (buf != NULL) {
 		memset(cfg, 0, sizeof(cfg_t));
+        cfg->flags = flags;
 		cfg->filename = (char *) "(buf)";
 		_cfg_realloc_json(cfg, strlen(buf) + SPACE_FOR_NULL, CFG_NONE);
 		strcpy(cfg->json, buf);
@@ -194,7 +232,7 @@ bool _cfg_init(cfg_t *cfg, int flags, char *buf)
 		struct stat st;
 		const char *adm_fn = ADM_FN;
 		
-		if (stat(adm_fn, &st) != 0) {
+		if (!kiwi_file_exists(adm_fn)) {
 			system("echo -n \"{}\" >" ADM_FN);
 			admcfg_init();
 			lprintf("#### transitioning to admin.json file ####\n");
@@ -347,26 +385,26 @@ static int _cfg_cut(cfg_t *cfg, jsmntok_t *jt, int skip)
 	// {ccc,R => {R
 	// {ccc} => {}
 	// L,ccc} => L}
-	//real_printf("PRE-CUT <<%s>>\n", cfg->json);
-	s = &cfg->json[key_jt->start - JSON_FIRST_QUOTE - 1];
-	while (*s == ' ' || *s == '\t')
+	if (cfg->flags & CFG_DEBUG) real_printf("PRE-CUT <<%s>>\n", cfg->json);
+	s = &cfg->json[key_jt->start - JSON_ID_FIRST_QUOTE - 1];
+	while (*s == ' ' || *s == '\t' || *s == '\n')
 		s--;
-	assert(*s == '{' || *s == ',' || *s == '\n');
+	check(*s == '{' || *s == ',');
 	s++;
-	e = &cfg->json[key_jt->start + key_size + val_size + skip];
+	e = &cfg->json[key_jt->start + key_size + JSON_ID_QUOTE_COLON];
+	while (*e == ' ' || *e == '\t') e++;    // whitespace between ':' and '"'
+	e += val_size + skip;
+	// "id": "val",
+	// s          e     at this point
 
-	// ddd\nxxx or ddd,xxx -> xxx
-	if (*e == '\n' || (*e == ',' && *(e+1) != '\n')) e++;
-	else
-	// ddd,\nxxx -> xxx
-	if (*e == ',' && *(e+1) == '\n') e += 2;
+    while (*e == ',' || *e == ' ' || *e == '\n') e++;
 
-	// e.g. xxx,ddd} -> xxx,} -> xxx}
+	// e.g. xxx,ccc} -> xxx,} -> xxx}
 	if (*(s-1) == ',' && *e == '}')
 		s--;
 
 	kiwi_overlap_strcpy(s, e);
-	//real_printf("POST-CUT %d <<%s>>\n", s - cfg->json, cfg->json);
+	if (cfg->flags & CFG_DEBUG) real_printf("POST-CUT %d <<%s>>\n", s - cfg->json, cfg->json);
 	return s - cfg->json;
 }
 
@@ -389,7 +427,7 @@ static void _cfg_ins(cfg_t *cfg, int pos, char *val)
 	//  ^r
 	// L} => L,ccc}		,ccc
 	//  ^r
-	//real_printf("PRE-INS <<%s>>\n", cfg->json);
+	if (cfg->flags & CFG_DEBUG) real_printf("PRE-INS <<%s>>\n", cfg->json);
 
 	if (*r == '}' && *(r-1) == '{') {
 		;
@@ -410,7 +448,7 @@ static void _cfg_ins(cfg_t *cfg, int pos, char *val)
 	strncpy(r, val, vlen);
 	if (Lcomma) *(r-1) = ',';
 
-	//real_printf("POST-INS <<%s>>\n", cfg->json);
+	if (cfg->flags & CFG_DEBUG) real_printf("POST-INS <<%s>>\n", cfg->json);
 }
 
 bool _cfg_int_json(cfg_t *cfg, jsmntok_t *jt, int *num)
@@ -466,13 +504,13 @@ int _cfg_set_int(cfg_t *cfg, const char *name, int val, u4_t flags, int pos)
             // ,"id":int or {"id":int
             //       ^start
             assert(JSMN_IS_PRIMITIVE(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
 		} else
 		if (strncmp(s, "null", 4) == 0) {
             // ,"id":null or {"id":null
             //       ^start
             assert(JSMN_IS_PRIMITIVE(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
         } else {
 			lprintf("%s: cfg_set_int(CFG_REMOVE) unexpected value: %s\n", cfg->filename, name);
             panic("cfg");
@@ -581,13 +619,13 @@ int _cfg_set_float(cfg_t *cfg, const char *name, double val, u4_t flags, int pos
             // ,"id":float or {"id":float
             //       ^start
             assert(JSMN_IS_PRIMITIVE(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
 		} else
 		if (strncmp(s, "null", 4) == 0) {
             // ,"id":null or {"id":null
             //       ^start
             assert(JSMN_IS_PRIMITIVE(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
         } else {
 			lprintf("%s: cfg_set_float(CFG_REMOVE) unexpected value: %s\n", cfg->filename, name);
             panic("cfg");
@@ -698,13 +736,13 @@ int _cfg_set_bool(cfg_t *cfg, const char *name, u4_t val, u4_t flags, int pos)
             // ,"id":t/f or {"id":t/f
             //       ^start
             assert(JSMN_IS_PRIMITIVE(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
 		} else
 		if (strncmp(s, "null", 4) == 0) {
             // ,"id":null or {"id":null
             //       ^start
             assert(JSMN_IS_PRIMITIVE(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
         } else {
 			lprintf("%s: cfg_set_bool(CFG_REMOVE) unexpected value: %s\n", cfg->filename, name);
             panic("cfg");
@@ -802,13 +840,13 @@ int _cfg_set_string(cfg_t *cfg, const char *name, const char *val, u4_t flags, i
             // ,"id":"string" or {"id":"string"
             //        ^start (NB: NOT first double quote)
             assert(JSMN_IS_STRING(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_3QUOTES_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_2QUOTES);
 		} else
 		if (strncmp(s, ":null", 5) == 0) {
             // ,"id":null or {"id":null
             //       ^start
             assert(JSMN_IS_PRIMITIVE(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
         } else {
 			lprintf("%s: cfg_set_string(CFG_REMOVE) unexpected value: %s\n", cfg->filename, name);
             panic("cfg");
@@ -862,6 +900,24 @@ void _cfg_default_string(cfg_t *cfg, const char *name, const char *val, bool *er
 		_cfg_set_string(cfg, name, val, CFG_SET, 0);
 		//printf("_cfg_default_string: %s = %s\n", name, val);
 	} else {
+	
+	    // v1.463
+        // Recover from broken UTF-8 sequences stored in cfg.
+	    if (cfg == &cfg_cfg) {
+	        char *uc = strdup(s);
+                void *cp;
+                cp = utf8valid(uc);
+                if (cp) {
+                    lprintf("NOT VALID UTF-8: pos=%d %s=<%s>\n", (char *) cp - uc, name, s);
+                    utf8makevalid(uc, '?');
+                    char *uc2 = kiwi_str_encode(uc);
+                        kiwi_str_decode_selective_inplace(uc2);
+                        _cfg_set_string(cfg, name, uc2, CFG_SET, 0);
+                    kiwi_ifree(uc2);
+                    error = true;
+                }
+	        kiwi_ifree(uc);
+	    }
 		_cfg_free(cfg, s);
 	}
 	if (error_p) *error_p = *error_p | error;
@@ -907,13 +963,13 @@ int _cfg_set_object(cfg_t *cfg, const char *name, const char *val, u4_t flags, i
             // ,"id":{...} or {"id":{...}
             //       ^start
             assert(JSMN_IS_OBJECT(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
 		} else
 		if (strncmp(s, "null", 4) == 0) {
             // ,"id":null or {"id":null
             //       ^start
             assert(JSMN_IS_PRIMITIVE(jt));
-		    pos = _cfg_cut(cfg, jt, SLEN_QUOTE_COLON);
+		    pos = _cfg_cut(cfg, jt, SLEN_NOTHING_ELSE);
         } else {
 			lprintf("%s: cfg_set_object(CFG_REMOVE) unexpected value: %s\n", cfg->filename, name);
             panic("cfg");
@@ -1159,9 +1215,8 @@ static bool _cfg_load_json(cfg_t *cfg)
 	
     TMEAS(printf("cfg_load_json: START file=%s\n", cfg->filename);)
 
-	struct stat st;
-	scall("stat", stat(cfg->filename, &st));
-	_cfg_realloc_json(cfg, st.st_size + SPACE_FOR_NULL, CFG_NONE);
+	off_t fsize = kiwi_file_size(cfg->filename);
+	_cfg_realloc_json(cfg, fsize + SPACE_FOR_NULL, CFG_NONE);
 	
     FILE *fp;
     scallz("_cfg_load_json fopen", (fp = fopen(cfg->filename, "r")));
@@ -1173,9 +1228,9 @@ static bool _cfg_load_json(cfg_t *cfg)
 	cfg->json[n] = '\0';
 	if (cfg->json[n-1] == '\n')
 		cfg->json[n-1] = '\0';
-	
+
 	// hack to add passband configuration (too difficult to do with cfg.h interface)
-	if (cfg == &cfg_cfg && strstr(cfg->json, ",\"passbands\":{") == NULL) {
+	if (cfg == &cfg_cfg && strstr(cfg->json, "\"passbands\":") == NULL) {
 	    _cfg_realloc_json(cfg, n + 1024, CFG_COPY);
 	    strcpy(&(cfg->json[n-2]),
 	        ",\"passbands\":{"
@@ -1196,8 +1251,8 @@ static bool _cfg_load_json(cfg_t *cfg)
                 "\"nbfm\":{\"lo\":-6000, \"hi\":6000},"
                 "\"iq\":  {\"lo\":-5000, \"hi\":5000}"
 	        "}}");
-	    _cfg_save_json(cfg, cfg->json);
-	    return true;
+        _cfg_save_json(cfg, cfg->json);
+        return true;
 	}
 	
     TMEAS(printf("cfg_load_json: parse\n");)

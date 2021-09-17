@@ -1,6 +1,6 @@
 // KiwiSDR
 //
-// Copyright (c) 2014-2017 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2021 John Seamons, ZL/KF6VO
 
 var kiwi = {
    is_local: [],
@@ -405,7 +405,7 @@ function kiwi_get_init_settings()
 	var ant = ext_get_cfg_param('rx_antenna');
 	var el = w3_el('rx-antenna');
 	if (el != undefined && ant) {
-		el.innerHTML = 'Antenna: '+ decodeURIComponent(ant);
+		el.innerHTML = 'Antenna: '+ kiwi_decodeURIComponent('rx_antenna', ant);
 	}
 
    kiwi.WSPR_rgrid = ext_get_cfg_param_string('WSPR.grid', '', EXT_NO_SAVE);
@@ -428,10 +428,10 @@ function cfg_save_json(path, ws)
 		return;
 	var s;
 	if (path.startsWith('adm.')) {
-		s = encodeURIComponent(JSON.stringify(adm));
+		s = encodeURIComponent(JSON.stringify(adm, null, 3));    // pretty-print the JSON
 		ws.send('SET save_adm='+ s);
 	} else {
-		s = encodeURIComponent(JSON.stringify(cfg));
+		s = encodeURIComponent(JSON.stringify(cfg, null, 3));    // pretty-print the JSON
 		ws.send('SET save_cfg='+ s);
 	}
 	console.log('cfg_save_json: DONE');
@@ -1629,6 +1629,9 @@ function kiwi_msg(param, ws)
 			max_camp = parseInt(param[1]);
 			break;
 
+      // Don't need kiwi_decodeURIComponent() here because the server-side is encoding before sending.
+      // It's only when the decoded cleartext cfg params contain invalid UTF-8 that we get into trouble.
+      // E.g. ext_get_cfg_param_string(): kiwi_decodeURIComponent(ext_get_cfg_param(...))
 		case "load_cfg":
 			var cfg_json = decodeURIComponent(param[1]);
 			//console.log('### load_cfg '+ ws.stream +' '+ cfg_json.length);
@@ -1711,7 +1714,7 @@ function kiwi_msg(param, ws)
 			break;
 
 		case "status_msg_html":
-		   var s = decodeURIComponent(param[1]);
+		   var s = kiwi_decodeURIComponent('status_msg_html', param[1]);
 		   //console.log('status_msg_html: '+ s);
 			w3_innerHTML('id-status-msg', s);		// overwrites last status msg
 			w3_innerHTML('id-msg-status', s);		// overwrites last status msg
@@ -1731,7 +1734,7 @@ function kiwi_msg(param, ws)
       // enable DRM mode button
       var el = w3_el('id-button-drm');
       if (el && kiwi.is_multi_core) {
-         w3_remove(el, 'class-button-disbled');
+         w3_remove(el, 'class-button-disabled');
          w3_create_attribute(el, 'onclick', 'mode_button(event, this)');
       }
       */
@@ -1778,7 +1781,7 @@ function kiwi_msg(param, ws)
 		
 		// can't simply come from 'cfg.*' because config isn't available without a web socket
 		case "reason_disabled":
-			reason_disabled = decodeURIComponent(param[1]);
+			reason_disabled = kiwi_decodeURIComponent('reason_disabled', param[1]);
 			break;
 		
 		case "sample_rate":
@@ -1800,9 +1803,10 @@ function kiwi_msg(param, ws)
 			break;
 
 		case 'notify_msg':
-			console.log('$ notify_msg: '+ decodeURIComponent(param[1]));
+		   var s = kiwi_decodeURIComponent('notify_msg', param[1]);
+			console.log('notify_msg: '+ s);
 			if (confirmation.displayed) break;
-         var s = w3_div('', decodeURIComponent(param[1]));
+         s = w3_div('', s);
          confirmation_show_content(s, 425, 50);
          setTimeout(confirmation_panel_close, 3000);
 			break;
