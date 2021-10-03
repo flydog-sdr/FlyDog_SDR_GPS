@@ -160,24 +160,9 @@ void update_vars_from_config(bool called_at_init)
     inactivity_timeout_mins = cfg_default_int("inactivity_timeout_mins", 0, &update_cfg);
     ip_limit_mins = cfg_default_int("ip_limit_mins", 0, &update_cfg);
 
-    int srate_idx = cfg_default_int("max_freq", -1, &update_cfg);
-    switch(srate_idx) {
-        default:
-            ui_srate = 32*MHz;
-            break;
-        case 0:
-            ui_srate = 32*MHz;
-            break;
-        case 1:
-            ui_srate = 42*MHz;
-            break;
-        case 2:
-            ui_srate = 52*MHz;
-            break;
-        case 3:
-            ui_srate = 62*MHz;
-            break;
-    }
+    int srate_idx = cfg_default_int("max_freq", 0, &update_cfg);
+	ui_srate = srate_idx? 32*MHz : 30*MHz;
+
 
     // force DC offsets to the default value if not configured
     // also if set to the previous default value
@@ -252,7 +237,7 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_int("clk_adj", 0, &update_cfg);
     freq_offset = cfg_default_float("freq_offset", 0, &update_cfg);
     kiwi_reg_lo_kHz = cfg_default_int("sdr_hu_lo_kHz", 0, &update_cfg);
-    kiwi_reg_hi_kHz = cfg_default_int("sdr_hu_hi_kHz", 32000, &update_cfg);
+    kiwi_reg_hi_kHz = cfg_default_int("sdr_hu_hi_kHz", 30000, &update_cfg);
     cfg_default_bool("index_html_params.RX_PHOTO_LEFT_MARGIN", true, &update_cfg);
     cfg_default_bool("ext_ADC_clk", false, &update_cfg);
     cfg_default_int("ext_ADC_freq", (int) round(ADC_CLOCK_TYP), &update_cfg);
@@ -417,7 +402,7 @@ void update_vars_from_config(bool called_at_init)
     admcfg_default_bool("no_dup_ip", false, &update_admcfg);
     admcfg_default_bool("my_kiwi", true, &update_admcfg);
     admcfg_default_bool("onetime_password_check", false, &update_admcfg);
-    admcfg_default_string("proxy_server", "p.sdrotg.com", &update_admcfg);
+    admcfg_default_string("proxy_server", "proxy.kiwisdr.com", &update_admcfg);
     admcfg_default_bool("console_local", true, &update_admcfg);
     log_local_ip = admcfg_default_bool("log_local_ip", true, &update_admcfg);
 
