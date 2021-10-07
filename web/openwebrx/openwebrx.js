@@ -1053,7 +1053,9 @@ function demodulator_default_analog(offset_frequency, subtype, locut, hicut)
          changed.passband = 1;
          owrx.last_locut = locut; owrx.last_hicut = hicut;
       }
-      if (changed != null) extint_environment_changed(changed);
+      if (changed != null) {
+         extint_environment_changed(changed);
+      }
 
 		if (muted_until_freq_set) {
 		   toggle_or_set_mute(muted_initially);
