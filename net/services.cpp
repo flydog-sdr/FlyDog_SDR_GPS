@@ -96,6 +96,9 @@ static void get_TZ(void *param)
 			if (report) lprintf("TIMEZONE: no lat/lon available from admin public config, ipinfo or GPS\n");
 			goto retry;
 		}
+		
+		gps.lowres_lat = ((int) roundf(lat)) & ~1;
+		gps.lowres_lon = ((int) roundf(lon)) & ~1;
 	
 		#define TIMEZONE_DB_COM
 		#ifdef TIMEZONE_DB_COM
@@ -739,7 +742,7 @@ static void reg_public(void *param)
                     #ifdef USE_ASAN
                         // leak detector needs exit while running on main() stack
                         kiwi_restart = true;
-                        TaskWakeup(TID_MAIN, TWF_CANCEL_DEADLINE);
+                        TaskWakeupF(TID_MAIN, TWF_CANCEL_DEADLINE);
                     #else
                         kiwi_exit(0);
                     #endif

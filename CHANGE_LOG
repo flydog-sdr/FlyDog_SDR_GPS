@@ -2,11 +2,87 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.478  November 22, 2021
+    HFDL extension improvements:
+        Added ACARS display menu option (does not show ACARS data without message content).
+        Map AFT icons: highlight yellow on mouseover. Auto EiBi label / band zooming when clicked.
+        
+    Kiwi right-click menu no longer clips when positioned near screen bottom or right edges.
+
+v1.477  November 21, 2021
+    HFDL extension improvements:
+        Added map of ground stations with active frequency table (AFT) icons sourced from
+        decoded squitter messages. It can takes a number of minutes before sufficient squitter
+        meesages are received to populate all the ground station icons.
+        
+        Small screens (laptops): because the area available for the waterfall is smaller than
+        ever use the 'x' and 'y' keys to hide the various control panels and label bars.
+        Click the "2" button at upper right to restore the map zoom/positioning.
+        The "split" show menu option lets you view the map ans a small message window simultaneously.
+        When you specify a band or frequency as an HFDL extension URL parameter EiBi labels
+        and band zooming are automatically selected. No need to specify "dx=none,hfdl" anymore.
+        
+        The Kiwi icon shown when the "Show Kiwi" button is pressed does NOT reveal the precise
+        location of the Kiwi. The lat/lon is rounded to the nearest 2 degrees which is approx.
+        200 km of latitude and 100 - 200 km of longitude depending on the latitude location
+        (recall that latitude lines converge at the poles). The purpose of showing the Kiwi
+        location is to help understand what propagation might be in effect given the time-of-day
+        at the Kiwi and transmission frequencies of the ground stations.
+        
+        No aircraft flight plotting on the map yet.
+
+v1.476  November 18, 2021
+    HFDL extension improvements:
+        From dumphfdl: Added RSSI, noise floor, SNR estimate to message header.
+    
+    Fix bug that prevented some Kiwis from updating past v1.470
+
+v1.475  November 17, 2021
+    HFDL extension improvements:
+        Now works for Kiwis using 3-channel/20.25 kHz mode.
+
+v1.474  November 15, 2021
+    HFDL extension improvements:
+        New entries in the "Bands" menu that select an entire HFDL frequency band.
+        Automatically sets the center frequency, zoom and switches to displaying only
+        the EiBi database HFDL labels. Eliminates tedious manual setup. Can be set
+        via URL parameter (see HFDL help panel).
+    
+    EiBi label database:
+        Updated to B21 published 14 Nov 21 on eibispace.de
+
+v1.473  November 13, 2021
+    HFDL extension improvements:
+        Additional processing of the messages appearing in the text window. The abbreviated 'DX'
+        display now contains aircraft info. The 'squitter' display is more compact.
+        Separate upload/download checkboxes to limit the message direction ('upload' are messages
+        transmitted from the ground stations). Thanks Martin.
+    
+    EiBi label database:
+        Clicking HFDL labels now selects IQ mode and the special USB passband used by HFDL.
+        Labels which automatically open an extension on shift-click now mention this fact in the
+        mouse-over popup (as a reminder). These are currently ALE, HFDL, Time, CW, FSK and Fax.
+        Clicking ALE, HFDL and Fax labels set the special passbands used by the associated extensions.
+        Clicking an HFDL label should also select the corresponding menu entry of the HFDL extension.
+        Corrections from the HFDL version 51 system table were applied to the EiBi database.
+
+v1.471,472  November 12, 2021
+    HFDL extension preliminary release.
+        Because the decoding happens entirely on the Beagle, and due to the buffering delay of
+        delivering audio and waterfall to the browser, you will see the decoded text before the
+        audio/waterfall occur. See:
+        forum.kiwisdr.com/index.php?p=/discussion/2424/v1-472-hfdl-extension-preliminary-release/p1
+    
+    BBAI performance improvement. Specify correct compiler cpu type (cortex-a15) and
+        vector floating point version (vfpv4) for the TI AM5729 cpu chip used by the BBAI.
+        This causes the fused multiply-add instructions available in vfpv4 to be used.
+        By comparison the BBG (TI AM3359 cpu chip) uses cortex-a8 and vfpv3.
+
 v1.470  October 15, 2021
     EiBi database now used as a second source of (read-only) DX labels.
         For details shift-click in an empty spot of the DX label area above the frequency scale.
-        Or use the first few entries in the right-click menu (or the keyboard shortcut "|").
-        Then click the help button at upper right of the DX label edit panel.
+        Or use the first few entries in the right-click menu (two-finger tap on mobile) or use the
+        keyboard shortcut "|". Then click the help button at upper right of the DX label edit panel.
 
 v1.469  October 10, 2021
     Yellow passband symbol in the frequency scale -- usability improvements:

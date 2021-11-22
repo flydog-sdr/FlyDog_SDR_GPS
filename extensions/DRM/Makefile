@@ -38,10 +38,10 @@ else
 	        rsync -av extensions/DRM/FDK-AAC/lib/ /usr/local/lib
         
         /usr/lib/arm-linux-gnueabihf/libsndfile.so:
-	        -apt-get -y install libsndfile1-dev
+	        -apt-get --no-install-recommends -y install libsndfile1-dev
         
         /usr/lib/arm-linux-gnueabihf/libz.so:
-	        -apt-get -y install zlib1g-dev
+	        -apt-get --no-install-recommends -y install zlib1g-dev
 
     else
         LIBS += -lfdk-aac
