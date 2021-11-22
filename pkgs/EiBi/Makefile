@@ -23,6 +23,8 @@ $(PROG): $(PROG).o $(MORE)
 %.o: %.cpp
 	$(CPP) $(CFLAGS) $(I) -c $<
 
+# always reads from sked-current.csv
+# always writes file ../../init/EiBi.h
 run: $(PROG)
 	./$(PROG) $(ARGS)
 	$(CMD)
