@@ -95,6 +95,7 @@ static void snd_service()
         spi_get3_noduplex(CmdGetRX, miso, rx_xfer_size, nrx_samps_rem, nrx_samps_loop);
         moved++;
         dpump.rx_adc_ovfl = miso->status & SPI_ADC_OVFL;
+        if (dpump.rx_adc_ovfl) dpump.rx_adc_ovfl_cnt++;
         
         evDPC(EC_EVENT, EV_DPUMP, -1, "snd_svc", "..CmdGetRX");
         
@@ -310,6 +311,8 @@ static void data_pump(void *param)
 	}
 }
 
+bool have_snd_users;
+
 void data_pump_start_stop()
 {
 #ifdef USE_SDR
@@ -327,7 +330,7 @@ void data_pump_start_stop()
 		itask_run = false;
 		spi_set(CmdSetRXNsamps, 0);
 		ctrl_clr_set(CTRL_SND_INTR, 0);
-		//printf("#### STOP dpump\n");
+		//real_printf("#### STOP dpump\n");
 		last_run_us = 0;
 	}
 
@@ -336,9 +339,11 @@ void data_pump_start_stop()
 		itask_run = true;
 		ctrl_clr_set(CTRL_SND_INTR, 0);
 		spi_set(CmdSetRXNsamps, nrx_samps);
-		//printf("#### START dpump\n");
+		//real_printf("#### START dpump\n");
 		last_run_us = 0;
 	}
+	
+	have_snd_users = !no_users;
 #endif
 }
 
