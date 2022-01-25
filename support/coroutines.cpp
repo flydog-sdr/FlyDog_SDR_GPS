@@ -364,6 +364,8 @@ static void TdeQ(TASK *t)
 // Print per-task accumulated usec runtime since last dump.
 // NB: all these prints take so long that the "max mS" of the current task (usually the web server)
 // will appear to go into the LRUN state.
+static int soft_fail;
+
 void TaskDump(u4_t flags)
 {
 	int i, j;
@@ -379,8 +381,8 @@ void TaskDump(u4_t flags)
 	
 	TASK *ct = cur_task;
 
-	int tused = 0;
-	for (i=0; i <= max_task; i++) {
+	int tused = 1;      // count main() because it doesn't have a ctx[].init set
+	for (i = TID_FIRST; i <= max_task; i++) {
 		t = Tasks + i;
 		if (t->valid && ctx[i].init) tused++;
 		if (flags & TDUMP_CLR_HIST)
@@ -401,7 +403,9 @@ void TaskDump(u4_t flags)
 	#else
 	    const char *asan_used = "";
 	#endif
-	lfprintf(printf_type, "TASKS: used %d/%d, spi_retry %d, spi_delay %d%s\n", tused, MAX_TASKS, spi.retry, spi_delay, asan_used);
+	lfprintf(printf_type, "TASKS: used %d/%d(%d|%d|%d), soft_fail %d, spi_retry %d, spi_delay %d%s\n",
+	    tused, MAX_TASKS, REG_STACK_TASKS, MED_STACK_TASKS, LARGE_STACK_TASKS,
+	    soft_fail, spi.retry, spi_delay, asan_used);
 
 	if (flags & TDUMP_LOG)
 	//lfprintf(printf_type, "Tttt Pd# cccccccc xxx.xxx xxxxx.xxx xxx.x%% xxxxxx xxxxx xxxxx xxx xxxxx xxx xxxx.xxxuu xxx%% cN\n");
@@ -419,41 +423,46 @@ void TaskDump(u4_t flags)
 		float f_longest = ((float) t->longest) / 1e3;
 
 		float deadline=0;
-		const char *dunit = "";
+		const char *dline = "", *dunit = "";
 		if (t->deadline > 0) {
-			deadline = (t->deadline > now_us)? (float) (t->deadline - now_us) : 9999999;
-			deadline /= 1e3;            // _mmm.uuu msec
-			dunit = "ms";
-			if (deadline >= 3600000) {  // >= 60 min
-			    deadline /= 3600000;    // hhhh.fff hr
-			    dunit = "Hr";
-			} else
-			if (deadline >= 60000) {    // >= 60 secs
-			    deadline /= 60000;      // mmmm.fff min
-			    dunit = "Mn";
-			} else
-			if (deadline >= 1000) {     // >= 1 sec
-			    deadline /= 1000;       // ssss.fff sec
-			    dunit = "s";
-			}
+		    if (t->deadline < now_us) {
+		        dline = "has past";
+		    } else {
+                deadline = (float) (t->deadline - now_us);
+                deadline /= 1e3;            // _mmm.uuu msec
+                dunit = "ms";
+                if (deadline >= 3600000) {  // >= 60 min
+                    deadline /= 3600000;    // hhhh.fff hr
+                    dunit = "Hr";
+                } else
+                if (deadline >= 60000) {    // >= 60 secs
+                    deadline /= 60000;      // mmmm.fff min
+                    dunit = "Mn";
+                } else
+                if (deadline >= 1000) {     // >= 1 sec
+                    deadline /= 1000;       // ssss.fff sec
+                    dunit = "s";
+                }
+                dline = stprintf("%8.3f%-2s", deadline, dunit);
+            }
 		}
 		
 		int rx_channel = (t->flags & CTF_RX_CHANNEL)? (t->flags & CTF_CHANNEL) : -1;
 
 		if (flags & TDUMP_LOG)
-		lfprintf(printf_type, "%c%03d %c%d%c %c%c%c%c%c%c%c%c %7.3f %9.3f %5.1f%% %6s %5d %5d %-3s %5d %-3s %8.3f%-2s %3d%c %s%d %-10s %-24s\n",
+		lfprintf(printf_type, "%c%03d %c%d%c %c%c%c%c%c%c%c%c %7.3f %9.3f %5.1f%% %6s %5d %5d %-3s %5d %-3s %10s %3d%c %s%d %-10s %-24s\n",
 		    (t == ct)? '*':'T', i, (t->flags & CTF_PRIO_INVERSION)? 'I':'P', t->priority, t->lock_marker,
 			t->stopped? 'T':'R', t->wakeup? 'W':'_', t->sleeping? 'S':'_', t->pending_sleep? 'P':'_', t->busy_wait? 'B':'_',
 			t->lock.wait? 'L':'_', t->lock.hold? 'H':'_', t->minrun? 'q':'_',
 			f_usec, f_longest, f_usec/f_elapsed*100,
 			toUnits(t->run), t->cmds,
 			t->stat1, t->units1? t->units1 : " ", t->stat2, t->units2? t->units2 : " ",
-			deadline, dunit, t->stack_hiwat*100 / t->ctx->stack_size_u64, (t->flags & CTF_STACK_MED)? 'M' : ((t->flags & CTF_STACK_LARGE)? 'L' : '%'),
+			dline, t->stack_hiwat*100 / t->ctx->stack_size_u64, (t->flags & CTF_STACK_MED)? 'M' : ((t->flags & CTF_STACK_LARGE)? 'L' : '%'),
 			(rx_channel != -1)? "c":"", rx_channel,
 			t->name, t->where? t->where : "-"
 		);
 		else
-		lfprintf(printf_type, "%c%03d %c%d%c %c%c%c%c%c%c%c%c %7.3f %9.3f %5.1f%% %6s %5d %5d %-3s %5d %-3s %5d %5d %5d %8.3f%c %3d%%%c %s%d %-10s %-24s %-24s\n",
+		lfprintf(printf_type, "%c%03d %c%d%c %c%c%c%c%c%c%c%c %7.3f %9.3f %5.1f%% %6s %5d %5d %-3s %5d %-3s %5d %5d %5d %10s %3d%c %s%d %-10s %-24s %-24s\n",
 		    (t == ct)? '*':'T', i, (t->flags & CTF_PRIO_INVERSION)? 'I':'P', t->priority, t->lock_marker,
 			t->stopped? 'T':'R', t->wakeup? 'W':'_', t->sleeping? 'S':'_', t->pending_sleep? 'P':'_', t->busy_wait? 'B':'_',
 			t->lock.wait? 'L':'_', t->lock.hold? 'H':'_', t->minrun? 'q':'_',
@@ -461,7 +470,7 @@ void TaskDump(u4_t flags)
 			toUnits(t->run), t->cmds,
 			t->stat1, t->units1? t->units1 : " ", t->stat2, t->units2? t->units2 : " ",
 			t->wu_count, t->no_run_same, t->spi_retry,
-			deadline, dunit, t->stack_hiwat*100 / t->ctx->stack_size_u64, (t->flags & CTF_STACK_MED)? 'M' : ((t->flags & CTF_STACK_LARGE)? 'L' : '%'),
+			dline, t->stack_hiwat*100 / t->ctx->stack_size_u64, (t->flags & CTF_STACK_MED)? 'M' : ((t->flags & CTF_STACK_LARGE)? 'L' : '%'),
 			(rx_channel != -1)? "c":"", rx_channel,
 			t->name, t->where? t->where : "-",
 			t->long_name? t->long_name : "-"
@@ -775,7 +784,10 @@ void TaskInit()
     //setpriority(PRIO_PROCESS, getpid(), -20);
 
 	kiwi_server_pid = getpid();
-	printf("TASK MAX_TASKS %d, stack memory %.1f MB, stack size %d k so(u64_t)\n", MAX_TASKS, ((float) sizeof(task_stacks))/M, STACK_SIZE_U64_T/K);
+	printf("TASK MAX_TASKS %d(%d|%d|%d), stack memory %.1f MB, stack size %d|%d|%d k so(u64_t)\n",
+	    MAX_TASKS, REG_STACK_TASKS, MED_STACK_TASKS, LARGE_STACK_TASKS,
+	    ((float) sizeof(task_stacks))/M,
+	    STACK_SIZE_REG * STACK_SIZE_U64_T / K, STACK_SIZE_MED * STACK_SIZE_U64_T / K, STACK_SIZE_LARGE * STACK_SIZE_U64_T / K);
 
 	t = Tasks;
 	cur_task = t;
@@ -1307,7 +1319,10 @@ void _NextTask(const char *where, u4_t param, u_int64_t pc)
         #endif
     } while (p < LOWEST_PRIORITY);		// if no eligible tasks keep looking
     
-	if (!need_hardware || update_in_progress || sd_copy_in_progress || LINUX_CHILD_PROCESS()) {
+    // DANGER: Critical to have "!have_snd_users" test. Otherwise deadlock situation can occur:
+    // Data pump is still running, interrupting faster than kiwi_usleep() rate below. This keeps
+    // the scheduler hung at the data pump priority level, never running anything else!
+	if (!need_hardware || (update_in_progress && !have_snd_users) || sd_copy_in_progress || LINUX_CHILD_PROCESS()) {
 		kiwi_usleep(100000);		// pause so we don't hog the machine
 	}
 
@@ -1377,9 +1392,15 @@ int _CreateTask(funcP_t funcP, const char *name, void *param, int priority, u4_t
         if (!t->valid && ctx[i].init && t_stack_size == stack_size) break;
     }
     if (i == MAX_TASKS) {
-        dump();
-        lprintf("create_task: stack_size=%04x\n", stack_size);
-        panic("create_task: no tasks available");
+        if (flags & CTF_SOFT_FAIL) {
+            soft_fail++;
+            return -1;
+        } else {
+            dump();
+            lprintf("create_task: stack_size=%s\n",
+                (stack_size == CTF_STACK_REG)? "REG" : ((stack_size == CTF_STACK_MED)? "MED" : "LARGE"));
+            panic("create_task: no tasks available");
+        }
     }
     
 	if (i > max_task) max_task = i;

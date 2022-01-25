@@ -30,19 +30,19 @@ else
 
         LIBS_DEP += /usr/bin/cmake
         /usr/bin/cmake:
-	        -apt-get --no-install-recommends -y install cmake
+	        -apt-get -y install cmake
 
         LIBS_DEP += /usr/lib/arm-linux-gnueabihf/libglib-2.0.so
         /usr/lib/arm-linux-gnueabihf/libglib-2.0.so:
-	        -apt-get --no-install-recommends -y install libglib2.0-dev
+	        -apt-get -y install libglib2.0-dev
 
         LIBS_DEP += /usr/lib/arm-linux-gnueabihf/libconfig++.so
         /usr/lib/arm-linux-gnueabihf/libconfig++.so:
-	        -apt-get --no-install-recommends -y install libconfig++-dev
+	        -apt-get -y install libconfig++-dev
 
         LIBS_DEP += /usr/lib/arm-linux-gnueabihf/libsqlite3.so
         /usr/lib/arm-linux-gnueabihf/libsqlite3.so:
-	        -apt-get --no-install-recommends -y install libsqlite3-dev
+	        -apt-get -y install libsqlite3-dev
     else
         EXT_I += -I/opt/local/include/glib-2.0 -I/usr/local/include/libacars-2
         EXT_I += -I/usr/local/Cellar/glib/2.64.3/lib/glib-2.0/include

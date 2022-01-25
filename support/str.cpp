@@ -51,7 +51,7 @@ Boston, MA  02110-1301, USA.
 typedef struct kstring_st {
 	#define KS_LAST (KSTRINGS + 1)
     #if KS_LAST > 0xffff
-        #error KS_LAST doesn't fit in u2_t!
+        #error KS_LAST does not fit in u2_t!
     #endif
 	u2_t next_free;
 	#define KS_VALID 1
@@ -406,7 +406,26 @@ char *kiwi_str_escape_HTML(char *str)
 	return sn;
 }
 
-char *kiwi_str_encode(char *src)
+static void kiwi_alt_encode(const char *src, char *dst, size_t dst_len) {
+  static const char *hex = "0123456789abcdef";
+  const char *end = dst + dst_len - 1;
+
+  for (; *src != '\0' && dst < end; src++, dst++) {
+    if (*src >= ' ' && *src <= '~') {
+      *dst = *src;
+    } else if (dst + 3 < end) {
+      dst[0] = '<';
+      dst[1] = hex[(* (const unsigned char *) src) >> 4];
+      dst[2] = hex[(* (const unsigned char *) src) & 0xf];
+      dst[3] = '>';
+      dst += 3;
+    } else break;	// KiwiSDR: for valgrind, don't leave uninitialized bytes in string
+  }
+
+  *dst = '\0';
+}
+
+char *kiwi_str_encode(char *src, bool alt)
 {
 	if (src == NULL) src = (char *) "null";		// JSON compatibility
 	
@@ -417,7 +436,10 @@ char *kiwi_str_encode(char *src)
 	// and also because dx list has to use kiwi_ifree() due to related allocations via strdup()
 	check(slen);
 	char *dst = (char *) kiwi_imalloc("kiwi_str_encode", slen);
-	mg_url_encode(src, dst, slen);
+	if (alt)
+	    kiwi_alt_encode(src, dst, slen);
+	else
+	    mg_url_encode(src, dst, slen);
 	return dst;		// NB: caller must kiwi_ifree(dst)
 }
 
@@ -425,10 +447,13 @@ char *kiwi_str_encode(char *src)
 static char dst_static[N_DST_STATIC];
 
 // for use with e.g. an immediate printf argument
-char *kiwi_str_encode_static(char *src)
+char *kiwi_str_encode_static(char *src, bool alt)
 {
 	if (src == NULL) src = (char *) "null";		// JSON compatibility
-	mg_url_encode(src, dst_static, N_DST_STATIC);
+	if (alt)
+	    kiwi_alt_encode(src, dst_static, N_DST_STATIC);
+	else
+	    mg_url_encode(src, dst_static, N_DST_STATIC);
 	return dst_static;
 }
 
@@ -455,19 +480,26 @@ char *kiwi_str_decode_static(char *src)
 static u1_t decode_table[128] = {
 //  (ctrl)
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+
 //  (ctrl)
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-//    ! " # $ % & ' ( ) * + , - . /     still % encoded: "%&'+
+
+//    ! " # $ % & ' ( ) * + , - . /     still % encoded: "22 %25 &26 '27 +2b
     1,1,0,1,1,0,0,0,1,1,1,0,1,1,1,1,
-//  0 1 2 3 4 5 6 7 8 9 : ; < = > ?     still % encoded: ;<>
+
+//  0 1 2 3 4 5 6 7 8 9 : ; < = > ?     still % encoded: ;3b <3c >3e
     1,1,1,1,1,1,1,1,1,1,1,0,0,1,0,1,
+
 //  @ (alpha)
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-//  (alpha)               [ \ ] ^ _     still % encoded: \
+
+//  (alpha)               [ \ ] ^ _     still % encoded: \5c
     1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,
-//  ` (alpha)                           still % encoded: `
+
+//  ` (alpha)                           still % encoded: `60
     0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-//  (alpha)               { | } ~ del   still % encoded: del
+
+//  (alpha)               { | } ~ del   still % encoded: del 7f
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,
 };
 
@@ -592,6 +624,16 @@ char *kiwi_overlap_strcpy(char *dst, const char *src)
         *d++ = c;
     } while (c != '\0');
     return dst;
+}
+
+
+// version of strlen() with limit to handle a corrupt string without proper null-termination
+int kiwi_strnlen(const char *s, int limit)
+{
+    int i;
+    for (i = 0; s && *s && i <= limit; i++)
+        s++;
+    return i;
 }
 
 
