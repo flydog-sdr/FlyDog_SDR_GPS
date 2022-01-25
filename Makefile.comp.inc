@@ -121,7 +121,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 	BBAI := $(shell grep -q -s "BeagleBoard" /etc/dogtag && echo true)
 	RPI := $(shell grep -q -s "Raspberry Pi" /boot/issue.txt && echo true)
 	DEBIAN_7 := $(shell cat /etc/debian_version | grep -q -s "7\." && echo true)
-	DEBIAN_10 := $(shell cat /etc/debian_version | grep -q -s "10\." && echo true)
+	DEBIAN_10 := $(shell cat /dev/null | grep -q -s "10\." && echo true)
 
 	ifeq ($(BBAI),true)
 	    DEBIAN_BUILD_VER = "Debian 9"
