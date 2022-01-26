@@ -2,6 +2,9 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.4861  January 26, 2022
+    Admin page: Fixed bug coordinates unable to change.
+
 v1.486  January 18, 2022
     Support for Debian 10 (Buster) on BBG/BBB.
 
