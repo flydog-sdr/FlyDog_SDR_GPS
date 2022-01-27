@@ -1,8 +1,5 @@
-export PROJ=~/FlyDog_SDR_GPS
+export PROJ=~/Beagle_SDR_GPS
 #export PATH=$PROJ:$PATH
-
-export COLOR='--color=auto'
-export LS_OPTIONS='--color=auto'
 
 if [ -f ~/.bashrc.local.common ]; then
   . ~/.bashrc.local.common
