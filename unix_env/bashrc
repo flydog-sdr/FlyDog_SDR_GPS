@@ -2,6 +2,9 @@ if [ -f ~/.bashrc.local ]; then
   . ~/.bashrc.local
 fi
 
+export COLOR='--color=auto'
+export LS_OPTIONS='--color=auto'
+
 alias bargs="function _bargs () { echo arg_one \$1 ; echo arg_two \$2 ; echo all_args \$* ; echo files_dirs * ; } ; _bargs"
 
 # shell
@@ -172,7 +175,7 @@ alias gdi="git diff"
 alias gst="git status"
 alias gsh="git show"
 alias grem="git remote -v"
-alias gclone="function _gclone () { git clone https://github.com/flydog-sdr/\$1.git ; } ; _gclone"
+alias gclone="function _gclone () { git clone https://github.com/jks-prv/\$1.git ; } ; _gclone"
 
 # git commits
 # current commit
@@ -240,7 +243,7 @@ alias cdbdt="cd /boot/dtbs/${d_sys}"
 # procedure: cddt; cpdt; m; cpdt2; reboot
 d_dt="/opt/source/dtb-${d_ver}"
 d_dt2="/opt/source/dtb-${d_ver}/src/arm"
-d_ai="~/FlyDog_SDR_GPS/platform/beaglebone_AI"
+d_ai="~/Beagle_SDR_GPS/platform/beaglebone_AI"
 f_dts="am5729-beagleboneai.dts"
 f_dtb="am5729-beagleboneai.dtb"
 f_cape="am5729-beagleboneai-kiwisdr-cape"
@@ -332,7 +335,7 @@ alias mu="make users"
 alias ja="jq '.' /root/kiwi.config/admin.json"
 alias jk="jq '.' /root/kiwi.config/kiwi.json"
 alias jd="jq '.' /root/kiwi.config/dx.json"
-alias scD="git clone https://github.com/flydog-sdr/FlyDog_SDR_GPS.git"
+alias scD="git clone https://github.com/jks-prv/Beagle_SDR_GPS.git"
 alias urldecode='sed "s@+@ @g;s@%@\\\\x@g" | xargs -0 printf "%b"'
 alias wk="json_pp -t dumper <~root/kiwi.config/kiwi.json | grep rx_name | urldecode"
 alias status="function _status () { curl --connect-timeout 5 \${*}:8073/status ; } ; _status"

@@ -1595,15 +1595,19 @@ function network_dhcp_static_update_cb(path, idx)
 {
    var use_static = adm.ip_address.use_static;
 	if (use_static) {
-      ext_send('SET static_ip='+ kiwi_ip_str(network_ip) +' static_nm='+ kiwi_ip_str(network_nm) +' static_gw='+ kiwi_ip_str(network_gw));
       ext_send('SET dns dns1=x'+ encodeURIComponent(adm.ip_address.dns1) +' dns2=x'+ encodeURIComponent(adm.ip_address.dns2));
+      ext_send('SET static_ip='+ kiwi_ip_str(network_ip) +' static_nm='+ kiwi_ip_str(network_nm) +' static_gw='+ kiwi_ip_str(network_gw));
 	} else {
 		ext_send('SET use_DHCP');
 	}
 
    ext_set_cfg_param('adm.ip_address.commit_use_static', use_static, EXT_SAVE)
    w3_hide('id-net-need-update');
-   w3_reboot_cb();		// show reboot button after confirm button pressed
+   
+   if (debian_ver <= 9)    // Debian 10 and above use connmanctl which has immediate effect (no reboot required)
+      w3_reboot_cb();      // show reboot button after confirm button pressed
+   else
+		window.location.reload(true);
 }
 
 function network_static_init()
