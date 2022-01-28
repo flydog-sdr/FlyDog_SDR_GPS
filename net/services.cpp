@@ -797,9 +797,9 @@ static void reg_public(void *param)
 
         bool kiwisdr_com_reg = (admcfg_bool("kiwisdr_com_register", NULL, CFG_OPTIONAL) == true);
 
-        // proxy always uses port 8073
+        // proxy always uses port 80
 	    int dom_sel = cfg_int("sdr_hu_dom_sel", NULL, CFG_REQUIRED);
-        int server_port = (dom_sel == DOM_SEL_REV)? 8073 : net.port_ext;
+        int server_port = (dom_sel == DOM_SEL_REV)? 80 : net.port_ext;
         int dom_stat = (dom_sel == DOM_SEL_REV)? net.proxy_status : (DUC_enable_start? net.DUC_status : -1);
 
 	    // done here because updating timer_sec() is sent
