@@ -12,6 +12,7 @@ var bpc = {
    msec: 0,
    dcnt: 0,
    line: 0,
+   phase: 0,
    prev: [],
    raw: [],
    chr: 0,
@@ -32,7 +33,7 @@ function bpc_legend()
 {
    if ((bpc.line & 3) == 0) {
       //tc_dmsg('         ');
-      tc_dmsg('ss hhhhhh mmmmmm ????Pp dddddd mmmm yyyyyy ?? <br>');
+      tc_dmsg('ss hhhhhh mmmmmm ?????? dddddd mmmm yyyyyy ?? <br>');
    }
 }
 
@@ -61,17 +62,24 @@ function bpc_decode(b)
 
    var yr = b[15]*16 + b[16]*4 + b[17] + 2000;
    
-   // odd-parity bit is b[9] & 1
-   var parity = 0;
-   for (var i = 0; i < 19; i++) {
-      parity += [0,1,1,2][b[i]];
-   }
-   parity = parity & 1;
-
    var s = day +' '+ mo +' '+ yr +' '+ hour +':'+ min +':'+ sec +' CST';
-   var p = parity? 'PARITY ERROR' : '';
-   tc_dmsg('   '+ s +'  '+ p +'<br>');
-   tc_stat('lime', 'Time decoded: '+ (parity? p : s));
+
+/*
+   var parity_check = (b[8] & 1) ^ 1;
+   var parity_sum = 0;
+   for (var i = 0; i < 19; i++) {
+      parity_sum += [0,1,1,2][b[i]];
+   }
+   var parity_error = ((parity_sum & 1) != parity_check)? false : true;
+
+   var p = parity_error? 'PARITY ERROR' : '';
+   var p2 = parity_error? '<span style="color:orange">PARITY ERROR</span>' : '';
+   tc_dmsg('   '+ s +'  '+ p2 +'<br>');
+   tc_stat('lime', 'Time decoded: '+ (parity_error? p : s));
+*/
+
+   tc_dmsg('   '+ s +'<br>');
+   tc_stat('lime', 'Time decoded: '+ s);
 }
 
 function bpc_clr()
@@ -79,6 +87,7 @@ function bpc_clr()
    var m = bpc;
    
    m.cur = m.cnt = m.one_width = m.zero_width = 0;
+   m.phase ^= 1;
    m.arm = m.no_modulation = m.dcnt = m.modct = m.line = m.sec = m.msec = 0;
    tc.trig = 0;
    tc.state = tc.ACQ_SYNC;
@@ -98,7 +107,7 @@ function bpc_ampl(ampl)
 	var m = bpc;
 	tc.trig++; if (tc.trig >= 100) tc.trig = 0;
 	ampl = (ampl > 0.5)? 1:0;
-	if (!tc.ref) { tc.data = ampl^1; tc.ref = 1; }
+	if (!tc.ref) { tc.data = ampl ^ m.phase; tc.ref = 1; }
 	
 	// de-noise signal
    if (ampl == m.cur) {
@@ -158,6 +167,7 @@ function bpc_ampl(ampl)
             }
    		   m.one_width = 0;
    		} else {
+   		   // one-to-zero transition
    		   //tc_dmsg('1-'+ m.one_width +' ');
    		   //m.chr += 5;
    		   //if (m.chr > 80) { tc_dmsg('<br>'); m.chr = 0; }
@@ -172,7 +182,7 @@ function bpc_ampl(ampl)
 	if (tc.state == tc.ACQ_SYNC && m.arm == 0 && m.one_width >= 170) { m.arm = 1; m.one_width = 0; }
 	if (m.arm == 1 && tc.data_last == 1 && tc.data == 0) {
 	   m.arm = 2;
-	   tc.state = tc.MIN_MARK;
+	   tc.state = tc.SYNCED;
       tc.trig = 0;
       tc.sample_point = 40;
 	   bpc_legend();

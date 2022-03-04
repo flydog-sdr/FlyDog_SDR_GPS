@@ -1080,7 +1080,6 @@ var network = {
    auto_nat_color:   null,
    show_updating: true,
    ip_blacklist_check_mtime: true,
-   ip_blacklist_input_prev: null,
    ethernet_speed_s: [ '100 Mbps', '10 Mbps' ],
    ethernet_mtu_s: [ '1500 (default)', '1440', '1400' ]
 };
@@ -1098,8 +1097,8 @@ function network_html()
    // check once per admin page load
    if (network.ip_blacklist_check_mtime) {
       network.ip_blacklist_double_fault = false;
-      //kiwi_ajax('http://kiwisdr.com/ip_blacklist/ip_blacklist.cjson.mtime', 'network_blacklist_mtime_cb', 0, -2000);
-      kiwi_ajax('http://kiwisdr.com/ip_blacklist/ip_blacklist.cjson.mtime', 'network_blacklist_mtime_cb', 0, 10000);
+      //kiwi_ajax(kiwi_SSL() +'kiwisdr.com/ip_blacklist/ip_blacklist2.cjson.mtime', 'network_blacklist_mtime_cb', 0, -2000);
+      kiwi_ajax(kiwi_SSL() +'kiwisdr.com/ip_blacklist/ip_blacklist2.cjson.mtime', 'network_blacklist_mtime_cb', 0, 10000);
       network.ip_blacklist_check_mtime = false;
    }
    
@@ -1111,11 +1110,15 @@ function network_html()
 		) +
 
 		'<hr>' +
-		w3_div('id-net-reboot',
-			w3_inline('w3-halign-space-around w3-margin-bottom w3-text-teal/',
+		w3_div('id-net-reboot w3-container',
+			w3_inline('w3-halign-space-between w3-margin-bottom w3-text-teal/',
 			   w3_divs('w3-valign w3-flex-col w3-restart/w3-tspace-6',
 					w3_input_get('', 'Internal port', 'adm.port', 'admin_int_cb'),
 					w3_input_get('', 'External port', 'adm.port_ext', 'admin_int_cb')
+				),
+				w3_divs('id-net-ssl-vis w3-hide/ w3-center w3-restart',
+					'<b>Enable HTTPS/SSL on<br>network connections?</b><br>',
+					w3_switch_get_param('id-net-ssl w3-margin-T-8', 'Yes', 'No', 'adm.use_ssl', true, false, 'network_use_ssl_cb')
 				),
 				/*w3_divs('w3-center w3-restart',
 					'<b>Auto add NAT rule<br>on firewall / router?</b><br>',
@@ -1128,14 +1131,21 @@ function network_html()
             w3_divs('w3-center/',
                w3_select('', 'Ethernet interface speed', '', 'ethernet_speed', cfg.ethernet_speed, network.ethernet_speed_s, 'network_ethernet_speed'),
                w3_div('w3-text-black',
-                  'Select 10 Mbps to reduce Ethernet spurs. <br> Try changing while looking at waterfall.')
+                  'Select 10 Mbps to reduce <br> Ethernet spurs. Try changing <br> while looking at waterfall.')
             ),
             w3_divs('w3-center/',
                w3_select('', 'Ethernet interface MTU', '', 'ethernet_mtu', cfg.ethernet_mtu, network.ethernet_mtu_s, 'network_ethernet_mtu'),
                w3_div('w3-text-black',
-                  'Select 1440 when having connection <br> problems using 4G networks.')
+                  'Select 1440 when having <br> connection problems <br> using 4G networks.')
             )
 			),
+			
+			w3_div('id-net-ssl-container w3-restart w3-hide',
+            w3_inline('w3-halign-space-between w3-margin-bottom w3-text-teal/',
+               w3_input_get('', 'Local port (HTTP)', 'adm.port_http_local', 'admin_int_cb')
+            )
+         ),
+			
 			w3_div('id-net-static w3-hide',
 			   w3_div('',
                w3_third('w3-margin-B-8 w3-text-teal', 'w3-container',
@@ -1212,44 +1222,20 @@ function network_html()
                )
             ),
             
-            /*
             w3_divs('/w3-center w3-tspace-8',
-               w3_div('', '<b>Download IP address blacklist?</b>'),
-               w3_button('w3-aqua', 'Download', 'network_download_button_cb'),
-               w3_text('w3-text-black w3-center',
-               / *
-                  'WARNING: will overwrite anything you have entered in <br>' +
-                  'the blacklist text area below.' +
-               * /
-                  'Downloads a standard blacklist definition from kiwisdr.com'
-               )
-            ),
-            */
-            
-            w3_divs('/w3-center w3-tspace-8',
-               //w3_inline('w3-valign w3-halign-space-between/',
-                  /*
                   w3_div('',
-                     w3_div('', '<b>Automatic download of <br> IP address blacklist?</b>'),
-                     w3_switch('w3-margin-T-8', 'Yes', 'No', 'adm.ip_blacklist_download', adm.ip_blacklist_download, 'admin_radio_YN_cb')
-                  ), */
-                  
-                  w3_div('',
-                     //w3_div('w3-margin-T-16', '<b>Manual download</b>'),
                      w3_div('w3-margin-T-16', '<b>Download IP address blacklist?</b>'),
                      w3_inline('w3-valign w3-halign-space-evenly w3-margin-T-10/',
                         w3_button('id-ip-blacklist-download w3-aqua', 'Download', 'network_download_button_cb'),
-                        w3_text('id-ip-blacklist-new w3-text-red w3-hide', 'New blacklist available')
+                        w3_text('id-ip-blacklist-new w3-text-red w3-hide', 'New blacklist available'),
+                        w3_button('w3-aqua', 'Clear', 'network_download_clear_cb')
                      )
                   )
-               //),
                ,
                w3_text('w3-text-black w3-center',
-                  //'Downloads a standard blacklist definition from ' +
-                  //w3_link('w3-link-darker-color', 'http://kiwisdr.com/ip_blacklist/ip_blacklist.cjson', 'kiwisdr.com')
-                  'WARNING: Download will overwrite anything you have manually entered <br>' +
-                  'in the blacklist text area below. Re-enter any changes afterwards. <br>' +
-                  'Downloads a standard blacklist definition from kiwisdr.com'
+                  'Downloads a standard blacklist definition from ' +
+                  w3_link('w3-link-darker-color', 'http://kiwisdr.com/ip_blacklist/ip_blacklist2.cjson', 'kiwisdr.com') +
+                  '<br>A local, writeable blacklist can be entered below.'
                )
             ),
             
@@ -1265,18 +1251,15 @@ function network_html()
             w3_div('id-ip-blacklist-status w3-margin-left w3-text-black w3-background-pale-aqua', '')
          ),
          
-         //w3_textarea_get_param('w3-margin-T-16//w3-light-grey|width:100%|readonly',
-         w3_textarea_get_param('w3-margin-T-16//w3-input-any-change|width:100%',
-            //'Downloaded blacklist (read-only)',
-            '',
-            'adm.ip_blacklist', 8, 100, 'network_ip_blacklist_cb', ''
-         ) /*,
+         w3_textarea_get_param('w3-margin-T-16//w3-light-grey|width:100%|readonly',
+            'Downloaded blacklist (read-only)',
+            'adm.ip_blacklist', 8, 100, '', ''
+         ),
          
-         w3_textarea_get_param('w3-margin-T-32//w3-input-any-change|width:100%',
+         w3_textarea_get_param('w3-margin-T-32//w3-input-any-change w3-no-change-events|width:100%',
             'Local blacklist (writeable)',
-            'adm.ip_blacklist_local', 8, 100, 'network_ip_blacklist_cb', ''
+            'adm.ip_blacklist_local', 8, 100, 'network_user_blacklist_cb', ''
          )
-         */
       ) +
 
       '<hr>' +
@@ -1295,17 +1278,46 @@ function network_html()
 	return w3_div('id-network w3-hide', s1 + s2 + s3);
 }
 
+function network_ssl_container_init()
+{
+   var show = dbgUs && (debian_ver >= 10);
+   w3_hide2('id-net-ssl-vis', !show);
+
+   var use_ssl = show && adm.use_ssl;
+   var s = '';
+   if (use_ssl) s = ' (HTTPS)';
+   w3_innerHTML('id-adm.port-label', 'Internal port'+ s);
+   w3_innerHTML('id-adm.port_ext-label', 'External port'+ s);
+   w3_hide2('id-net-ssl-container', !use_ssl);
+}
+
+function network_use_ssl_cb(path, idx, first)
+{
+   if (first) return;
+	var use_ssl = (+idx == 0);
+	console.log('network_use_ssl_cb use_ssl='+ use_ssl);
+   admin_bool_cb(path, use_ssl);
+   network_ssl_container_init();
+}
+
 function network_download_button_cb(id, idx, first)
 {
    if (first) return;
    w3_innerHTML('id-ip-blacklist-status', 'updating..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 20));
-   //kiwi_ajax('http://kiwisdr.com/ip_blacklist/ip_blacklist.cjson', 'network_download_blacklist_cb', 0, -2000);
-   kiwi_ajax('http://kiwisdr.com/ip_blacklist/ip_blacklist.cjson', 'network_download_blacklist_cb', 0, 10000);
+   //kiwi_ajax(kiwi_SSL() +'kiwisdr.com/ip_blacklist/ip_blacklist2.cjson', 'network_download_blacklist_cb', 0, -2000);
+   kiwi_ajax(kiwi_SSL() +'kiwisdr.com/ip_blacklist/ip_blacklist2.cjson', 'network_download_blacklist_cb', 0, 10000);
 }
 
-function network_user_blacklist_cb(id, idx)
+function network_download_clear_cb(id, idx, first)
 {
-   console.log('network_user_blacklist_cb='+ idx);
+   network_ip_blacklist_cb('adm.ip_blacklist', '');
+   w3_int_set_cfg_cb('adm.ip_blacklist_mtime', 0);
+}
+
+function network_user_blacklist_cb(path, val)
+{
+   //console.log('network_user_blacklist_cb val='+ val);
+   network_ip_blacklist_cb('adm.ip_blacklist_local', val);
 }
 
 function network_download_blacklist_cb(bl)
@@ -1417,20 +1429,20 @@ function network_download_blacklist_cb(bl)
    network.show_updating = true;
 
    // silently fail if kiwisdr.com can't be contacted for the mtime check
-   //kiwi_ajax('http://kiwisdr.com/ip_blacklist/ip_blacklist.cjson.mtime', 'network_blacklist_mtime_cb', 1, -2000);
-   kiwi_ajax('http://kiwisdr.com/ip_blacklist/ip_blacklist.cjson.mtime', 'network_blacklist_mtime_cb', 1, 10000);
+   //kiwi_ajax('http://kiwisdr.com/ip_blacklist/ip_blacklist2.cjson.mtime', 'network_blacklist_mtime_cb', 1, -2000);
+   kiwi_ajax('http://kiwisdr.com/ip_blacklist/ip_blacklist2.cjson.mtime', 'network_blacklist_mtime_cb', 1, 10000);
 }
 
 function network_blacklist_mtime_cb(mt, update)
 {
    var fault = false;
    
-   if (!mt) {
+   if (!isArg(mt)) {
       console.log('network_blacklist_mtime_cb: mt='+ mt);
       fault = true;
    } else
    
-   if (mt.AJAX_error && mt.AJAX_error == 'timeout') {
+   if (isObject(mt) && mt.AJAX_error && mt.AJAX_error == 'timeout') {
       console.log('network_blacklist_mtime_cb: TIMEOUT');
       fault = true;
    }
@@ -1441,9 +1453,8 @@ function network_blacklist_mtime_cb(mt, update)
    }
    //console.log(mt);
    
-   // since the JSON data is just a number (not an object or array)
-   // mt will be the object: { AJAX_error: "JSON prefix", response: "(number)\n" }
-   var mtime = parseInt(mt.response);
+   if (dbgUs) console.log(mt);
+   var mtime = parseInt(mt);
    if (dbgUs) console.log('network_blacklist_mtime_cb: '+ (update? 'UPDATE' : 'AVAIL') +
       ' mtime='+ mtime +' adm.ip_blacklist_mtime='+ adm.ip_blacklist_mtime);
    
@@ -1473,6 +1484,8 @@ function network_proxy_server_cb(path, val)
 
 function network_ip_blacklist_cb(path, val)
 {
+   //console.log('network_ip_blacklist_cb path='+ path +' val='+ val);
+   
 	var re = /([^,;\s]+)/gm;
 	var ar = val.match(re);
 	//console.log(ar);
@@ -1482,28 +1495,54 @@ function network_ip_blacklist_cb(path, val)
    ar.forEach(function(v) {
       s += v +' ';
    });
-   //console.log('network_ip_blacklist_cb s='+ dq(s) + ' prev='+ dq(network.ip_blacklist_input_prev));
-   if (s == network.ip_blacklist_input_prev) {
-      console.log('blacklist unchanged');
-      w3_innerHTML('id-ip-blacklist-status', 'blacklist up-to-date');
-      return;     // detect multiple callbacks with same input
-   }
-
-   network.ip_blacklist_input_prev = s;
-   ext_send('SET network_ip_blacklist_clear');
-   if (network.show_updating) {
-      //w3_innerHTML('id-ip-blacklist-status', 'downloading..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 20));
-      w3_innerHTML('id-ip-blacklist-status', 'updating..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 20));
-   }
    w3_set_value(path, s);
    w3_string_set_cfg_cb(path, s);
+
+   if (path.endsWith('ip_blacklist_local')) {
+	   network.ip_blacklist_local = ar;
+	   
+	   // make sure network.ip_blacklist is valid
+	   ar = decodeURIComponent(adm.ip_blacklist).match(re);
+	   if (ar == null) ar = [];
+	   network.ip_blacklist = ar;
+	} else {
+	   network.ip_blacklist = ar;
+
+	   // make sure network.ip_blacklist_local is valid
+	   ar = decodeURIComponent(adm.ip_blacklist_local).match(re);
+	   if (ar == null) ar = [];
+	   network.ip_blacklist_local = ar;
+	}
+
+   ext_send('SET network_ip_blacklist_clear');
+   if (network.show_updating) {
+      w3_innerHTML('id-ip-blacklist-status', 'updating..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 20));
+   }
    
    network.seq = 0;
 	network.ip_address_error = false;
-   ar.forEach(function(v) {
-      ext_send('SET network_ip_blacklist='+ encodeURIComponent(v));
-   });
-   ext_send('SET network_ip_blacklist_enable');
+	console.log(network.ip_blacklist);
+	console.log(network.ip_blacklist_local);
+	network_ip_blacklist_send( {idx:0, type:0} );
+}
+
+function network_ip_blacklist_send(p)
+{
+   if (p.type == 0) {
+      if (p.idx == network.ip_blacklist.length) {
+         network_ip_blacklist_send( {idx:0, type:1} );
+      } else {
+         ext_send('SET network_ip_blacklist='+ encodeURIComponent(network.ip_blacklist[p.idx]));
+         setTimeout(function() { network_ip_blacklist_send( {idx:p.idx+1, type:0} ); }, 250);   // rate limit
+      }
+   } else {
+      if (p.idx == network.ip_blacklist_local.length) {
+         ext_send('SET network_ip_blacklist_enable');
+      } else {
+         ext_send('SET network_ip_blacklist='+ encodeURIComponent(network.ip_blacklist_local[p.idx]));
+         setTimeout(function() { network_ip_blacklist_send( {idx:p.idx+1, type:1} ); }, 250);   // rate limit
+      }
+   }
 }
 
 function network_ip_blacklist_status(status, ip)
@@ -1557,6 +1596,7 @@ function network_focus()
 {
    network_static_init();
 	network_port_open_init();
+	network_ssl_container_init();
 	network.status_interval = setInterval(network_auto_nat_status_poll, 1000);
 }
 
@@ -1607,7 +1647,7 @@ function network_dhcp_static_update_cb(path, idx)
    if (debian_ver <= 9)    // Debian 10 and above use connmanctl which has immediate effect (no reboot required)
       w3_reboot_cb();      // show reboot button after confirm button pressed
    else
-		window.location.reload(true);
+		admin_wait_then_reload(10, 'Waiting for configuration change');
 }
 
 function network_static_init()
@@ -1625,11 +1665,7 @@ function network_use_static_cb(path, idx, first)
 	var dhcp = (idx == 0);
 	
 	// only show IP fields if in static mode
-	if (!dhcp) {
-		w3_show_block('id-net-static');
-	} else {
-		w3_hide('id-net-static');
-	}
+	w3_hide2('id-net-static', dhcp);
 
 	//console.log('network_use_static_cb: first='+ first +' dhcp='+ dhcp);
 

@@ -13,7 +13,7 @@ var hfdl = {
    pb: { lo: 300, hi: 2600 },
    
    stations: null,
-   url: 'http://kiwisdr.com/hfdl/systable.cjson',
+   url: kiwi_SSL() +'files.kiwisdr.com/hfdl/systable.cjson',
    using_default: false,
    double_fault: false,
 
@@ -411,7 +411,7 @@ function hfdl_controls_setup()
 	w3_do_when_rendered('id-hfdl-menus', function() {
       ext_send('SET reset');
 	   hfdl.double_fault = false;
-	   if (1 && dbgUs) {
+	   if (0 && dbgUs) {
          kiwi_ajax(hfdl.url +'.xxx', 'hfdl_get_systable_done_cb', 0, -500);
 	   } else {
          kiwi_ajax(hfdl.url, 'hfdl_get_systable_done_cb', 0, 10000);
@@ -930,7 +930,7 @@ function hfdl_map_stations()
 function hfdl_rebuild_stations(opts)
 {
 //jks
-return;
+if (1) return;
    if (!hfdl.refs) return;
    
    // remove previous
@@ -983,7 +983,7 @@ return;
    }
    //console.log('hfdl_rebuild_stations cur_ref_markers='+ hfdl.cur_ref_markers.length);
 //jks
-return;
+if (1) return;
 
    var mc = L.markerClusterGroup({
       maxClusterRadius: hfdl.prev_ui? 30:80,
@@ -1088,6 +1088,11 @@ function hfdl_get_systable_done_cb(stations)
    
    if (stations.AJAX_error && stations.AJAX_error == 'timeout') {
       console.log('hfdl_get_systable_done_cb: TIMEOUT');
+      hfdl.using_default = true;
+      fault = true;
+   } else
+   if (stations.AJAX_error && stations.AJAX_error == 'status') {
+      console.log('hfdl_get_systable_done_cb: status='+ stations.status);
       hfdl.using_default = true;
       fault = true;
    } else
