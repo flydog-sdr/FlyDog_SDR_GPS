@@ -335,7 +335,6 @@ int main(int argc, char *argv[])
     if (fpga_id == FPGA_ID_OTHER) {
         fpga_file = strdup((char *) "other");
     } else {
-        rx_decim *= 2;
         asprintf(&fpga_file, "rx%d.wf%d", rx_chans, wf_chans);
     
         bool no_wf = cfg_bool("no_wf", &err, CFG_OPTIONAL);
