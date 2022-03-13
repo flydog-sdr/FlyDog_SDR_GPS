@@ -2,6 +2,31 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.498  March 10, 2022
+    Fix for menu rendering changes starting with Firefox 98.
+
+v1.497  March 8, 2022
+    Add freq offset adjustment to right-click menu (admin access only).
+    Include freq_offset value (kHz) in /status result.
+    TDoA: By default don't show sampling hosts on result map. A new result menu entry will do that.
+
+v1.495,496  March 7, 2022
+    Enhancements:
+        Admin config tab:
+            Based on the work of studentkra (thanks!) "frequency scale offset" values with 1 Hz
+            resolution (admin config tab) are now supported. Previously were multiples of 1 MHz. 
+
+        Band definitions when in "frequency scale offset" mode now works.
+            So you can have e.g. an entry in kiwi.config/config.js like this:
+            bands.push({ s:svc.A, min:144000, max:148000, region:'*', name:"2 meters" });
+            The "select band" menu on the main control panel now only shows entries appropriate to
+            the frequency scale.
+        
+        Admin config tab:
+            Added option "Show user geolocation info". If unchecked shows "no location" in place
+            of geolocation in connection list of main control panel and camp panel. Admin status
+            tab and /users JSON query still shows geolocation.
+
 v1.494  March 5, 2022
     Enhancements:
         Admin network tab: "Auto add NAT rule" should now remove rule from router
