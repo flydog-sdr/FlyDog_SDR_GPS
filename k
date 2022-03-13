@@ -27,8 +27,8 @@ if test ! -f /etc/dogtag; then
 	exit 0
 fi
 
-RPI=$(grep -q -s "Raspberry Pi" /boot/issue.txt; echo $?)
-BBAI=$(grep -q -s "BeagleBoard" /etc/dogtag; echo $?)
+RPI=$(grep -q -s "Raspberry Pi" /boot/issue.txt && echo true)
+BBAI=$(grep -q -s "BeagleBoard" /etc/dogtag && echo true)
 
 if [ "x${BBAI}" = "xtrue" ] ; then
     SBC="BBAI"

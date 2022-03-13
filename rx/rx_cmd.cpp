@@ -675,6 +675,15 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
                 lprintf("** attempt to save kiwi config with auth_admin == FALSE! IP %s\n", conn->remote_ip);
                 return true;	// fake that we accepted command so it won't be further processed
             }
+            
+            // To prevent cfg database multi-writer data loss, enforce no admin connections (a source of writes)
+            // on any non-admin/mfg (i.e. user) connection cfg save.
+            if (conn->type != STREAM_ADMIN && conn->type != STREAM_MFG && (n = rx_count_server_conns(ADMIN_USERS)) != 0) {
+                //cprintf(conn, "CMD_SAVE_CFG: abort because admin_users=%d\n", n);
+                send_msg(conn, false, "MSG no_admin_conns");    // tell user their cfg save was rejected
+                rx_server_send_config(conn);    // and reload last saved config to flush bad values
+                return true;
+            }
 
             char *json = (char *) kiwi_imalloc("CMD_SAVE_CFG", strlen(cmd) + SPACE_FOR_NULL); // a little bigger than necessary
             n = sscanf(cmd, "SET save_cfg=%s", json);
@@ -747,8 +756,23 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
             n = sscanf(cmd, "SET DX_UPD g=%d f=%f lo=%d hi=%d o=%d m=%d i=%1024ms n=%1024ms p=%1024ms",
                 &gid, &freq, &low_cut, &high_cut, &mkr_off, &flags, &text_m, &notes_m, &params_m);
             enum { DX_MOD_ADD = 9, DX_DEL = 2 };
-            //cprintf(conn, "DX_UPD [%s]\n", cmd);
-            //cprintf(conn, "DX_UPD n=%d #%d %8.2f %d 0x%x text=<%s> notes=<%s> params=<%s>\n", n, gid, freq, mkr_off, flags, text_m, notes_m, params_m);
+            
+            #if 0
+                cprintf(conn, "DX_UPD [%s]\n", cmd);
+                int type;
+                if (n == DX_MOD_ADD) {
+                    const char * dx_mod_add_s[] = { "MOD", "ADD", "???" };
+                    if (gid != -1 && freq != -1) type = 0;
+                    else
+                    if (gid == -1) type = 1; else type = 2;
+                    cprintf(conn, "DX_UPD %s: n=%d #%d %8.2f %s lo=%d hi=%d off=%d flags=0x%x text=<%s> notes=<%s> params=<%s>\n",
+                        dx_mod_add_s[type], n, gid, freq, mode_s[flags & DX_MODE], low_cut, high_cut, mkr_off, flags, text_m, notes_m, params_m);
+                } else {
+                    const char * dx_del_s[] = { "DEL", "???" };
+                    if (gid != -1 && freq == -1) type = 0; else type = 1;
+                    cprintf(conn, "DX_UPD %s: n=%d #%d\n", dx_del_s[type], n, gid);
+                }
+            #endif
 
             if (n != DX_MOD_ADD && n != DX_DEL) {
                 cprintf(conn, "DX_UPD n=%d ?\n", n);

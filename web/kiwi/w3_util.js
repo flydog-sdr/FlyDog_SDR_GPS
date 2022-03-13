@@ -1897,11 +1897,11 @@ function w3int_input_keydown(ev, path, cb)
    if (!el) return;
    //w3_remove(el, 'kiwi-pw');
    //console.log('w3int_input_keydown k='+ k + (ctl? ' CTL ':'') +' val=<'+ el.value +'> cb='+ cb);
-   cb = cb.split('|');
+   var cb_a = cb.split('|');
 
-   if (ctl && 'CD\\'.includes(k) && cb[1]) {
-      //console.log('w3int_input_keydown ^'+ k +' cb='+ cb[1]);
-      w3_call(cb[1], k);
+   if (ctl && 'CD\\'.includes(k) && cb_a[1]) {
+      //console.log('w3int_input_keydown ^'+ k +' cb_a[1]='+ cb_a[1]);
+      w3_call(cb_a[1], k);
    }
 
    var input_any_change = w3_contains(el, 'w3-input-any-change');
@@ -1931,13 +1931,13 @@ function w3int_input_keydown(ev, path, cb)
          if (el.selectionStart == el.selectionEnd && el.selectionStart == el.textLength) {
             //console.log('el.value='+ JSON.stringify(w3_el('id-ale_2g-user-textarea').value));
             //console.log(el);
-            w3_input_change(path, cb[0]);
+            w3_input_change(path, cb);
          }
       } else
 	   if (el.value == '') {
          // cause empty input lines followed by Enter to send empty command to shell
          //console.log('w3int_input_keydown: empty line + Enter');
-         w3_input_change(path, cb[0]);
+         w3_input_change(path, cb);
       }
 	}
 
@@ -1945,7 +1945,7 @@ function w3int_input_keydown(ev, path, cb)
 	if (ev.key == 'Backspace' && input_any_change && el.selectionStart == 0 && el.selectionEnd == el.value.length) {
       //console.log('w3int_input_keydown Delete: len='+ el.value.length +' ss='+ el.selectionStart +' se='+ el.selectionEnd);
       el.value = '';
-      w3_input_change(path, cb[0]);
+      w3_input_change(path, cb);
 	}
 }
 
@@ -1954,7 +1954,7 @@ function w3int_input_keyup(ev, path, cb)
 /*
 	var el = w3_el(path);
 	if (ev.key == 'Backspace' && el.value == '')
-      w3_input_change(path, cb[0]);
+      w3_input_change(path, cb);
 */
 }
 
@@ -1968,9 +1968,9 @@ function w3_input_change(path, cb)
       
       // cb is a string because can't pass an object to onclick
       if (cb) {
-         cb = cb.split('|');
+         var cb_a = cb.split('|');
          //el.select();
-         w3_call(cb[0], path, el.value, /* first */ false);
+         w3_call(cb_a[0], path, el.value, /* first */ false, cb_a);
       }
 
 /*
@@ -2249,7 +2249,7 @@ function w3int_select(psa, label, title, path, sel, opts_s, cb, cb_param)
    var psa3 = w3_psa3(psa);
    var psa_outer = w3_psa(psa3.left, inline? 'w3-show-inline-new':'');
    var psa_label = w3_psa_mix(psa3.middle, (label != '' && bold)? 'w3-bold':'');
-	var psa_inner = w3_psa(psa3.right, id +' w3-pointer'+ spacing, '', onchange);
+	var psa_inner = w3_psa(psa3.right, id +' w3-select-menu'+ spacing, '', onchange);
 
 	var s =
 	   '<div '+ psa_outer +'>' +
@@ -2305,8 +2305,9 @@ function w3int_select_options(sel, opts)
       });
    } else
 
-   // { key0:opt0, key1:opt1 ... }
-   // object: enumerate sequentially like an array using keys values as the menu options
+   // { key0:opt0, key1:opt1, opt2:{} ... }
+   // object: enumerate sequentially like an array using key values,
+   // or key itself if key value is an object, as the menu options
    if (isObject(opts)) {
       w3_obj_enum(opts, function(key, i, o) {
          var value, text, disabled = false;
@@ -2754,6 +2755,31 @@ function w3_int_set_cfg_cb(path, val, first)
 	// if first time don't save, otherwise always save
 	var save = (first != undefined)? (first? false : true) : true;
 	ext_set_cfg_param(path, v, save);
+}
+
+// limit precision using callback spec: 'admin_float_cb|prec'
+function w3_float_set_cfg_cb(path, val, first, cb_a)
+{
+   var prec = -1;    // default to no precision limiting applied
+	//console.log('admin_float_cb '+ path +'='+ val +' cb_a.len='+ cb_a.length);
+	if (cb_a && cb_a.length >= 2) {
+	   prec = +(cb_a[1]);
+	   if (isNaN(prec)) prec = -1;
+	   //console.log('admin_float_cb prec='+ prec);
+	}
+	val = parseFloat(val);
+	if (isNaN(val)) {
+	   // put old value back
+	   val = ext_get_cfg_param(path);
+	} else {
+	   if (prec != -1) {
+         var s = val.toFixed(prec);    // NB: .toFixed() does rounding
+         //console.log('admin_float_cb val('+ prec +')='+ s);
+         val = +s;
+      }
+	   ext_set_cfg_param(path, val, true);
+	}
+   w3_set_value(path, val);   // remove any non-numeric part from field
 }
 
 function w3_bool_set_cfg_cb(path, val, first)

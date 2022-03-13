@@ -3,6 +3,7 @@
 // Copyright (c) 2014-2021 John Seamons, ZL/KF6VO
 
 var kiwi = {
+   isOffset: false,
    is_local: [],
    loaded_files: {},
    WSPR_rgrid: '',
@@ -11,6 +12,7 @@ var kiwi = {
    is_multi_core: 0,
    
    inactivity_panel: false,
+   no_admin_conns_pend: 0,
    notify_seq: 0,
    ident_min: 16,    // e.g. "wsprdaemon_v3.0a" is 16 chars
 
@@ -25,6 +27,21 @@ var kiwi = {
    modes_l: [ 'am', 'amn', 'usb', 'lsb', 'cw', 'cwn', 'nbfm', 'iq', 'drm', 'usn', 'lsn', 'sam', 'sal', 'sau', 'sas', 'qam' ],
    modes_u: [],
    modes_s: {},
+   
+   svc: {
+      B: { name:'Broadcast',  color:'red' },
+      U: { name:'Utility',    color:'green' },
+      A: { name:'Amateur',    color:'blue' },
+      L: { name:'Beacons',    color:'blue' },
+      I: { name:'ISM',        color:'orange',   longName:'Industrial/Scientific' },
+      M: { name:'Markers',    color:'purple' },
+      X: { name:'QRN',        color:'red' },
+      N: { name:'Event',      color:'yellow' }
+   },
+   
+   ITU_ANY: 0,
+   BAND_SCALE_ONLY: -1,
+   BAND_MENU_ONLY: -2,
    
    RX4_WF4:0, RX8_WF2:1, RX3_WF3:2, RX14_WF0:3,
    
@@ -416,20 +433,18 @@ function kiwi_get_init_settings()
 var cfg = { };
 var adm = { };
 
-function cfg_save_json(path, ws)
+function cfg_save_json(path)
 {
 	//console.log('cfg_save_json: path='+ path);
 	//kiwi_trace();
 
-	if (ws == undefined || ws == null)
-		return;
 	var s;
 	if (path.startsWith('adm.')) {
 		s = encodeURIComponent(JSON.stringify(adm, null, 3));    // pretty-print the JSON
-		ws.send('SET save_adm='+ s);
+		extint.ws.send('SET save_adm='+ s);
 	} else {
 		s = encodeURIComponent(JSON.stringify(cfg, null, 3));    // pretty-print the JSON
-		ws.send('SET save_cfg='+ s);
+		extint.ws.send('SET save_cfg='+ s);
 	}
 	console.log('cfg_save_json: DONE');
 }
@@ -1419,7 +1434,7 @@ function user_cb(obj)
 			var g = (geoloc == '(null)' || geoloc == '')? 'unknown location' : decodeURIComponent(geoloc);
 			ip = ip.replace(/::ffff:/, '');		// remove IPv4-mapped IPv6 if any
 			g = '('+ ip + g +') ';
-			var f = freq + cfg.freq_offset*1e3;
+			var f = freq + kiwi.freq_offset_Hz;
 			var f = (f/1000).toFixed((f > 100e6)? 1:2);
 			var f_s = f + ' kHz ';
 			var fo = (freq/1000).toFixed(2);
@@ -1488,8 +1503,8 @@ function user_cb(obj)
       }
       
       // detect change in frequency scale offset
-      //if (i == rx_chan) console.log('obj.fo='+ obj.fo +' freq_offset='+ cfg.freq_offset);
-      if (i == rx_chan && isNumber(obj.fo) && obj.fo != cfg.freq_offset && !confirmation.displayed) {
+      //if (i == rx_chan) console.log('$obj.fo='+ obj.fo +' freq_offset_kHz='+ kiwi.freq_offset_kHz);
+      if (i == rx_chan && isNumber(obj.fo) && obj.fo != kiwi.freq_offset_kHz && !confirmation.displayed) {
          var s =
             w3_div('',
                'Frequency scale offset changed. Page must be reloaded.',
@@ -1630,15 +1645,15 @@ function kiwi_msg(param, ws)
 		case "badp":
 			//console.log('badp='+ param[1]);
 			extint_valpwd_cb(parseInt(param[1]));
-			break;					
+			break;
 
 		case "chan_no_pwd":
 			chan_no_pwd = parseInt(param[1]);
-			break;					
+			break;
 
 		case "chan_no_pwd_true":
 			chan_no_pwd_true = parseInt(param[1]);
-			break;					
+			break;
 
 		case "rx_chans":
 			rx_chans = parseInt(param[1]);
@@ -1666,46 +1681,68 @@ function kiwi_msg(param, ws)
       // E.g. ext_get_cfg_param_string(): kiwi_decodeURIComponent(ext_get_cfg_param(...))
 		case "load_cfg":
 			var cfg_json = decodeURIComponent(param[1]);
-			//console.log('### load_cfg '+ ws.stream +' '+ cfg_json.length);
+			console.log('### load_cfg '+ ws.stream +' '+ cfg_json.length);
 			cfg = kiwi_JSON_parse('load_cfg', cfg_json);
+			kiwi.isOffset = (cfg.freq_offset != 0);
+         kiwi.freq_offset_kHz = cfg.freq_offset;
+         kiwi.freq_offset_Hz  = cfg.freq_offset * 1000;
+	      kiwi.offset_frac = (cfg.freq_offset % 1000) * 1000;
 			owrx_cfg();
 			break;
 
 		case "load_adm":
 			var adm_json = decodeURIComponent(param[1]);
-			//console.log('### load_adm '+ ws.stream +' '+ adm_json.length);
+			console.log('### load_adm '+ ws.stream +' '+ adm_json.length);
 			adm = kiwi_JSON_parse('load_adm', adm_json);
 			break;
-
+		
+		case "no_admin_conns":
+		   kiwi.no_admin_conns_pend++;
+		   //console.log('$$$$ no_admin_conns '+ kiwi.no_admin_conns_pend);
+		   if (kiwi.no_admin_conns_pend == 1) {
+            //console.log('$$$$ confirmation_show_content');
+            confirmation_panel_close();
+            confirmation_show_content(
+               'Must close all admin connections before attempting this operation.',
+               500, 55,
+               function() {
+                  confirmation_panel_close();
+                  kiwi.no_admin_conns_pend = 0;
+                  //console.log('$$$$ confirmation_panel_close');
+               },
+               'red');
+         }
+         break;
+      
 		case "request_dx_update":
 			dx_update();
-			break;					
+			break;
 
 		case "mkr":
 			var mkr = param[1];
 			//console.log('MKR '+ mkr);
 			var obj = kiwi_JSON_parse('mkr', mkr);
 			if (obj) dx_label_cb(obj);
-			break;					
+			break;
 
 		case "user_cb":
 			//console.log('user_cb='+ param[1]);
 			var obj = kiwi_JSON_parse('user_cb', param[1]);
 			if (obj) user_cb(obj);
-			break;					
+			break;
 
 		case "config_cb":
 			//console.log('config_cb='+ param[1]);
 			var o = kiwi_JSON_parse('config_cb', param[1]);
 			if (o) config_cb(o.r, o.g, o.s, o.pu, o.pe, o.pv, o.pi, o.n, o.m, o.v1, o.v2, o.ai);
-			break;					
+			break;
 
 		case "update_cb":
 			//console.log('update_cb='+ param[1]);
 			var o = kiwi_JSON_parse('update_cb', param[1]);
 			if (o) update_cb(o.f, o.p, o.i, o.r, o.g, o.v1, o.v2, o.p1, o.p2,
 				decodeURIComponent(o.d), decodeURIComponent(o.t));
-			break;					
+			break;
 
 		case "stats_cb":
 			//console.log('stats_cb='+ param[1]);
@@ -1737,7 +1774,7 @@ function kiwi_msg(param, ws)
 				admin_stats_cb(o.ad, o.au, o.ae, o.ar, o.an, o.ap, o.an2, o.ai);
 				time_display_cb(o);
 			}
-			break;					
+			break;
 
 		case "status_msg_text":
 		   // kiwi_output_msg() does decodeURIComponent()
