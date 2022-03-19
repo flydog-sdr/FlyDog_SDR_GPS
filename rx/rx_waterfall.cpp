@@ -39,6 +39,7 @@ Boston, MA  02110-1301, USA.
 #include "non_block.h"
 #include "noise_blank.h"
 #include "str.h"
+#include "mem.h"
 #include "rx_waterfall.h"
 
 #include <string.h>
@@ -315,8 +316,13 @@ void c2s_waterfall(void *param)
 			#endif
 
 			// SECURITY: this must be first for auth check
-			if (rx_common_cmd("W/F", conn, cmd))
+			if (rx_common_cmd("W/F", conn, cmd)) {
+                #ifdef TR_WF_CMDS
+                    if (tr_cmds++ < 32)
+                        clprintf(conn, "WF #%02d <%s> cmd_recv 0x%x/0x%x\n", tr_cmds, cmd, cmd_recv, CMD_ALL);
+                #endif
 				continue;
+			}
 			
 			#ifdef TR_WF_CMDS
 				if (tr_cmds++ < 32) {
@@ -341,15 +347,20 @@ void c2s_waterfall(void *param)
                     if (sscanf(cmd, "SET zoom=%d start=%f", &_zoom, &_start) == 2) {
                         //cprintf(conn, "WF: zoom=%d/%d start=%.3f(%.1f)\n", _zoom, zoom, _start, _start * HZperStart / kHz);
                         _zoom = CLAMP(_zoom, 0, MAX_ZOOM);
+                        float halfSpan_Hz = (ui_srate / (1 << _zoom)) / 2;
+                        cf = (_start * HZperStart) + halfSpan_Hz;
                         zoom_start_chg = true;
                     } else
                     if (sscanf(cmd, "SET zoom=%d cf=%f", &_zoom, &cf) == 2) {
                         _zoom = CLAMP(_zoom, 0, MAX_ZOOM);
                         float halfSpan_Hz = (ui_srate / (1 << _zoom)) / 2;
-                        _start = (cf * kHz - halfSpan_Hz) / HZperStart;
-                        //cprintf(conn, "WF: zoom=%d cf=%.3f start=%.3f halfSpan=%.3f\n", _zoom, cf, _start * HZperStart / kHz, halfSpan_Hz/kHz);
+                        cf *= kHz;
+                        _start = (cf - halfSpan_Hz) / HZperStart;
+                        //cprintf(conn, "WF: zoom=%d cf=%.3f start=%.3f halfSpan=%.3f\n", _zoom, cf/kHz, _start * HZperStart / kHz, halfSpan_Hz/kHz);
                         zoom_start_chg = true;
                     }
+                    
+                    conn->freqHz = cf;      // for logging purposes
                 }
             
                 if (zoom_start_chg) {
@@ -431,6 +442,7 @@ void c2s_waterfall(void *param)
                         if (csnd && csnd->type == STREAM_SOUND && csnd->rx_channel == conn->rx_channel) {
                             csnd->zoom = zoom;		// set in the AUDIO conn
                         }
+                        conn->zoom = zoom;      // for logging purposes
                     
                         //jksd
                         //printf("ZOOM z=%d ->z=%d\n", zoom, wf->zoom);
@@ -601,7 +613,8 @@ void c2s_waterfall(void *param)
                 break;
             
             default:
-                cprintf(conn, "#### WF key=%d DEFAULT CASE <%s>\n", key, cmd);
+                if (conn->mc != NULL)
+                    cprintf(conn, "#### WF key=%d DEFAULT CASE <%s>\n", key, cmd);
                 did_cmd = true;     // force skip
                 break;
  
@@ -681,9 +694,10 @@ void c2s_waterfall(void *param)
 			continue;
 		}
 		
-		// Log internal WF-only connections like the SNR measurement sampler.
-		// Others like external SNR measurement samplers won't show up.
-        if (!conn->arrived && conn->internal_connection && conn->ident) {
+        // handle LOG_ARRIVED and missing ident for WF-only connections
+        if (conn->isMaster && !conn->arrived && (conn->ident || ((cmd_recv & CMD_SET_ZOOM) && timer_sec() > (conn->arrival + 15)))) {
+            if (!conn->ident)
+			    kiwi_str_redup(&conn->ident_user, "user", (char *) "(no identity)");
             rx_loguser(conn, LOG_ARRIVED);
             conn->arrived = TRUE;
         }
