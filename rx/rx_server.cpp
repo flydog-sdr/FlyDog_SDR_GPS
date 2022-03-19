@@ -19,6 +19,7 @@ Boston, MA  02110-1301, USA.
 
 #include "types.h"
 #include "config.h"
+#include "options.h"
 #include "kiwi.h"
 #include "rx.h"
 #include "clk.h"
@@ -152,18 +153,21 @@ void show_conn(const char *prefix, conn_t *cd)
         return;
     }
     
-    lprintf("%sCONN-%02d %p %s%s rx=%d auth%d kiwi%d prot%d admin%d local%d isP%d tle%d%d KA=%02d/60 KC=%05d mc=%9p ip=%s:%d other=%s%d %s%s%s\n",
-        prefix, cd->self_idx, cd, rx_streams[cd->type].uri, cd->internal_connection? "(INT)":"",
-        (cd->type == STREAM_EXT)? cd->ext_rx_chan : cd->rx_channel,
-        cd->auth, cd->auth_kiwi, cd->auth_prot, cd->auth_admin, cd->isLocal,
+    lprintf("%sCONN-%02d %p %5s rx%d %s%s%s%s%s auth%d kiwi%d admin%d isP%d tle%d%d sv=%d KA=%02d/60 KC=%05d mc=%9p %s:%d oth=%s%d %s%s%s\n",
+        prefix, cd->self_idx, cd, rx_streams[cd->type].uri, (cd->type == STREAM_EXT)? cd->ext_rx_chan : cd->rx_channel,
+        cd->isMaster? "M":"_", cd->internal_connection? "I":(cd->ext_api? "E":"_"), cd->ext_api_determined? "D":"_",
+        cd->isLocal? "L":"_", cd->auth_prot? "P":"_",
+        cd->auth, cd->auth_kiwi, cd->auth_admin,
         cd->isPassword, cd->tlimit_exempt, cd->tlimit_exempt_by_pwd,
+        cd->served,
         cd->keep_alive, cd->keepalive_count, cd->mc,
         cd->remote_ip, cd->remote_port, cd->other? "CONN-":"", cd->other? cd->other-conns:-1,
         (cd->type == STREAM_EXT)? (cd->ext? cd->ext->name : "?") : "",
         cd->stop_data? " STOP_DATA":"",
         cd->is_locked? " LOCKED":"");
-    if (cd->arrived)
-        lprintf("       user=<%s> isUserIP=%d geo=<%s>\n", cd->user, cd->isUserIP, cd->geo);
+
+    if (cd->isMaster && cd->arrived)
+        lprintf("       user=<%s> isUserIP=%d geo=<%s>\n", cd->ident_user, cd->isUserIP, cd->geo);
 }
 
 void dump()
@@ -316,13 +320,27 @@ void rx_loguser(conn_t *c, logtype_e type)
 		asprintf(&s, "%d:%02d:%02d%s", hr, min, sec, (type == LOG_UPDATE_NC)? " n/c":"");
 	}
 	
+	const char *mode = "";
+	if (c->type == STREAM_WATERFALL)
+	    mode = "WF";
+	else
+	    mode = kiwi_enum2str(c->mode, mode_s, ARRAY_LEN(mode_s));
+	
 	if (type == LOG_ARRIVED || type == LOG_LEAVING) {
 		clprintf(c, "%8.2f kHz %3s z%-2d %s%s\"%s\"%s%s%s%s %s\n", (float) c->freqHz / kHz + freq_offset,
-			kiwi_enum2str(c->mode, mode_s, ARRAY_LEN(mode_s)), c->zoom,
-			c->ext? c->ext->name : "", c->ext? " ":"",
-			c->user? c->user : "(no identity)", c->isUserIP? "":" ", c->isUserIP? "":c->remote_ip,
+			mode, c->zoom, c->ext? c->ext->name : "", c->ext? " ":"",
+			c->ident_user? c->ident_user : "(no identity)", c->isUserIP? "":" ", c->isUserIP? "":c->remote_ip,
 			c->geo? " ":"", c->geo? c->geo:"", s);
 	}
+
+    #ifdef OPTION_LOG_WF_ONLY_UPDATES
+        if (c->type == STREAM_WATERFALL && type == LOG_UPDATE) {
+            cprintf(c, "%8.2f kHz %3s z%-2d %s%s\"%s\"%s%s%s%s %s\n", (float) c->freqHz / kHz + freq_offset,
+			    mode, c->zoom, c->ext? c->ext->name : "", c->ext? " ":"",
+                c->ident_user? c->ident_user : "(no identity)", c->isUserIP? "":" ", c->isUserIP? "":c->remote_ip,
+                c->geo? " ":"", c->geo? c->geo:"", s);
+        }
+    #endif
 	
 	// we don't do anything with LOG_UPDATE and LOG_UPDATE_NC at present
 	kiwi_ifree(s);
@@ -336,9 +354,9 @@ void rx_server_remove(conn_t *c)
 	c->stop_data = TRUE;
 	c->mc = NULL;
 
-	if (c->arrived) rx_loguser(c, LOG_LEAVING);
+    if (c->isMaster && c->arrived) rx_loguser(c, LOG_LEAVING);
 	webserver_connection_cleanup(c);
-	kiwi_free("user", c->user);
+	kiwi_free("ident_user", c->ident_user);
 	kiwi_ifree(c->geo);
 	kiwi_ifree(c->pref_id);
 	kiwi_ifree(c->pref);
@@ -389,11 +407,11 @@ int rx_count_server_conns(conn_count_e type, conn_t *our_conn)
         bool sound = (c->type == STREAM_SOUND && ((type == EXTERNAL_ONLY)? !c->internal_connection : true));
 
 	    if (type == TDOA_USERS) {
-	        if (sound && c->user && kiwi_str_begins_with(c->user, "TDoA_service"))
+	        if (sound && c->ident_user && kiwi_str_begins_with(c->ident_user, "TDoA_service"))
 	            users++;
 	    } else
 	    if (type == EXT_API_USERS) {
-	        if (sound && c->user && c->ext_api)
+	        if (c->ext_api)
 	            users++;
 	    } else
 	    if (type == LOCAL_OR_PWD_PROTECTED_USERS) {
@@ -775,11 +793,17 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 		}
 		
 		c->rx_channel = cother? cother->rx_channel : rx;
-		if (st->type == STREAM_SOUND && c->rx_channel != -1) rx_channels[c->rx_channel].conn = c;
+		if (st->type == STREAM_SOUND && c->rx_channel != -1) {
+		    rx_channels[c->rx_channel].conn = c;
+		    c->isMaster = true;
+		    if (cother) cother->isMaster = false;
+		}
 		
 		// e.g. for WF-only kiwirecorder connections (won't override above)
-		if (st->type == STREAM_WATERFALL && c->rx_channel != -1 && rx_channels[c->rx_channel].conn == NULL)
+		if (st->type == STREAM_WATERFALL && c->rx_channel != -1 && rx_channels[c->rx_channel].conn == NULL) {
 		    rx_channels[c->rx_channel].conn = c;
+		    c->isMaster = true;
+		}
 	}
   
 	c->mc = mc;

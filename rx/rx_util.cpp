@@ -662,7 +662,8 @@ void geoloc_task(void *param)
     } while (!okay && retry < 10);
     kiwi_ifree(geo_host_ip_s);
     if (okay)
-        clprintf(conn, "GEOLOC: %s sent no geoloc info, we got \"%s\"\n", conn->remote_ip, conn->geo);
+        clprintf(conn, "GEOLOC: %s sent no geoloc info, we got \"%s\" from geo host #%d\n",
+            conn->remote_ip, conn->geo, i);
     else
         clprintf(conn, "GEOLOC: for %s FAILED for all geo servers\n", ip);
 }
@@ -678,6 +679,8 @@ char *rx_users(bool include_ip)
     for (rx = rx_channels, i=0; rx < &rx_channels[rx_chans]; rx++, i++) {
         n = 0;
         if (rx->busy) {
+            // rx->conn is always STREAM_SOUND for regular SND+WF connections and
+            // always STREAM_WATERFALL for WF-only connections
             conn_t *c = rx->conn;
             if (c && c->valid && c->arrived) {
                 assert(c->type == STREAM_SOUND || c->type == STREAM_WATERFALL);
@@ -731,16 +734,18 @@ char *rx_users(bool include_ip)
                 u4_t r_min = t % 60; t /= 60;
                 u4_t r_hr = t;
 
-                char *user = (c->isUserIP || !c->user)? NULL : kiwi_str_encode(c->user);
+                char *user = (c->isUserIP || !c->ident_user)? NULL : kiwi_str_encode(c->ident_user);
                 char *geo = !show_geo? kiwi_str_encode((char *) "no location") : (c->geo? kiwi_str_encode(c->geo) : NULL);
                 char *ext = ext_users[i].ext? kiwi_str_encode((char *) ext_users[i].ext->name) : NULL;
                 const char *ip = include_ip? c->remote_ip : "";
-                asprintf(&sb2, "%s{\"i\":%d,\"n\":\"%s\",\"g\":\"%s\",\"f\":%d,\"m\":\"%s\",\"z\":%d,\"t\":\"%d:%02d:%02d\","
+                asprintf(&sb2, "%s{\"i\":%d,\"n\":\"%s\",\"g\":\"%s\",\"f\":%d,\"m\":\"%s\",\"z\":%d,\"wf\":%d,\"t\":\"%d:%02d:%02d\","
                     "\"rt\":%d,\"rn\":%d,\"rs\":\"%d:%02d:%02d\",\"e\":\"%s\",\"a\":\"%s\",\"c\":%.1f,\"fo\":%.3f,\"ca\":%d,"
                     "\"nc\":%d,\"ns\":%d}",
                     need_comma? ",":"", i, user? user:"", geo? geo:"", c->freqHz,
-                    kiwi_enum2str(c->mode, mode_s, ARRAY_LEN(mode_s)), c->zoom, hr, min, sec,
-                    rtype, rn, r_hr, r_min, r_sec, ext? ext:"", ip, wdsp_SAM_carrier(i), freq_offset, rx->n_camp,
+                    kiwi_enum2str(c->mode, mode_s, ARRAY_LEN(mode_s)), c->zoom,
+                    (c->type == STREAM_WATERFALL)? 1:0,
+                    hr, min, sec, rtype, rn, r_hr, r_min, r_sec,
+                    ext? ext:"", ip, wdsp_SAM_carrier(i), freq_offset, rx->n_camp,
                     extint.notify_chan, extint.notify_seq);
                 if (user) kiwi_ifree(user);
                 if (geo) kiwi_ifree(geo);
