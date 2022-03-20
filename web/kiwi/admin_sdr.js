@@ -47,7 +47,7 @@ var ITU_region_i = [ 'R1: Europe, Africa', 'R2: North & South America', 'R3: Asi
 
 var AM_BCB_chan_i = [ '9 kHz', '10 kHz' ];
 
-var max_freq_i = [ '30 MHz', '32 MHz' ];
+var max_freq_i = [ '32 MHz', '42 MHz', '52 MHz', '62 MHz' ];
 
 var SPI_clock_i = [ '48 MHz', '24 MHz' ];
 
