@@ -588,8 +588,6 @@ void c2s_admin(void *param)
 // dx
 ////////////////////////////////
 
-            // "SET GET_DX_JSON" is processed in rx_common_cmd() since it is called from multiple places
-
 
 ////////////////////////////////
 // update
@@ -634,7 +632,12 @@ void c2s_admin(void *param)
 						mprintf("%s", buf);
 					}
 					TaskSleepMsec(250);
-				} while (n > 0);
+					u4_t now = timer_sec();
+					if ((now - conn->keepalive_time) > 5) {
+					    send_msg(conn, false, "MSG keepalive");
+					    conn->keepalive_time = now;
+					}
+				} while (n >= 0);
 				err = non_blocking_cmd_pclose(&p);
                 //real_printf("microSD_write: err=%d\n", err);
 				sd_copy_in_progress = false;
@@ -790,8 +793,8 @@ void c2s_admin(void *param)
 
 			i = strcmp(cmd, "SET network_ip_blacklist_clear");
 			if (i == 0) {
-                cprintf(conn, "\"iptables -D INPUT -j KIWI; iptables -N KIWI; iptables -F KIWI\"\n");
-				system("iptables -D INPUT -j KIWI; iptables -N KIWI; iptables -F KIWI");
+			    cprintf(conn, "\"iptables -D INPUT -j KIWI; iptables -F KIWI; iptables -X KIWI; iptables -N KIWI\"\n");
+				system("iptables -D INPUT -j KIWI; iptables -F KIWI; iptables -X KIWI; iptables -N KIWI");
 
                 net.ip_blacklist_len = 0;
 				continue;
