@@ -282,7 +282,7 @@ void c2s_sound(void *param)
             //cprintf(conn, "SND UPD freq %.3f kHz i_phase 0x%08x|%08x clk %.3f\n",
             //    freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected);
             if (do_sdr) spi_set3(CmdSetRXFreq, rx_chan, (i_phase >> 16) & 0xffffffff, i_phase & 0xffff);
-		//printf("SND%d freq updated due to ADC clock correction\n", rx_chan);
+		    //cprintf(conn, "SND freq updated due to ADC clock correction\n");
 		}
 
 		if (nb) web_to_app_done(conn, nb);
@@ -302,9 +302,14 @@ void c2s_sound(void *param)
             #endif
 
 			// SECURITY: this must be first for auth check
-			if (rx_common_cmd("SND", conn, cmd))
+			if (rx_common_cmd("SND", conn, cmd)) {
+                #ifdef TR_SND_CMDS
+                    if (tr_cmds++ < 32)
+                        clprintf(conn, "SND #%02d <%s> cmd_recv 0x%x/0x%x\n", tr_cmds, cmd, cmd_recv, CMD_ALL);
+                #endif
 				continue;
-			
+			}
+
 			#ifdef TR_SND_CMDS
 				if (tr_cmds++ < 32) {
 					clprintf(conn, "SND #%02d <%s> cmd_recv 0x%x/0x%x\n", tr_cmds, cmd, cmd_recv, CMD_ALL);

@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 506
+VERSION_MIN = 510
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
@@ -205,15 +205,14 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
         ifeq ($(DEBIAN_10),true)
 #		    INT_FLAGS += -DUSE_CRYPT
 #	        LIBS += -lcrypt
-            INT_FLAGS += -DMONGOOSE_5_6 -DUSE_SSL
+            INT_FLAGS += -DUSE_SSL
             LIBS += -lssl
         else
-            INT_FLAGS += -DMONGOOSE_5_6 -DUSE_CRYPT
+            INT_FLAGS += -DUSE_CRYPT
             LIBS += -lcrypt
         endif
 	else
 		# development machine, compile simulation version
-		INT_FLAGS += -DMONGOOSE_5_6
 		LIBS += -L/usr/local/lib -lfftw3f
 		LIBS_DEP += /usr/local/lib/libfftw3f.a
 		CMD_DEPS =
@@ -234,11 +233,11 @@ else
 	ifeq ($(DEBIAN_10),true)
 #		INT_FLAGS += -DUSE_CRYPT
 #	    LIBS += -lcrypt
-		INT_FLAGS += -DMONGOOSE_5_6 -DUSE_SSL
+		INT_FLAGS += -DUSE_SSL
 	    LIBS += -lssl
 		CMD_DEPS += /usr/include/openssl/ssl.h
 	else
-		INT_FLAGS += -DMONGOOSE_5_6 -DUSE_CRYPT
+		INT_FLAGS += -DUSE_CRYPT
 	    LIBS += -lcrypt
 	endif
 
@@ -418,6 +417,7 @@ build_makefile_inc:
 	@echo "building" $(MF_INC)
 	@echo $(VER)
 	@echo $(DEBIAN_BUILD_VER)
+	@echo PROJECT = $(PROJECT)
 	@echo ARCH = $(ARCH)
 	@echo CPU = $(CPU)
 	@echo PLATFORMS = $(PLATFORMS)
@@ -475,6 +475,8 @@ pru/pru_realtime.bin: pas pru/pru_realtime.p pru/pru_realtime.h pru/pru_realtime
 ifneq ($(OTHER_DIR),)
     OTHER_DIR2 = -x $(OTHER_DIR)
     OTHER_CONFIG = $(subst ../../,../,$(OTHER_DIR)/other.config)
+else
+    PROJECT = "KiwiSDR"
 endif
 
 $(GEN_ASM): kiwi.config verilog/kiwi.inline.vh $(wildcard e_cpu/asm/*)
