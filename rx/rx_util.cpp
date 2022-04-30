@@ -276,6 +276,7 @@ void update_vars_from_config(bool called_at_init)
     snr_local_time = cfg_default_bool("snr_local_time", true, &update_cfg);
     cfg_default_int("ident_len", IDENT_LEN_MIN, &update_cfg);
     cfg_default_bool("show_geo", true, &update_cfg);
+    cfg_default_bool("show_1Hz", false, &update_cfg);
 
     if (wspr_update_vars_from_config()) update_cfg = true;
 
@@ -737,11 +738,14 @@ char *rx_users(bool include_ip)
                 u4_t r_hr = t;
 
                 char *user = (c->isUserIP || !c->ident_user)? NULL : kiwi_str_encode(c->ident_user);
-                char *geo = !show_geo? kiwi_str_encode((char *) "no location") : (c->geo? kiwi_str_encode(c->geo) : NULL);
+                char *geo = show_geo? (c->geo? kiwi_str_encode(c->geo) : NULL) : NULL;
                 char *ext = ext_users[i].ext? kiwi_str_encode((char *) ext_users[i].ext->name) : NULL;
                 const char *ip = include_ip? c->remote_ip : "";
-                asprintf(&sb2, "%s{\"i\":%d,\"n\":\"%s\",\"g\":\"%s\",\"f\":%d,\"m\":\"%s\",\"z\":%d,\"wf\":%d,\"t\":\"%d:%02d:%02d\","
-                    "\"rt\":%d,\"rn\":%d,\"rs\":\"%d:%02d:%02d\",\"e\":\"%s\",\"a\":\"%s\",\"c\":%.1f,\"fo\":%.3f,\"ca\":%d,"
+                asprintf(&sb2, "%s{\"i\":%d,\"n\":\"%s\",\"g\":\"%s\",\"f\":%d,"
+                    "\"m\":\"%s\",\"z\":%d,"
+                    "\"wf\":%d,"
+                    "\"t\":\"%d:%02d:%02d\",\"rt\":%d,\"rn\":%d,\"rs\":\"%d:%02d:%02d\","
+                    "\"e\":\"%s\",\"a\":\"%s\",\"c\":%.1f,\"fo\":%.3f,\"ca\":%d,"
                     "\"nc\":%d,\"ns\":%d}",
                     need_comma? ",":"", i, user? user:"", geo? geo:"", c->freqHz,
                     kiwi_enum2str(c->mode, mode_s, ARRAY_LEN(mode_s)), c->zoom,
