@@ -55,7 +55,7 @@ try {
 var kiwi_util = {
 };
 
-var kiwi_iOS, kiwi_OSX, kiwi_linux, kiwi_Windows, kiwi_android;
+var kiwi_iOS, kiwi_MacOS, kiwi_linux, kiwi_Windows, kiwi_android;
 var kiwi_safari, kiwi_firefox, kiwi_chrome, kiwi_opera, kiwi_smartTV;
 
 // wait until DOM has loaded before proceeding (browser has loaded HTML, but not necessarily images)
@@ -67,7 +67,7 @@ document.onreadystatechange = function() {
 		console.log(s);
 		//alert(s);
 		kiwi_iOS = (s.includes('iPhone') || s.includes('iPad'));
-		kiwi_OSX = s.includes('OS X');
+		kiwi_MacOS = s.includes('OS X');
 		kiwi_linux = s.includes('Linux');
 		kiwi_Windows = s.includes('Win');
 		kiwi_android = s.includes('Android');
@@ -76,11 +76,26 @@ document.onreadystatechange = function() {
 		kiwi_browserVersion = /version\/([0-9]+)/i.exec(s);
 		kiwi_firefox = /firefox\/([0-9]+)/i.exec(s);
 		kiwi_chrome = /chrome\/([0-9]+)/i.exec(s);
+
 		kiwi_opera = /opera\/([0-9]+)/i.exec(s);
 		if (!kiwi_opera) kiwi_opera = /OPR\/([0-9]+)/i.exec(s);
-		kiwi_smartTV = /SmartTV\/([0-9]+)/i.exec(s);
+
+		kiwi_smartTV = s.includes('SmartTV');
+		if (!kiwi_smartTV) kiwi_smartTV = s.includes('SMART-TV');
+		if (kiwi_smartTV) {
+		   if (s.includes('Samsung')) kiwi_smartTV = 'Samsung';
+		   else
+		   if (s.includes('LG')) kiwi_smartTV = 'LG';
+		}
 		
-		console.log('iOS='+ kiwi_iOS +' OSX='+ kiwi_OSX +' Linux='+ kiwi_linux +' Windows='+ kiwi_Windows +' android='+ kiwi_android);
+		
+		console.log(
+		   'MacOS='+ kiwi_MacOS +
+		   ' Linux='+ kiwi_linux +
+		   ' Windows='+ kiwi_Windows +
+		   ' iOS='+ kiwi_iOS +
+		   ' Android='+ kiwi_android +
+		   ' SmartTV='+ kiwi_smartTV);
 		
 		// madness..
 		if (kiwi_opera) {
@@ -93,7 +108,7 @@ document.onreadystatechange = function() {
 		   if (kiwi_browserVersion) kiwi_safari[1] = kiwi_browserVersion[1];
 		}
 
-		console.log('safari='+ kiwi_isSafari() + ' firefox='+ kiwi_isFirefox() + ' chrome='+ kiwi_isChrome() + ' opera='+ kiwi_isOpera());
+		console.log('Safari='+ kiwi_isSafari() + ' Firefox='+ kiwi_isFirefox() + ' Chrome='+ kiwi_isChrome() + ' Opera='+ kiwi_isOpera());
 
 		if (typeof(kiwi_check_js_version) !== 'undefined') {
 			// done as an AJAX because needed long before any websocket available
@@ -107,7 +122,7 @@ document.onreadystatechange = function() {
 
 function kiwi_is_iOS() { return kiwi_iOS; }
 
-function kiwi_isOSX() { return kiwi_OSX; }
+function kiwi_isMacOS() { return kiwi_MacOS; }
 
 function kiwi_isWindows() { return kiwi_Windows; }
 
@@ -115,7 +130,9 @@ function kiwi_isLinux() { return kiwi_linux; }
 
 function kiwi_isAndroid() { return kiwi_android; }
 
-function kiwi_isMobile() { return (kiwi_isAndroid() || kiwi_is_iOS() || mobile_laptop_test); }
+function kiwi_isSmartTV() { return kiwi_smartTV; }
+
+function kiwi_isMobile() { return (force_mobile || kiwi_is_iOS() || kiwi_isAndroid() || (kiwi_isSmartTV() == 'Samsung') || mobile_laptop_test); }
 
 // returns the version number or NaN (later of which will evaluate false in numeric comparisons)
 function kiwi_isSafari() { return (kiwi_safari? kiwi_safari[1] : NaN); }
@@ -125,8 +142,6 @@ function kiwi_isFirefox() { return (kiwi_firefox? kiwi_firefox[1] : NaN); }
 function kiwi_isChrome() { return (kiwi_chrome? kiwi_chrome[1] : NaN); }
 
 function kiwi_isOpera() { return (kiwi_opera? kiwi_opera[1] : NaN); }
-
-function kiwi_isSmartTV() { return (kiwi_smartTV? kiwi_smartTV[1] : NaN); }
 
 var kiwi_version_fail = false;
 
@@ -231,6 +246,16 @@ function kiwi_dup_array(a)
    return a.slice();
 }
 
+function kiwi_dedup_array(a, func)
+{
+   var ra = [];
+   a.forEach(function(v, i) {
+      if (func && func(v)) return;
+      if (!ra.includes(v)) ra.push(v);
+   });
+   return ra;
+}
+
 function kiwi_shallow_copy(obj)
 {
    return Object.assign({}, obj);
@@ -247,12 +272,45 @@ function getFirstChars(buf, len)
    arrayBufferToStringLen(buf, len);
 }
 
-// NB: no error checking
-function kiwi_inet4_d2h(inet4_str)
+function kiwi_inet4_d2h(inet4_str, exclude_local)
 {
 	var s = inet4_str.split('.');
-	return ((s[0]&0xff)<<24) | ((s[1]&0xff)<<16) | ((s[2]&0xff)<<8) | (s[3]&0xff);
+	//console.log(s);
+	if (s.length != 4) return null;
+	var check = function(v) {
+	   var n = parseInt(v);    // includes "" => NaN
+	   if (!isNumber(n) || n < 0 || n > 255) return null;
+	   return n;
+	}
+	var a, b, c, d;
+	if ((a = check(s[0])) == null) return null;
+	if ((b = check(s[1])) == null) return null;
+	if ((c = check(s[2])) == null) return null;
+	if ((d = check(s[3])) == null) return null;
+	var ip = (a<<24) | (b<<16) | (c<<8) | d;
+	
+	if (exclude_local) {
+	   //console.log('CHECK '+ kiwi_ip_str(ip));
+	   if (
+         (ip >= kiwi_ip_10_lo && ip <= kiwi_ip_10_hi) ||
+         (ip >= kiwi_ip_172_16_lo && ip <= kiwi_ip_172_16_hi) ||
+         (ip >= kiwi_ip_192_168_lo && ip <= kiwi_ip_192_168_hi) ||
+         (ip == kiwi_ip_loopback)) {
+	         //console.log('EXCLUDE LOCAL '+ kiwi_ip_str(ip));
+            return null;
+      }
+	}
+	
+	return ip;
 }
+
+var kiwi_ip_10_lo = kiwi_inet4_d2h('10.0.0.0');
+var kiwi_ip_10_hi = kiwi_inet4_d2h('10.255.255.255');
+var kiwi_ip_172_16_lo = kiwi_inet4_d2h('172.16.0.0');
+var kiwi_ip_172_16_hi = kiwi_inet4_d2h('172.31.255.255');
+var kiwi_ip_192_168_lo = kiwi_inet4_d2h('192.168.0.0');
+var kiwi_ip_192_168_hi = kiwi_inet4_d2h('192.168.255.255');
+var kiwi_ip_loopback = kiwi_inet4_d2h('127.0.0.1');
 
 function kiwi_h2n_32(ip, o)
 {
@@ -522,6 +580,172 @@ function kiwi_trace_log(s)
    setTimeout(function(s) {
       kiwi_trace(s);
    }, 1, s);
+}
+
+function canvas_log(s)
+{
+   if (isUndefined(owrx.news_acc_s)) owrx.news_acc_s = '<br>';
+
+   if (s == '\f') {
+      owrx.news_acc_s = '<br>';
+   } else
+   if (s.charAt(0) == '$') {
+      owrx.news_acc_s += '<br>'+ s;
+   } else {
+      owrx.news_acc_s += ((owrx.news_acc_s != '<br>')? ' | ' : '') + s;
+   }
+
+   extint_news(owrx.news_acc_s);
+}
+
+function canvas_log2(s)
+{
+   if (kiwi_isMobile())
+      toggle_or_set_hide_bars(owrx.HIDE_BANDBAR);
+   w3_innerHTML('id-rx-title', kiwi.log2_seq +': '+ s);
+   kiwi.log2_seq++;
+}
+
+// from: stackoverflow.com/questions/11547672/how-to-stringify-event-object
+// Calculate a string representation of a node's DOM path.
+function kiwi_pathToSelector(node)
+{
+  if (!node || !node.outerHTML) {
+    return null;
+  }
+
+  var path;
+  while (node.parentElement) {
+    var name = node.localName;
+    if (!name) break;
+    name = name.toLowerCase();
+    var parent = node.parentElement;
+
+    var domSiblings = [];
+
+    if (parent.children && parent.children.length > 0) {
+      for (var i = 0; i < parent.children.length; i++) {
+        var sibling = parent.children[i];
+        if (sibling.localName && sibling.localName.toLowerCase) {
+          if (sibling.localName.toLowerCase() === name) {
+            domSiblings.push(sibling);
+          }
+        }
+      }
+    }
+
+    if (domSiblings.length > 1) {
+      name += ':eq(' + domSiblings.indexOf(node) + ')';
+    }
+    path = name + (path ? '>' + path : '');
+    node = parent;
+  }
+
+  return path;
+}
+
+// Generate a JSON version of the event.
+function kiwi_serializeEvent(e) {
+  if (e) {
+    var o = {
+      eventName: e.toString(),
+      altKey: e.altKey,
+      bubbles: e.bubbles,
+      button: e.button,
+      buttons: e.buttons,
+      cancelBubble: e.cancelBubble,
+      cancelable: e.cancelable,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      composed: e.composed,
+      ctrlKey: e.ctrlKey,
+      currentTarget: e.currentTarget ? e.currentTarget.outerHTML : null,
+      defaultPrevented: e.defaultPrevented,
+      detail: e.detail,
+      eventPhase: e.eventPhase,
+      fromElement: e.fromElement ? e.fromElement.outerHTML : null,
+      isTrusted: e.isTrusted,
+      layerX: e.layerX,
+      layerY: e.layerY,
+      metaKey: e.metaKey,
+      movementX: e.movementX,
+      movementY: e.movementY,
+      offsetX: e.offsetX,
+      offsetY: e.offsetY,
+      pageX: e.pageX,
+      pageY: e.pageY,
+      path: kiwi_pathToSelector(e.path && e.path.length ? e.path[0] : null),
+      relatedTarget: e.relatedTarget ? e.relatedTarget.outerHTML : null,
+      returnValue: e.returnValue,
+      screenX: e.screenX,
+      screenY: e.screenY,
+      shiftKey: e.shiftKey,
+      sourceCapabilities: e.sourceCapabilities ? e.sourceCapabilities.toString() : null,
+      target: e.target ? e.target.outerHTML : null,
+      timeStamp: e.timeStamp,
+      toElement: e.toElement ? e.toElement.outerHTML : null,
+      type: e.type,
+      view: e.view ? e.view.toString() : null,
+      which: e.which,
+      x: e.x,
+      y: e.y
+    };
+
+    var s = JSON.stringify(o, null, 2);
+    //console.log(s);
+    return s;
+  }
+  
+  return '(null)';
+}
+
+function event_dump(evt, id, oneline)
+{
+   if (oneline) {
+      var trel = (isDefined(evt.relatedTarget) && evt.relatedTarget)? (' Trel='+ evt.relatedTarget.id) : '';
+      var key = '';
+      if (evt.shiftKey) key += 'shift-';
+      if (evt.ctrlKey)  key += 'ctrl-';
+      if (evt.altKey)   key += 'alt-';
+      if (evt.metaKey)  key += 'meta-';
+      key += ''+ evt.key;
+      console.log('event_dump '+ id +' '+ evt.type +' k='+ key +' T='+ evt.target.id +' Tcur='+ evt.currentTarget.id + trel);
+   } else {
+      console.log('================================');
+      if (!isArg(evt)) {
+         console.log('EVENT_DUMP: '+ id +' bad evt');
+         kiwi_trace();
+         return;
+      }
+      console.log('EVENT_DUMP: '+ id +' type='+ evt.type);
+      console.log((evt.shiftKey? 'SFT ':'') + (evt.ctrlKey? 'CTL ':'') + (evt.altKey? 'ALT ':'') + (evt.metaKey? 'META ':'') +'key='+ evt.key);
+      var ct_id = evt.currentTarget? evt.currentTarget.id : '(null)';
+      console.log('this.id='+ this.id +' tgt.name='+ evt.target.nodeName +' tgt.id='+ evt.target.id +' ctgt.id='+ ct_id);
+      var buttons = '';
+      if (evt.buttons & 1) buttons += 'L';
+      if (evt.buttons & 4) buttons += 'M';   // yes, 4 is middle
+      if (evt.buttons & 2) buttons += 'R';
+      console.log('button='+ "LMR"[evt.button] +' buttons='+ buttons +' detail='+ evt.detail);
+      
+      if (evt.type.startsWith('touch')) {
+         console.log('pageX='+ evt.pageX +' clientX='+ evt.clientX +' screenX='+ evt.screenX);
+         console.log('pageY='+ evt.pageY +' clientY='+ evt.clientY +' screenY='+ evt.screenY);
+      } else {
+         console.log('pageX='+ evt.pageX +' clientX='+ evt.clientX +' screenX='+ evt.screenX +' offX(EXP)='+ evt.offsetX +' layerX(DEPR)='+ evt.layerX);
+         console.log('pageY='+ evt.pageY +' clientY='+ evt.clientY +' screenY='+ evt.screenY +' offY(EXP)='+ evt.offsetY +' layerY(DEPR)='+ evt.layerY);
+      }
+      
+      console.log('evt, evt.target, evt.currentTarget, evt.relatedTarget, elementFromPoint:');
+      console.log(evt);
+      console.log(evt.target);
+      console.log(evt.currentTarget);
+      console.log(evt.relatedTarget);
+      if (isNumber(evt.pageX) && isNumber(evt.pageY))
+         console.log(document.elementFromPoint(evt.pageX, evt.pageY));
+      else
+         console.log('(no x,y)');
+      console.log('----');
+   }
 }
 
 function kiwi_rateLimit(cb, time)
@@ -1001,28 +1225,48 @@ function deleteCookie(cookie)
 }
 
 // appinventor.mit.edu used by KiwiSDR Android app doesn't have localStorage
-function kiwi_localStorage_getItem(s)
+function kiwi_storeGet(s, init)
 {
    var rv;
+   if (!isArg(s)) return null;
 	try {
 	   if (localStorage == null) return null;
 	   rv = localStorage.getItem(s);
+	   if (rv == null) {
+	      rv = readCookie(s);
+	      // move cookie to storage api
+	      if (rv != null) {
+	         console.log('$moving to storage api: '+ s +'='+ rv);
+	         kiwi_storeSet(s, rv);
+	         deleteCookie(s);
+	      } else {
+	         if (isDefined(init)) {
+	            kiwi_storeSet(s, init);
+               rv = init;
+	         } else {
+	            rv = null;
+	         }
+	      }
+	   }
 	} catch(ex) {
+      console.log('$kiwi_storeGet CATCH: '+ s);
+      console.log('$kiwi_storeGet CATCH: '+ ex);
 	   rv = null;
 	}
+	if (rv == null) console.log('$ kiwi_storeGet warning: '+ s +'=null');
 	return rv;
 }
 
-function kiwi_localStorage_setItem(s, v)
+function kiwi_storeSet(s, v)
 {
-   var rv;
+   if (!isArg(v)) return null;
 	try {
 	   if (localStorage == null) return null;
-	   rv = localStorage.setItem(s, v);
+	   localStorage.setItem(s, v);
 	} catch(ex) {
-	   rv = null;
+	   return null;
 	}
-	return rv;
+	return true;
 }
 
 // Get function from string, with or without scopes (by Nicolas Gauthier)
@@ -1359,7 +1603,7 @@ function kiwi_remove_cjson_comments(s)
 
 function kiwi_scrollbar_width()
 {
-	if (kiwi_isOSX()) return 10;		// OSX/iOS browser scrollbars are all narrower
+	if (kiwi_isMacOS()) return 10;		// MacOS/iOS browser scrollbars are all narrower
 	return 15;
 }
 

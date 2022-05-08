@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 514
+VERSION_MIN = 522
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
@@ -340,7 +340,7 @@ endif
 
 ifeq ($(BBAI),true)
 /usr/bin/cpufreq-info:
-	-apt-get --no-install-recommends -y install cpufrequtils
+	#-apt-get --no-install-recommends -y install cpufrequtils
 endif
 
 ifneq ($(DEBIAN_7),true)

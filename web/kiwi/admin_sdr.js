@@ -737,7 +737,7 @@ function webpage_html()
 		w3_half('w3-margin-bottom', 'w3-container',
 			w3_inline('w3-halign-space-between/',
             w3_inline('',
-               w3_input('w3-flex-col//w3-no-styling||type="file" accept="image/*"',
+               w3_input('w3-dump w3-flex-col//w3-no-styling||type="file" accept="image&slash;*"',
                   'Photo file', 'id-photo-file', '', 'webpage_photo_file_upload'
                ),
                w3_div('id-photo-error', '')
@@ -872,7 +872,7 @@ function webpage_photo_file_upload2(key)
 	w3_remove(el, 'w3-text-red');
 	w3_remove(el, 'w3-text-green');
 
-	//kiwi_ajax_send(fdata, '/PIX?'+ key, 'webpage_photo_uploaded');
+	kiwi_ajax_send(fdata, '/PIX?'+ key, 'webpage_photo_uploaded');
 }
 
 function webpage_title_cb(path, val)
@@ -1078,13 +1078,18 @@ function kiwisdr_com_register_cb(path, idx)
    
    var text, color;
    var no_url = (cfg.server_url == '');
+   var bad_ip = (kiwi_inet4_d2h(cfg.server_url) != null && kiwi_inet4_d2h(cfg.server_url, true) == null);
    var no_passwordless_channels = (adm.user_password != '' && cfg.chan_no_pwd == 0);
    var no_rx_gps = (cfg.rx_gps == '' || cfg.rx_gps == '(0.000000, 0.000000)' || cfg.rx_gps == '(0.000000%2C%200.000000)');
    //console.log('kiwisdr_com_register_cb has_u_pwd='+ (adm.user_password != '') +' chan_no_pwd='+ cfg.chan_no_pwd +' no_passwordless_channels='+ no_passwordless_channels);
-
-   if (idx == w3_SWITCH_YES_IDX && (no_url || no_passwordless_channels || no_rx_gps)) {
+   //console.log('cfg.server_url='+ cfg.server_url);
+   
+   if (idx == w3_SWITCH_YES_IDX && (no_url || bad_ip || no_passwordless_channels || no_rx_gps)) {
       if (no_url)
          text = 'Error, you must first setup a valid Kiwi connection URL on the admin "connect" tab';
+      else
+      if (bad_ip)
+         text = 'Error, must be a public (not local) IP address on the admin "connect" tab';
       else
       if (no_passwordless_channels)
          text = 'Error, must have at least one user channel that doesn\'t require a password (see admin "security" tab)';
@@ -1295,8 +1300,8 @@ function dx_html()
    dx.LEGEND = -1;
    dx.SAVE_NOW = true;
    dx.DX_DOW_BASE = dx.DX_DOW >> dx.DX_DOW_SFT;
-   dx.spacer = w3_div('w3-font-fixed w3-circle-pad-small w3-pale-blue', '&nbsp;');
-   dx.button_section = 'w3-font-fixed w3-aqua w3-circle w3-circle-pad||title="show&slash;hide section"';
+   dx.spacer = w3_div('w3-font-fixed w3-text-in-circle w3-wh-24px w3-pale-blue', '&nbsp;');
+   dx.button_section = 'w3-font-fixed w3-aqua w3-text-in-circle w3-wh-28px||title="show&slash;hide section"';
    dx.button_add = 'w3-css-lime||title="duplicate this entry"';
    dx.button_del = 'w3-css-red||title="delete this entry"';
    dx.link1 = 'w3-link-darker-color w3-bold||title="more information"';
@@ -1517,7 +1522,7 @@ function dx_save(id, now)
    }
 }
 
-function dx_btn(c) { return 'w3-font-fixed w3-circle w3-circle-pad-small '+ c; }
+function dx_btn(c) { return 'w3-font-fixed w3-text-in-circle w3-wh-24px '+ c; }
 
 
 // dx: labels
@@ -2637,7 +2642,7 @@ function extensions_html()
 {
 	var s =
 	w3_div('id-extensions w3-hide w3-section',
-      w3_sidenav('id-extensions-nav'),
+      w3_sidenav('id-extensions-nav w3-margin-B-16'),
 		w3_div('id-extensions-config')
 	);
 	return s;
