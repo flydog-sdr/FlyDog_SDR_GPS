@@ -476,32 +476,47 @@ function ext_panel_set_name(name)
 
 
 /*
+www.ios-resolution.com
 screen.{width,height}	P=portrait L=landscape
 			   w     h		screen.[wh] in portrait
 			   h     w		rotated to landscape
 iPhone 5S	320   568	P
-iPhone X	   414   896	P
-levono		600   976	P 7"
-huawei		600   976	P 7"
+iPhone 6S   375   667   P
+iPhone XR   414   896	P
+levono		600   1024	P 7"
+huawei		600   982	P 7"
 
 iPad 2		768   1024	P
 MBP 15"		1440  900	L
 */
 
+// Must delay the determination of orientation change while the popup keyboard is active.
+// Otherwise an incorrect window.innerHeight value is possible leading to an invalid
+// isPortrait determination. This is why the check for owrx.popup_keyboard_active
+// Tried checking w against window.screen.width, but latter changed with rotation on Android
+// but not with iOS. So isn't constant and can't be used.
 function ext_mobile_info(last)
 {
    var w = window.innerWidth;
-   var h = window.innerHeight;
+   var h = window.innerHeight;      // reduced if popup keyboard active
    var rv = { width:w, height:h };
-   rv.wh_unchanged = (last && last.width == w && last.height == h)? 1:0;
+   var isPortrait;
 
-	var isPortrait = (w < h || mobile_laptop_test)? 1:0;
+   if (owrx.popup_keyboard_active) {
+      isPortrait = last? last.isPortrait : 1;
+   } else {
+      // if popup keyboard active h could be <= w making test invalid
+      isPortrait = (w < h || mobile_laptop_test)? 1:0;
+   }
    rv.orient_unchanged = (last && last.isPortrait == isPortrait)? 1:0;
+
+   //if (!rv.orient_unchanged && last)
+   //   canvas_log(w +' '+ h +' '+ last +' '+ last.isPortrait + isPortrait);
 
 	rv.isPortrait = isPortrait? 1:0;
 	rv.iPad     = (isPortrait && w <= 768)? 1:0;    // iPad or smaller
 	rv.small    = (isPortrait && w <  768)? 1:0;    // anything smaller than iPad
-	rv.narrow   = (isPortrait && h <= 600)? 1:0;    // narrow screens, i.e. phones and 7" tablets
+	rv.narrow   = (isPortrait && w <= 600)? 1:0;    // narrow screens, i.e. phones and 7" tablets
    return rv;
 }
 
@@ -515,18 +530,31 @@ function extint_news(s)
    var el;
    if (!extint.news_init) {
       el = w3_el('id-news');
+      el.style.top = '';
+      el.style.bottom = '';
+      el.style.left = '';
+      el.style.right = '';
       if (kiwi_isMobile()) {
-         //el.style.top = '36px';
-         el.style.top = '300px';
-         el.style.bottom = '';
-         el.style.left = '';
-         el.style.right = '0';
-         el.style.width = '350px';
-         el.style.height = '200px';
+         var w = window.innerWidth;
+         var h = window.innerHeight;
+         if (w <= 768 && h >= 600) {    // iPad & tablets
+            //el.style.top = '36px';
+            el.style.bottom = '0';
+            //el.style.right = '0';
+            el.style.left = '0';
+            el.style.width = '350px';
+            //el.style.height = '300px';
+            el.style.height = '400px';
+         } else {
+            el.style.top = '36px';
+            //el.style.top = '300px';
+            el.style.right = '0';
+            //el.style.width = '350px';
+            el.style.width = '150px';
+            el.style.height = '150px';
+         }
       } else {
-         el.style.top = '';
          el.style.bottom = '0';
-         el.style.right = '';
          el.style.left = '0';
          el.style.width = '350px';
          el.style.height = '300px';
@@ -727,6 +755,9 @@ function extint_environment_changed(changed)
          if (extint.current_ext_name) {
             w3_call(extint.current_ext_name +'_environment_changed', changed);
          }
+         
+         if (changed.freq || changed.mode || changed.zoom || changed.waterfall_pan || changed.resize)
+            mouse_freq_remove();
 
          // for benefit of programs like CATSync that use injected javascript to catch events
          w3_call('injection_environment_changed', changed);

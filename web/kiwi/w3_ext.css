@@ -207,25 +207,22 @@ input[type=range]::-moz-range-thumb {
     margin: 0;
 }
 
-/* not Firefox */
-@supports not (-moz-appearance:none) {
-    .w3-select-menu
-    {
-        width: auto;
-        cursor: pointer;
-    }
+.w3-select-menu {
+    width: auto;
+    cursor: pointer;
+    
+    /*
+        Chrome mobile requires the background to be set white to get white.
+        Otherwise it seems to inherit the parent background color.
+        But if you specify a select background you get the default borders
+        which are awful. So we have to set those as well.
+    */
+    background: white;
+    border: 1px solid rgb(227,227,227);
+    border-radius: 3px;
 }
 
-/* Firefox: due to change in <select> menu width and added scrollbar, 10-mar-22 */
-@supports (-moz-appearance:none) {
-    .w3-select-menu
-    {
-        width: 90%;
-        cursor: pointer;
-    }
-}
-
-.w3-menu {
+.w3-menu-container {
     display: inline-block;
     visibility: hidden;
     position: fixed;
@@ -240,7 +237,7 @@ input[type=range]::-moz-range-thumb {
     outline: 0;
 }
 
-/* OSX menu colors (sort-of) */
+/* MacOS menu colors (sort-of) */
 .w3-menu-item {
     padding: 4px 16px;      /* instead of margin so :hover inverts color of full width */
     background-color: rgb(240, 240, 240);
@@ -710,24 +707,31 @@ input[type=range]::-moz-range-thumb {
     padding: 0 0 8px 0
 }
 
-.w3-circle-pad
+.w3-text-in-circle
 {
-    padding: 2px 8px
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    border-radius: 50% !important;
 }
 
-.w3-circle-pad2
+.w3-wh-20px
 {
-    padding: 3.5px 8px
+    width: 20px;
+    height: 20px;
 }
 
-.w3-circle-pad-small
+.w3-wh-24px
 {
-    padding: 0 6px
+    width: 24px;
+    height: 24px;
 }
 
-.w3-circle-pad-small2
+.w3-wh-28px
 {
-    padding: 1.5px 6px
+    width: 28px;
+    height: 28px;
 }
 
 
@@ -995,6 +999,16 @@ input[type=range]::-moz-range-thumb {
 	overflow-y: auto;
 }
 
+/*
+    NB: If "overflow-y: auto" is used for w3_menus(), instead of "overflow-y: scroll"
+    via w3-scroll-always-y below, then the scrollbar will intrude into the width
+    of the menu elements and cause the longest to lose right padding. */
+.w3-scroll-always-y
+{
+	overflow-x: hidden;
+	overflow-y: scroll;
+}
+
 .w3-iphone-scroll
 {
     -webkit-overflow-scrolling: touch;
@@ -1208,6 +1222,10 @@ input[type=range]::-moz-range-thumb {
 
 .w3-font-14px {
     font-size: 14px;
+}
+
+.w3-font-16px {
+    font-size: 16px;
 }
 
 .w3-font-20px {
