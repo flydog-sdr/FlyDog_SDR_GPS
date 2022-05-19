@@ -160,7 +160,7 @@ void update_vars_from_config(bool called_at_init)
     inactivity_timeout_mins = cfg_default_int("inactivity_timeout_mins", 0, &update_cfg);
     ip_limit_mins = cfg_default_int("ip_limit_mins", 0, &update_cfg);
 
-    int srate_idx = cfg_default_int("max_freq", -1, &update_cfg);
+    int srate_idx = cfg_default_int("max_freq", 0, &update_cfg);
     switch(srate_idx) {
         default:
             ui_srate = 32*MHz;
