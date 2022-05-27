@@ -26,17 +26,21 @@
 function JNX()
 {
    var t = this;
+   t.init = true;
    
    t.State_e = { NOSIGNAL:0, SYNC1:1, SYNC2:2, READ_DATA:3, FIXED_LENGTH:4 };
    t.states = [ 'NOSIGNAL', 'SYNC1', 'SYNC2', 'READ_DATA', 'FIXED_LENGTH' ];
    t.state = t.State_e.NOSIGNAL;
    
    // "front porch" mode -- look for run of "mark" bits followed by the start bit
+   // used by CHU
    t.fp_OFF = 0;
    t.fp_WAIT = 1;
    t.fp_WAIT2 = 2;
    t.fp_START = 3;
    t.fp_PASS = 4;
+   t.fp_SYNC = 5;
+   t.fp_SYNC_START = 6;
    
    // constants
    t.invsqr2 = 1.0 / Math.sqrt(2);
@@ -60,7 +64,7 @@ function JNX()
    t.biquad_lowpass = new BiQuadraticFilter();
 }
 
-JNX.prototype.setup_values = function(sample_rate, center_frequency_f, shift_Hz, baud_rate, framing, inverted, encoding) {
+JNX.prototype.setup_values = function(sample_rate, center_frequency_f, shift_Hz, baud_rate, framing, inverted, encoding, show_errs) {
    var t = this;
    t.sample_rate = sample_rate;
    t.center_frequency_f = (center_frequency_f == undefined)? 500.0 : center_frequency_f;
@@ -78,7 +82,7 @@ JNX.prototype.setup_values = function(sample_rate, center_frequency_f, shift_Hz,
    t.baud_rate = (t.baud_rate < 10) ? 10 : t.baud_rate;
    t.bit_duration_seconds = 1.0 / t.baud_rate;
    t.bit_sample_count = Math.floor(t.sample_rate * t.bit_duration_seconds + 0.5);
-   //console.log('JNX bit_sample_count='+ t.bit_sample_count +' sr+bds='+ (t.sample_rate * t.bit_duration_seconds));
+   if (t.trace) console.log('JNX bit_sample_count='+ t.bit_sample_count +' sr+bds='+ (t.sample_rate * t.bit_duration_seconds));
    t.half_bit_sample_count = t.bit_sample_count / 2;
    
    t.framing = framing;
@@ -89,14 +93,24 @@ JNX.prototype.setup_values = function(sample_rate, center_frequency_f, shift_Hz,
       t.fp_mark_bits = 32;
       t.fp_pass_bits = 11 * 10;
    } else
+   if (encoding == 'DSC') {
+      t.fp = t.fp_SYNC;
+   } else
       t.fp = t.fp_OFF;
    
-   if (dbgUs && framing == 'CHU') {
+   if (0 && dbgUs && framing == 'CHU') {
+      //t.trace = 1;
       //t.dbg = 1;
       t.chu_dbg = 1;
    }
    
+   if (0 && dbgUs && framing == 'DSC') {
+      t.trace = 1;
+      t.dbg = 1;
+   }
+   
    t.inverted = inverted;
+   t.show_errs = show_errs;
 
    switch(encoding) {
    
@@ -108,6 +122,11 @@ JNX.prototype.setup_values = function(sample_rate, center_frequency_f, shift_Hz,
    
       case 'CCIR476':
          t.encoding = new CCIR476();
+         break;
+   
+      case 'DSC':
+         t.encoding = new DSC(t.init, t.output_char_cb);
+         t.init = false;
          break;
    
    }
@@ -185,7 +204,7 @@ JNX.prototype.set_state = function(s) {
    var t = this;
    if (s != t.state) {
       t.state = s;
-      //console.log("New state: " + t.states[t.state]);
+      if (t.trace) console.log("New state: " + t.states[t.state]);
    }
 }
 
@@ -320,13 +339,13 @@ JNX.prototype.process_data = function(samps, nsamps) {
          if (t.fp == t.fp_WAIT) {
             t.fp_count = 0;
             t.fp = t.fp_WAIT2;
-            //console.log('fp_WAIT');
+            if (t.trace) console.log('fp_WAIT');
          }
          if (t.fp_count >= t.fp_mark_bits && bit == 0) {
             t.fp_count = 0;
             t.sync_setup = 1;
             t.fp = t.fp_START;      // one-time event for others to observe
-            //console.log('fp_START');
+            if (t.trace) console.log('fp_START');
          } else {
             if (bit == 1) t.fp_count++; else t.fp_count = 0;
             t.sample_count++; continue;   // don't forward any bits while waiting
@@ -346,10 +365,10 @@ JNX.prototype.process_data = function(samps, nsamps) {
          }
          if (t.chu_bn >= 1 && t.chu_bn <= 8) { t.chu_s += bit; t.chu_v >>= 1; t.chu_v |= bit? 0x80:0; }
          if (t.chu_bn == 8) t.chu_s += ' ';
-         if (t.chu_bn >= 9 && t.chu_bn <= 10) { t.chu_s += bit; t.chu_s1 += bit; }
+         if (t.chu_bn >= 9 && t.chu_bn <= 10) { t.chu_s += bit; t.chu_s1 += bit; }     // stop bits
          if (t.chu_bn == 10) {
             var hv = t.chu_v;
-            hv = (((hv & 0xf) << 4) & 0xf0) | (((hv & 0xf0) >>> 4) & 0xf);
+            hv = (((hv & 0xf) << 4) & 0xf0) | (((hv & 0xf0) >>> 4) & 0xf);    // swap nybble
             t.chu_s = t.chu_cc.leadingZeros(2) +': '+ t.chu_s +' '+ hv.toHex(-2) +' ^'+ (hv ^ 0xff).toHex(-2) +' ';
             //console.log(t.chu_s);
             t.chu_s1 += '_'+ hv.toHex(-2) +' ';
@@ -368,6 +387,15 @@ JNX.prototype.process_data = function(samps, nsamps) {
 
          //t.sample_count++; continue;
       }
+
+      if (t.fp == t.fp_SYNC) {
+         if (t.encoding.search_sync(bit)) {
+            t.sync_setup = 1;
+            t.fp = t.fp_SYNC_START;
+            t.sample_count++;
+            continue;      // wait for next bit
+         }
+      }
       
       if (t.sync_setup) {
          t.bit_count = 0;
@@ -379,7 +407,7 @@ JNX.prototype.process_data = function(samps, nsamps) {
          
          // If we've already waited for the start bit via front porch search
          // use a fixed-length transfer scheme.
-         if (t.fp == t.fp_START)
+         if (t.fp == t.fp_START || t.fp == t.fp_SYNC_START)
             t.set_state(t.State_e.FIXED_LENGTH);
          else
             t.set_state(t.State_e.SYNC1);
@@ -388,6 +416,9 @@ JNX.prototype.process_data = function(samps, nsamps) {
       }
             
       switch (t.state) {
+         case t.State_e.NOSIGNAL:
+            break;
+         
          // scan indefinitely for valid bit pattern
          case t.State_e.SYNC1:
             t.code_bits = (t.code_bits >> 1) | (bit? t.msb : 0);
@@ -479,11 +510,15 @@ JNX.prototype.process_data = function(samps, nsamps) {
             break;
 
          case t.State_e.FIXED_LENGTH:
-            if (t.fp == t.fp_START) t.fixed_start = 1;
+            if (t.fp == t.fp_START || t.fp == t.fp_SYNC_START) t.fixed_start = 1;
             t.code_bits = (t.code_bits >> 1) | (bit? t.msb : 0);
             t.bit_count++;
             if (t.bit_count == t.nbits) {
-               t.encoding.process_char(t.code_bits, t.fixed_start, t.output_char_cb);
+               var rv = t.encoding.process_char(t.code_bits, t.fixed_start, t.output_char_cb, t.show_errs);
+               if (rv.resync) {
+                  t.fp = t.fp_SYNC;
+                  t.set_state(t.State_e.NOSIGNAL);
+               }
                t.bit_count = 0;
                t.code_bits = 0;
                t.fixed_start = 0;

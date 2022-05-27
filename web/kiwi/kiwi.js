@@ -62,6 +62,9 @@ var kiwi = {
    aper_s: [ 'man', 'auto' ],
    aper_e: { man:0, auto:1 },
    
+   esc_lt: '\x11',   // ascii dc1
+   esc_gt: '\x12',   // ascii dc2
+   
    xdLocalStorage_ready: false,
    prefs_import_ch: -1,
 };
@@ -664,13 +667,23 @@ var ansi = {
                [249,53,248],
                [20,240,240],
                [233,235,235]
-            ]
+   ],
+   
+   // black on color unless otherwise noted
+   RED:     "\u001b[97m\u001b[101m",   // white on red
+   YELLOW:  "\u001b[103m",
+   GREEN:   "\u001b[102m",
+   CYAN:    "\u001b[106m",
+   BLUE:    "\u001b[97m\u001b[104m",   // white on blue
+   MAGENTA: "\u001b[97m\u001b[105m",   // white on magenta
+   GREY:    "\u001b[47m",
+   NORM:    "\u001b[m"
 };
 
 // NB: doesn't yet handle XY screen addressing so apps like nano editor can be used in admin console
 function kiwi_output_msg(id, id_scroll, p)
 {
-   var dbg = (1 && dbgUs);
+   var dbg = (0 && dbgUs);
    
 	var parent_el = w3_el(id);
 	if (!parent_el) {
@@ -692,6 +705,7 @@ function kiwi_output_msg(id, id_scroll, p)
       p.esc = { s:'', state:0 };
       p.sgr = { span:0, bright:0, fg:null, bg:null };
       p.return_pending = false;
+      p.inc = 1;
       p.init = true;
    }
 
@@ -984,18 +998,19 @@ function kiwi_output_msg(id, id_scroll, p)
          }
 		} else
 		
-		if ((c >= ' ' && c <= '~') || c == '\n') {
+		// let single-byte UTF-8 go through
+		if ((c >= ' ' && c <= '\xff') || c == '\n') {
 		   if (c == '<') {
 		      snew += '&lt;';
-            p.col++;
+            p.col += p.inc;
 		   } else
 		   if (c == '>') {
 		      snew += '&gt;';
-            p.col++;
+            p.col += p.inc;
 		   } else {
             if (c != '\n') {
                snew += c;
-               p.col++;
+               p.col += p.inc;
             }
             if (c == '\n' || p.col == p.ncol) {
                wasScrolledDown = w3_isScrolledDown(el_scroll);
@@ -1011,7 +1026,13 @@ function kiwi_output_msg(id, id_scroll, p)
                   w3_scrollDown(el_scroll);
             }
          }
-		}  // ignore any other chars
+		} else
+		
+		// don't count HTML escape sequences
+		if (c == kiwi.esc_lt) { snew += '<'; p.inc = 0; } else
+		if (c == kiwi.esc_gt) { snew += '>'; p.inc = 1; }
+		
+      // ignore any other chars
 	}
 
    wasScrolledDown = w3_isScrolledDown(el_scroll);
