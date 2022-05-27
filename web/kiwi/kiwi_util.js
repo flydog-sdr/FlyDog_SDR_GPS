@@ -205,6 +205,11 @@ function dqc(s)
 	return '"'+ s +'":';
 }
 
+function paren(s)
+{
+   return '('+ s +')';
+}
+
 function plural(num, word)
 {
    if (num == 1) return word; else return word +'s';
@@ -264,6 +269,20 @@ function kiwi_shallow_copy(obj)
 function kiwi_deep_copy(obj)
 {
    return JSON.parse(JSON.stringify(obj));
+}
+
+function kiwi_bitReverse(v, len) {
+   if (v == 0) return 0;
+   var rv = 0;
+   for (i = 0; i < len; i++) {
+      rv |= ((v >> i) & 1) << (len - 1 - i);
+   }
+   return rv >>> 0;     // force unsigned result if b31 set
+}
+
+function kiwi_bitCount(n) {
+   if (n == 0) return 0;
+   return n.toString(2).match(/1/g).length
 }
 
 // external API compatibility
@@ -936,19 +955,25 @@ function kiwi_JSON_parse(tag, json)
    return obj;
 }
 
-// remove ANSI "ESC[ ... m" sequences
-function kiwi_remove_ANSI_escape_sequences(s)
+// remove ANSI "ESC[ ... m" sequences and our HTML escape sequences
+function kiwi_remove_escape_sequences(s)
 {
    var a1 = s.split('');
    var a2 = [];
-   var inANSI = false;
+   var inANSI = false, inHTML = false;
    for (var i = 0; i < a1.length; i++) {
       if (inANSI) {
          if (a1[i] == 'm') inANSI = false;
+      } else
+      if (inHTML) {
+         if (a1[i] == kiwi.esc_gt) inHTML = false;
       } else {
          if (a1[i] == '\u001b' && (i+1) < a1.length && a1[i+1] == '[') {
             i++;
             inANSI = true;
+         } else
+         if (a1[i] == kiwi.esc_lt) {
+            inHTML = true;
          } else {
             a2.push(a1[i]);
          }
