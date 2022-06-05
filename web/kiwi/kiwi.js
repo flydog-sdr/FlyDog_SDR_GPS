@@ -200,7 +200,7 @@ function kiwi_load_js(js_files, cb_post, cb_pre)
 	console.log(js_files);
 
    var loaded_any = false;
-   js_files.forEach(function(src) {
+   js_files.forEach(function(src, i) {
       // only load once in case used in multiple places (e.g. Google maps)
       if (!kiwi.loaded_files[src]) {
          if (!src.includes('kiwi_js_load.js')) {
@@ -220,7 +220,7 @@ function kiwi_load_js(js_files, cb_post, cb_pre)
             // callback is associated with kiwi_js_load.js, in case there are
             // multiple js_files to be loaded prior
             if (src == 'kiwi/kiwi_js_load.js') {
-               script.kiwi_js = js_files[0];
+               script.kiwi_js = js_files[i-1];
                script.kiwi_cb = cb_post;
             }
          } else
@@ -233,14 +233,14 @@ function kiwi_load_js(js_files, cb_post, cb_pre)
             unknown_ext = true;
          
          if (unknown_ext) {
-            console.log('UNKNOWN FILETYPE '+ src);
+            console.log('DYNLOAD UNKNOWN FILETYPE '+ src);
          } else {
             script.async = false;
             document.head.appendChild(script);
-            console.log('loading '+ src);
+            console.log('DYNLOAD loading '+ src);
          }
       } else {
-         console.log('already loaded: '+ src);
+         console.log('DYNLOAD already loaded: '+ src);
       }
    });
 	console.log('DYNLOAD FINISH');
@@ -248,16 +248,16 @@ function kiwi_load_js(js_files, cb_post, cb_pre)
 	// if the kiwi_js_load.js process never loaded anything just call the callback(s) here
 	if (!loaded_any) {
 	   if (cb_pre) {
-         //console.log('call pre '+ cb_pre);
+         console.log('DYNLOAD call pre '+ cb_pre);
 	      w3_call(cb_pre, false);
 	   }
 	   if (cb_post) {
-         //console.log('call post '+ cb_post);
+         console.log('DYNLOAD call post '+ cb_post);
          w3_call(cb_post);
       }
 	} else {
 	   if (cb_pre) {
-         //console.log('call pre subsequent '+ cb_pre);
+         console.log('DYNLOAD call pre subsequent '+ cb_pre);
          w3_call(cb_pre, true);
       }
       // cb_post is called from kiwi_js_load.js after module has actually loaded
@@ -677,7 +677,10 @@ var ansi = {
    BLUE:    "\u001b[97m\u001b[104m",   // white on blue
    MAGENTA: "\u001b[97m\u001b[105m",   // white on magenta
    GREY:    "\u001b[47m",
-   NORM:    "\u001b[m"
+   NORM:    "\u001b[m",
+   
+   rolling: [ 'RED', 'YELLOW', 'GREEN', 'CYAN', 'BLUE', 'MAGENTA', 'GREY' ],
+   rolling_n: 7
 };
 
 // NB: doesn't yet handle XY screen addressing so apps like nano editor can be used in admin console
