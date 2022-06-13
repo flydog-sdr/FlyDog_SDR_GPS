@@ -1232,10 +1232,10 @@ function network_html()
             w3_div('',
                w3_text('w3-bold w3-text-teal', 'IP address blacklist'),
                w3_text('w3-text-black w3-show-block',
-                  'IP addresses/ranges listed here are blocked <br>' +
-                  'from accessing your Kiwi (via Linux iptables). <br>' +
-                  'Use CIDR notation for ranges, e.g. CIDR "ip/24" <br>' +
-                  'is equivalent to netmask "255.255.255.0" <br>' +
+                  'IP addresses/ranges listed here are<br>' +
+                  'blocked from accessing your Kiwi. <br>' +
+                  'Use CIDR notation for ranges, e.g.<br>' +
+                  '"ip/24" is netmask "255.255.255.0".<br>' +
                   'More information at the ' +
                   w3_link('w3-link-darker-color', 'http://forum.kiwisdr.com/index.php?p=/discussion/2352/call-for-ip-address-blacklist-contributions/p1', 'Kiwi forum') +'.'
                )
@@ -1244,22 +1244,28 @@ function network_html()
             w3_divs('/w3-center w3-tspace-8',
                   w3_div('',
                      w3_div('w3-margin-T-16', '<b>Download IP address blacklist?</b>'),
+                     w3_text('id-ip-blacklist-new w3-text-red w3-hide', 'New blacklist available'),
                      w3_inline('w3-valign w3-halign-space-evenly w3-margin-T-10/',
                         w3_button('id-ip-blacklist-download w3-aqua', 'Download', 'network_download_button_cb'),
-                        w3_text('id-ip-blacklist-new w3-text-red w3-hide', 'New blacklist available'),
                         w3_button('w3-aqua', 'Clear', 'network_download_clear_cb')
                      )
                   )
                ,
                w3_text('w3-text-black w3-center',
-                  'Downloads a standard blacklist definition from ' +
+                  'Downloads a standard blacklist definition from<br>' +
                   w3_link('w3-link-darker-color', network.ip_blacklist_file, 'kiwisdr.com') +
-                  '<br>A local, writeable blacklist can be entered below.'
+                  '. A local, writeable blacklist<br>can be entered below.'
                )
             ),
             
             w3_div('w3-center w3-margin-B-24',
-               '<b>Prevent multiple connections from<br>the same IP address?</b><br>',
+               '<b>Automatically download<br>IP blacklist?</b><br>',
+               w3_switch('w3-margin-T-8 w3-margin-B-8', 'Yes', 'No', 'adm.ip_blacklist_auto_download',
+                  adm.ip_blacklist_auto_download, 'admin_radio_YN_cb')
+            ),
+            
+            w3_div('w3-center w3-margin-B-24',
+               '<b>Prevent multiple connections<br>from the same IP address?</b><br>',
                w3_switch('w3-margin-T-8 w3-margin-B-8', 'Yes', 'No', 'adm.no_dup_ip', adm.no_dup_ip, 'admin_radio_YN_cb')
             )
          ),
@@ -1496,7 +1502,7 @@ function network_blacklist_mtime_cb(mt, update)
       w3_int_set_cfg_cb('adm.ip_blacklist_mtime', mtime);
    } else {
       // update download button ui if new blacklist available
-      if (adm.ip_blacklist_mtime != mtime) {
+      if (adm.ip_blacklist_mtime < mtime) {
          w3_remove_then_add('id-ip-blacklist-download', 'w3-aqua', 'w3-red');
          w3_hide2('id-ip-blacklist-new', false);
       }
@@ -3219,8 +3225,10 @@ function admin_close()
 {
    // don't show message if reload countdown running
    kiwi_clearTimeout(admin.keepalive_timeoout);
-   if (!admin.reload_rem && !admin.long_running)
-      kiwi_show_msg('Server has closed connection.');
+   if (!admin.reload_rem && !admin.long_running) {
+      //kiwi_show_msg('Server has closed connection.');
+      admin_wait_then_reload(60, 'Server has closed connection. Will retry.');
+   }
 }
 
 // Process replies to our messages sent via ext_send('SET ...')
@@ -3466,7 +3474,12 @@ function admin_draw_pie() {
 		admin.reload_rem--;
 		kiwi_draw_pie('id-admin-pie', admin.pie_size, (admin.reload_secs - admin.reload_rem) / admin.reload_secs);
 	} else {
-		window.location.reload(true);
+	   try {
+		   window.location.reload(true);
+		} catch(ex) {
+		   console.log('RELOAD FAILED?');
+		   console.log(ex);
+		}
 	}
 };
 
