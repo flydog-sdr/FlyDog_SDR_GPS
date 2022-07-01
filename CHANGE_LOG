@@ -2,6 +2,54 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.544  Jun 23, 2022
+    Admin page, DX tab:
+        Show solitary circle-plus icon if all band bar entries have been deleted.
+        Don't allow last remaining DX label list or band service menu entries to be removed.
+    
+    Selcall extension:
+        For Austravel Net frequencies show base names when their selcalls are used.
+        Add Austravel Net channel numbers to the Selcall frequency menu.
+
+v1.543  Jun 19, 2022
+    Fixes:
+        Fix passband initialization bug that occurs under certain circumstances.
+        When snap-to-nearest enabled via right-click menu or occurs via shift-click in waterfall:
+            Allows waterfall dragging and respects locked tuning mode.
+    
+    New URL parameters:
+        "mem=f1,f2...  Set frequency memory menu to values given. Overrides any previously stored values.
+        "z=[0-14]"  Set zoom level directly (historically could be done as part of "f=" parameter).
+
+    Show ip blacklist file hash in /status inquiry (help determine if auto update is working).
+
+v1.541,542  Jun 17, 2022
+    FAX, FSK, NAVTEX extensions:
+        Menu frequencies are now loaded from a file on kiwisdr.com so a new release is not required
+        to update them. A backup copy is kept on the server in case the Kiwi has no Internet access.
+
+    Selcall:
+        Use published frequency values in menus at the expense of higher offset for some.
+        Added Austravel Safety Net: www.austravelsafetynet.org.au/node/2
+        Using clear button when map shown will clear map markers.
+        Decodes calling when position info not included. Formats not decoded show raw values.
+
+    Frequency memory:
+        When you continuously tune by mousing down in the frequency scale (or on mobile by two-finger
+            swiping on the waterfall) only the last frequency gets stored in the memory.
+            Previously all the intermediate frequencies were stored and older memory entries would
+            get flushed out (25 entry maximum).
+        Fixed a bunch of other user interface issues with the frequency menu.
+
+	Enable recently commissioned Galileo E34 (thanks Benjamin F4FPR/K5AW)
+
+	Changed WSPR ISM_13 center freq from 13554.5 to 13555.4 (900 Hz higher) per forum thread:
+	    forum.kiwisdr.com/index.php?p=/discussion/2649/wspr-22-m-ism-band-wrong-centre-frequency#p1
+
+v1.540  Jun 14, 2022
+    Fixed bug encountered when saving large configuration files.
+        e.g. many band bar definitions (thanks Ben).
+
 v1.539  Jun 12, 2022
     Automatic IP blacklist download added to admin network tab. Enabled by default.
     Selcall decoder improvements.
