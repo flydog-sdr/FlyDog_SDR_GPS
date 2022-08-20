@@ -473,6 +473,8 @@ void bl_GET(void *param)
                     json_string_free(&bl_json, ip_s);
                 }
             }
+
+            ip_blacklist_init_list("ip_blacklist_local");
             system("iptables -A KIWI -j RETURN; iptables -A INPUT -j KIWI");
         } else {
             lprintf("bl_GET: using STORED blacklist\n");
@@ -738,7 +740,7 @@ static void pvt_NET(void *param)
             reply = read_file_string_reply("/sys/class/net/eth0/address");
             if (reply != NULL) {
                 n = sscanf(kstr_sp(reply), "%17s", net.mac);
-                assert (n == 1);
+                assert(n == 1);
                 kstr_free(reply);
                 sprintf(net.mac_no_delim, "%.2s%.2s%.2s%.2s%.2s%.2s",
                     &net.mac[0], &net.mac[3], &net.mac[6], &net.mac[9], &net.mac[12], &net.mac[15]);
@@ -934,8 +936,11 @@ static void reg_public(void *param)
         bool send_deregister = false;
         static bool last_reg;
         if (last_reg && !kiwisdr_com_reg) {     // reg=1 => reg=0 transition
-            printf("REG deregister\n");
+            printf("REG: deregister\n");
             send_deregister = true;
+        }
+        if (!last_reg && kiwisdr_com_reg) {     // reg=0 => reg=1 transition
+            printf("REG: register\n");
         }
         last_reg = kiwisdr_com_reg;
 

@@ -583,6 +583,14 @@ void c2s_admin(void *param)
 				kstr_free(sb);
 				continue;
 			}
+
+			i = strcmp(cmd, "SET public_wakeup");
+			if (i == 0) {
+                if (reg_kiwisdr_com_tid) {
+                    TaskWakeupF(reg_kiwisdr_com_tid, TWF_CANCEL_DEADLINE);
+                }
+				continue;
+			}
 #endif
 
 
@@ -1066,8 +1074,8 @@ void c2s_admin(void *param)
                     sb = kstr_asprintf(sb, ",\"lat\":0");
                 }
                     
-                sb = kstr_asprintf(sb, ",\"acq\":%d,\"track\":%d,\"good\":%d,\"fixes\":%d,\"fixes_min\":%d,\"adc_clk\":%.6f,\"adc_corr\":%d,\"a\":\"%s\"}",
-                    gps.acquiring? 1:0, gps.tracking, gps.good, gps.fixes, gps.fixes_min, adc_clock_system()/1e6, clk.adc_gps_clk_corrections, gps.a);
+                sb = kstr_asprintf(sb, ",\"acq\":%d,\"track\":%d,\"good\":%d,\"fixes\":%d,\"fixes_min\":%d,\"adc_clk\":%.6f,\"adc_corr\":%d,\"is_corr\":%d,\"a\":\"%s\"}",
+                    gps.acquiring? 1:0, gps.tracking, gps.good, gps.fixes, gps.fixes_min, adc_clock_system()/1e6, clk.adc_gps_clk_corrections, clk.is_corr? 1:0, gps.a);
         
                 send_msg_encoded(conn, "MSG", "gps_update_cb", "%s", kstr_sp(sb));
                 kstr_free(sb);
