@@ -14,6 +14,7 @@ var kiwi = {
    
    inactivity_panel: false,
    no_admin_conns_pend: 0,
+   foff_error_pend: 0,
    notify_seq: 0,
    ident_min: 16,    // e.g. "wsprdaemon_v3.0a" is 16 chars
 
@@ -21,6 +22,7 @@ var kiwi = {
    volume_f: 1e-6,
    muted: 1,         // mute until muted_initially state determined
    unmuted_color: 'lime',
+   pan: 0,
 
    queued: 0,
    
@@ -67,6 +69,11 @@ var kiwi = {
    
    xdLocalStorage_ready: false,
    prefs_import_ch: -1,
+   
+   ADC_CLK_CORR_DISABLED: 0,
+   ADC_CLK_CORR_CONTINUOUS: 1,
+   
+   _last_: null
 };
 
 kiwi.modes_l.forEach(function(e,i) { kiwi.modes_u.push(e.toUpperCase()); kiwi.modes_s[e] = i});
@@ -645,9 +652,10 @@ function time_display_width()
    return 200;
 }
 
-function time_display_html(ext_name)
+function time_display_html(ext_name, top)
 {
-   return w3_div(ext_name +'-time-display|top:50px; background-color:black; position:relative;');
+   top = top || '50px';
+   return w3_div(ext_name +'-time-display|top:'+ top +'; background-color:black; position:relative;');
 }
 
 
@@ -1778,6 +1786,26 @@ function kiwi_msg(param, ws)
          }
          break;
       
+		case "foff_error":
+		   kiwi.foff_error_pend++;
+		   if (kiwi.foff_error_pend == 1) {
+		      setTimeout(function() {
+               confirmation_panel_close();
+               confirmation_show_content(
+                  (+param[1] == 0)?
+                     '"foff=" URL parameter available from local connections only.'
+                  :
+                     'Must close all admin connections before using "foff=" URL parameter.',
+                  500, 55,
+                  function() {
+                     confirmation_panel_close();
+                     kiwi.foff_error_pend = 0;
+                  },
+                  'red');
+            }, 5000);
+         }
+         break;
+      
 		case "request_dx_update":
 		   if (isAdmin()) {
 		      // NB: tabbing between fields won't work if field select undone by list re-render
@@ -1818,7 +1846,7 @@ function kiwi_msg(param, ws)
 				decodeURIComponent(o.d), decodeURIComponent(o.t));
 			break;
 
-		case "stats_cb":
+		case "stats_cb":     // in response to "SET STATS_UPD"
 			//console.log('stats_cb='+ param[1]);
 			var o = kiwi_JSON_parse('stats_cb', param[1]);
 			if (o) {
@@ -1846,6 +1874,7 @@ function kiwi_msg(param, ws)
 				}
 
 				admin_stats_cb(o.ad, o.au, o.ae, o.ar, o.an, o.ap, o.an2, o.ai);
+				w3_call('config_status_cb', o);
 				time_display_cb(o);
 			}
 			break;

@@ -58,6 +58,7 @@
     #endif
 
     #if 1
+        // debug (selectable)
         #define wspr_dprintf(fmt, ...) \
             /*printf("%3ds ", timer_sec() - passes_start);*/ \
             if (w->debug) rcprintf(rx_chan, fmt, ## __VA_ARGS__)
@@ -66,6 +67,7 @@
 	#endif
 
     #if 0
+        // decode
 	    #define wspr_d1printf(fmt, ...) \
 	    	rcprintf(rx_chan, fmt, ## __VA_ARGS__)
 	#else
@@ -73,6 +75,7 @@
 	#endif
 
     #if 0
+        // decode more detail
 	    #define wspr_d2printf(fmt, ...) \
 	    	printf(fmt, ## __VA_ARGS__)
 	#else
@@ -80,12 +83,14 @@
 	#endif
 
     #if 0
+        // upload
 	    #define wspr_ulprintf(fmt, ...) \
 	    	rcprintf(w->rx_chan, fmt, ## __VA_ARGS__)
 	#else
 	    #define wspr_ulprintf(fmt, ...)
 	#endif
 
+    // general
 	#define wspr_gprintf(fmt, ...) \
 		printf(fmt, ## __VA_ARGS__)
 
@@ -93,8 +98,9 @@
 	#define wspr_printf(fmt, ...)
 	#define wspr_d1printf(fmt, ...)
     #define wspr_d2printf(fmt, ...)
-	#define wspr_gprintf(fmt, ...)
 	#define wspr_dprintf(fmt, ...)
+	#define wspr_ulprintf(fmt, ...)
+	#define wspr_gprintf(fmt, ...)
 #endif
 
 #define WSPR_CHECKING
@@ -254,6 +260,9 @@ typedef struct {
 	u4_t arun_last_status_sent;
 	int arun_decoded, arun_last_decoded;
 	
+	// IWBP
+	int prev_per;
+	
 	// sampler
 	bool reset, tsync;
 	int last_sec;
@@ -297,7 +306,7 @@ typedef struct {
     char *rcall;
     char rgrid[LEN_GRID];
 	bool GPS_update_grid;
-	bool syslog;
+	bool syslog, spot_log;
 } wspr_conf_t;
 
 extern wspr_conf_t wspr_c;
@@ -340,7 +349,7 @@ typedef struct {
 #define YIELD_EVERY_N_TIMES 64
 
 void wspr_init();
-bool wspr_update_vars_from_config();
+bool wspr_update_vars_from_config(bool called_at_init);
 void wspr_data(int rx_chan, int ch, int nsamps, TYPECPX *samps);
 void wspr_decode(int rx_chan);
 void wspr_send_peaks(wspr_t *w, int start, int stop);
@@ -350,13 +359,6 @@ void wspr_autorun_restart();
 
 typedef enum { FIND_BEST_TIME_LAG, FIND_BEST_FREQ, CALC_SOFT_SYMS } wspr_mode_e;
 
-void sync_and_demodulate(
-	WSPR_CPX_t *id, WSPR_CPX_t *qd, long np,
-	unsigned char *symbols, float *f1, int ifmin, int ifmax, float fstep,
-	int *shift1,
-	int lagmin, int lagmax, int lagstep,
-	float drift1, int symfac, float *sync, wspr_mode_e mode);
-
 void renormalize(wspr_t *w, float psavg[], float smspec[], float tmpsort[]);
 
 void unpack50(u1_t *dat, u4_t *call_28b, u4_t *grid_pwr_22b, u4_t *grid_15b, u4_t *pwr_7b);
@@ -365,10 +367,6 @@ int unpackgrid(u4_t grid_15b, char *grid);
 int unpackpfx(int32_t nprefix, char *call);
 void deinterleave(unsigned char *sym);
 int unpk_(u1_t *decdata, char *call_loc_pow, char *callsign, char *grid, int *dBm);
-void subtract_signal(float *id, float *qd, long np,
-	float f0, int shift0, float drift0, unsigned char* channel_symbols);
-void subtract_signal2(float *id, float *qd, long np,
-	float f0, int shift0, float drift0, unsigned char* channel_symbols);
 
 int snr_comp(const void *elem1, const void *elem2);
 int freq_comp(const void *elem1, const void *elem2);
