@@ -481,32 +481,40 @@ var wspr_autorun_u = [
 function wspr_config_html()
 {
    var s =
-      w3_div('w3-show-inline-block',
+      w3_div('w3-show-inline-block w3-foo w3-width-full',
          w3_col_percent('w3-container w3-restart/w3-margin-bottom',
-            w3_input_get('', 'BFO Hz (multiple of 375 Hz)', 'WSPR.BFO', 'w3_num_set_cfg_cb', '', 'typically 750 Hz'), 30, ''
+            w3_input_get('', 'BFO Hz (multiple of 375 Hz)', 'WSPR.BFO', 'w3_num_set_cfg_cb', '', 'typically 750 Hz'), 24, ''
          ),
          w3_col_percent('w3-container w3-restart/w3-margin-bottom',
-            w3_input_get('', 'Reporter callsign', 'WSPR.callsign', 'w3_string_set_cfg_cb', ''), 30, ''
+            w3_input_get('', 'Reporter callsign', 'WSPR.callsign', 'w3_string_set_cfg_cb', ''), 24, ''
          ),
          w3_col_percent('w3-container/w3-margin-bottom',
                w3_input_get('', w3_label('w3-bold', 'Reporter grid square ') +
                   w3_div('id-wspr-grid-set cl-admin-check w3-blue w3-btn w3-round-large w3-hide', 'set from GPS'),
                   'WSPR.grid', 'wspr_input_grid_cb', '', '4 or 6-character grid square location'
-               ), 30,
-               '', 5,
+               ), 24,
+               '', 3,
                w3_divs('w3-center w3-tspace-8',
-                  w3_div('', '<b>Update grid continuously from GPS?</b>'),
+                  w3_div('', '<b>Update grid continuously<br>from GPS?</b>'),
                   w3_switch('', 'Yes', 'No', 'cfg.WSPR.GPS_update_grid', cfg.WSPR.GPS_update_grid, 'admin_radio_YN_cb'),
                   w3_text('w3-text-black w3-center',
                      'Useful for Kiwis in motion <br> (e.g. marine mobile)'
                   )
-               ), 35,
-               '', 5,
+               ), 22,
+               '', 3,
                w3_divs('w3-center w3-tspace-8',
-                  w3_div('', '<b>Log decodes to syslog?</b>'),
+                  w3_div('', '<b>Log decodes to<br>syslog?</b>'),
                   w3_switch('', 'Yes', 'No', 'cfg.WSPR.syslog', cfg.WSPR.syslog, 'admin_radio_YN_cb'),
                   w3_text('w3-text-black w3-center',
                      'Use with care as over time <br> filesystem can fill up.'
+                  )
+               ), 22,
+               '', 3,
+               w3_divs('w3-center w3-tspace-8',
+                  w3_div('', '<b>Log spot debug<br>info?</b>'),
+                  w3_switch('', 'Yes', 'No', 'cfg.WSPR.spot_log', cfg.WSPR.spot_log, 'admin_radio_YN_cb'),
+                  w3_text('w3-text-black w3-center',
+                     'Logs the actual upload commands<br>used to assist in spot debugging.'
                   )
                )
          ),
@@ -520,6 +528,14 @@ function wspr_config_html()
                   
                   'Spot decodes are available in the Kiwi log (use "Log" tab above) and are listed on <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a><br>' +
                   'The "Reporter" fields above must be set to valid values for proper spot entry into the <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a> database.'),
+               
+               w3_div('w3-margin-T-10 w3-valign',
+                  '<header class="id-wspr-warn-full w3-container w3-yellow"><h6>' +
+                  'If your Kiwi is publicly listed you must not configure all the channels to use WSPR-autorun!<br>' +
+                  'This defeats the purpose of making your Kiwi public and public registration will be disabled<br>' +
+                  'until you make at least one channel available for connection. Check the Admin Public tab.' +
+                  '</h6></header>'
+               ),
                
                w3_button('id-wspr-restart w3-margin-T-16 w3-aqua w3-hide', 'autorun restart', 'wspr_autorun_restart_cb'),
                
@@ -541,8 +557,25 @@ function wspr_config_html()
 	w3_innerHTML('id-wspr-admin-autorun', s);
 }
 
+function wspr_autorun_public_check()
+{
+   var num_autorun = 0;
+	for (var i=0; i < rx_chans; i++) {
+	   if (cfg.WSPR['autorun'+ i] != 0)
+	      num_autorun++;
+	}
+	ext_set_cfg_param('WSPR.autorun', num_autorun, EXT_SAVE);
+	
+	var full = (adm.kiwisdr_com_register && num_autorun >= rx_chans);
+   w3_remove_then_add_cond('id-wspr-warn-full', full, 'w3-red', 'w3-yellow');
+	if (full) {
+      kiwisdr_com_register_cb('adm.kiwisdr_com_register', w3_SWITCH_NO_IDX);
+	}
+}
+
 function wspr_autorun_restart_cb()
 {
+   wspr_autorun_public_check();
    w3_hide('id-wspr-restart');
    ext_send("ADM wspr_autorun_restart");  // NB: must be sent as ADM command
 }
@@ -559,6 +592,7 @@ function wspr_autorun_select_cb(path, idx, first)
 function wspr_config_focus()
 {
    //console.log('wspr_config_focus');
+   wspr_autorun_public_check();
    wspr_check_GPS_update_grid();
    wspr.focus_interval = setInterval(function() { wspr_check_GPS_update_grid(); }, 10000);
 
@@ -732,7 +766,7 @@ function wspr_upload(type, s)
 	
 	kiwi_GETrequest_param(request, "dbm", dbm);
 
-	var version = "1.3 Kiwi";
+	var version = "1.4 Kiwi";
 	if (version.length <= 10) {
 		kiwi_GETrequest_param(request, "version", version);
 		kiwi_GETrequest_submit(request, { gc: kiwi_gc_wspr } );

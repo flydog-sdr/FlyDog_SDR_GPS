@@ -523,6 +523,14 @@ err:
     return 0;
 }
 
+void inet4_h2d(u4_t inet4, u1_t *ap, u1_t *bp, u1_t *cp, u1_t *dp)
+{
+    if (ap != NULL) *ap = bf(inet4, 31, 24);
+    if (bp != NULL) *bp = bf(inet4, 23, 16);
+    if (cp != NULL) *cp = bf(inet4, 15,  8);
+    if (dp != NULL) *dp = bf(inet4,  7,  0);
+}
+
 // ::ffff:a.b.c.d/96
 bool is_inet4_map_6(u1_t *a)
 {
@@ -739,13 +747,15 @@ static int ip_blacklist_add(char *ips, bool *whitelist)
     }
     
     // always add to beginning of list to match iptables insert behavior
-    memmove(&net.ip_blacklist[1], &net.ip_blacklist[0], net.ip_blacklist_len * sizeof(ip_blacklist_t));
+    if (net.ip_blacklist_len != 0)
+        memmove(&net.ip_blacklist[1], &net.ip_blacklist[0], net.ip_blacklist_len * sizeof(ip_blacklist_t));
     ip_blacklist_t *bl = &net.ip_blacklist[0];
     bl->ip = ip;
     bl->a = a; bl->b = b; bl->c = c; bl->d = d;
     bl->cidr = cidr;
     bl->nm = nm;
     bl->whitelist = *whitelist;
+    bl->dropped = bl->last_dropped = 0;
     //printf("ip_blacklist_add[%d] %s %d.%d.%d.%d 0x%08x\n", net.ip_blacklist_len, ips, bl->a, bl->b, bl->c, bl->d, bl->nm);
     net.ip_blacklist_len++;
     
@@ -781,7 +791,7 @@ int ip_blacklist_add_iptables(char *ip_s)
     return rv;
 }
 
-static void ip_blacklist_init_list(const char *list)
+void ip_blacklist_init_list(const char *list)
 {
     const char *bl_s = admcfg_string(list, NULL, CFG_REQUIRED);
     if (bl_s == NULL) return;
@@ -822,6 +832,7 @@ bool check_ip_blacklist(char *remote_ip, bool log)
             net.ip_blacklist_inuse = true;
             bl->dropped++;
             if (bl->whitelist) return false;
+            bl->last_dropped = ip;
             if (log) lprintf("IP BLACKLISTED: %s\n", remote_ip);
             return true;
         }
@@ -831,7 +842,7 @@ bool check_ip_blacklist(char *remote_ip, bool log)
 
 void ip_blacklist_dump()
 {
-    if (!net.ip_blacklist_inuse) return;
+    //if (!net.ip_blacklist_inuse) return;
 	lprintf("\n");
 	lprintf("PROXY IP BLACKLIST:\n");
 	lprintf("  dropped  ip\n");
@@ -839,8 +850,12 @@ void ip_blacklist_dump()
 	for (int i = 0; i < net.ip_blacklist_len; i++) {
 	    ip_blacklist_t *bl = &net.ip_blacklist[i];
 	    //if (bl->dropped == 0) continue;
-	    lprintf("%9d  %d.%d.%d.%d/%d%s\n", bl->dropped, bl->a, bl->b, bl->c, bl->d, bl->cidr,
-	        bl->whitelist? "  WHITELIST" : "");
+	    u1_t a, b, c, d;
+	    inet4_h2d(bl->last_dropped, &a, &b, &c, &d);
+	    lprintf("%9d  %18s %08x|%08x last=%d.%d.%d.%d|%08x %s\n",
+	        bl->dropped, stprintf("%d.%d.%d.%d/%d", bl->a, bl->b, bl->c, bl->d, bl->cidr),
+	        bl->ip, bl->nm, a, b, c, d, bl->last_dropped,
+	        bl->whitelist? " WHITELIST" : "");
 	}
 	lprintf("\n");
 }
@@ -855,9 +870,9 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
     int zoom, float cf_kHz, int min_dB, int max_dB, int wf_speed, int wf_comp)
 {
     struct mg_connection *mc_fail, *mcs = NULL, *mcw = NULL, *mce = NULL;
-    conn_t *csnd, *cwf, *cext;
-    int port = port_base + instance;
-    int chan;
+    conn_t *csnd = NULL, *cwf, *cext;
+    int local_port = port_base + instance * 3;
+    u64_t tstamp = timer_ms64_1970();
     bool ident_geo_sent = false;
     memset(iconn, 0, sizeof(internal_conn_t));
     
@@ -865,9 +880,10 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
         mcs = &iconn->snd_mc;
         mc_fail = mcs;
         mcs->connection_param = NULL;
-        asprintf((char **) &mcs->uri, "%d/SND", port);
+        asprintf((char **) &mcs->uri, "%lld/SND", tstamp);
         kiwi_strncpy(mcs->remote_ip, "127.0.0.1", NET_ADDRSTRLEN);
-        mcs->remote_port = mcs->local_port = net.port;
+        mcs->remote_port = local_port;
+        mcs->local_port = net.port;
         csnd = rx_server_websocket(WS_INTERNAL_CONN, mcs);
         if (csnd == NULL) goto error;
         iconn->csnd = csnd;
@@ -885,9 +901,10 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
         mcw = &iconn->wf_mc;
         mc_fail = mcw;
         mcw->connection_param = NULL;
-        asprintf((char **) &mcw->uri, "%d/W/F", port);
+        asprintf((char **) &mcw->uri, "%lld/W/F", tstamp);
         kiwi_strncpy(mcw->remote_ip, "127.0.0.1", NET_ADDRSTRLEN);
-        mcw->remote_port = mcw->local_port = net.port;
+        mcw->remote_port = local_port + 1;
+        mcw->local_port = net.port;
         cwf = rx_server_websocket(WS_INTERNAL_CONN, mcw);
         if (cwf == NULL) goto error;
         iconn->cwf = cwf;
@@ -904,25 +921,32 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
     }
 
     if (ws & ICONN_WS_EXT) {
-        chan = csnd->rx_channel;
         mce = &iconn->ext_mc;
-        mc_fail = mcs;
+        mc_fail = mce;
+        if (csnd == NULL) goto error2;  // i.e. ICONN_WS_SND must be used together with ICONN_WS_EXT
         mce->connection_param = NULL;
-        asprintf((char **) &mce->uri, "%d/EXT", port);
+        asprintf((char **) &mce->uri, "%lld/EXT", tstamp);
         kiwi_strncpy(mce->remote_ip, "127.0.0.1", NET_ADDRSTRLEN);
-        mce->remote_port = mce->local_port = net.port;
+        mce->remote_port = local_port + 2;
+        mce->local_port = net.port;
         cext = rx_server_websocket(WS_INTERNAL_CONN, mce);
-        if (csnd == NULL) goto error;
+        if (cext == NULL) goto error;
         iconn->cext = cext;
         input_msg_internal(cext, (char *) "SET auth t=kiwi p=");
         input_msg_internal(cext, (char *) "SET ext_switch_to_client=%s first_time=1 rx_chan=%d",
-            client, chan);
+            client, csnd->rx_channel);
     }
 
     return true;
 
 error:
     printf("internal_conn_setup: couldn't get websocket instance=%d uri=%s port=%d\n",
+        instance, mc_fail->uri, mc_fail->remote_port);
+    internal_conn_shutdown(iconn);
+    return false;
+
+error2:
+    printf("internal_conn_setup: need (ICONN_WS_EXT | ICONN_WS_SND) instance=%d uri=%s port=%d\n",
         instance, mc_fail->uri, mc_fail->remote_port);
     internal_conn_shutdown(iconn);
     return false;

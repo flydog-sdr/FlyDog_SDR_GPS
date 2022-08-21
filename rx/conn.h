@@ -47,7 +47,7 @@ typedef struct conn_st {
 
 	char remote_ip[NET_ADDRSTRLEN];
 	int remote_port;
-	u64_t tstamp;
+	u64_t tstamp;       // msec since 1970
 	ndesc_t s2c, c2s;
 	funcP_t task_func;
 	char *tname;
@@ -57,10 +57,13 @@ typedef struct conn_st {
 
 	// set in STREAM_{SOUND, WATERFALL, EXT, ADMIN}
 	u4_t keepalive_time, keep_alive, keepalive_count;
+	bool ext_no_keepalive;
 
 	// set in both STREAM_SOUND & STREAM_WATERFALL
 	int task;
 	bool stop_data, kick;
+	bool foff_set;
+	double foff;
 
 	// set in STREAM_SOUND or STREAM_WATERFALL (WF-only connections)
 	bool ident, arrived;
@@ -90,7 +93,6 @@ typedef struct conn_st {
 	bool isWF_conn;
 
 	// set in STREAM_EXT, STREAM_SOUND
-	int ext_rx_chan;
 	ext_t *ext;
 	
 	// set in STREAM_SOUND and STREAM_WATERFALL

@@ -161,7 +161,7 @@ struct ctx_t {
 			#if defined(__x86_64__)
 				u4_t x1, fp, sp, x2[4], pc;
 			#endif
-			#if defined(__arm__)
+			#if defined(__arm__) || defined(__aarch64__)
 				u4_t v[6], sl, fp, sp, pc;
 			#endif
 		};
@@ -443,14 +443,15 @@ void TaskDump(u4_t flags)
                     deadline /= 1000;       // ssss.fff sec
                     dunit = "s";
                 }
-                dline = stprintf("%8.3f%-2s", deadline, dunit);
+                dline = stnprintf(0, "%8.3f%-2s", deadline, dunit);
             }
 		}
 		
 		int rx_channel = (t->flags & CTF_RX_CHANNEL)? (t->flags & CTF_CHANNEL) : -1;
+		const char *rx_s = (rx_channel == -1)? "  " : stnprintf(1, "c%d", rx_channel);
 
 		if (flags & TDUMP_LOG)
-		lfprintf(printf_type, "%c%03d %c%d%c %c%c%c%c%c%c%c%c %7.3f %9.3f %5.1f%% %6s %5d %5d %-3s %5d %-3s %10s %3d%c %s%d %-10s %-24s\n",
+		lfprintf(printf_type, "%c%03d %c%d%c %c%c%c%c%c%c%c%c %7.3f %9.3f %5.1f%% %6s %5d %5d %-3s %5d %-3s %10s %3d%c %s %-10s %-24s\n",
 		    (t == ct)? '*':'T', i, (t->flags & CTF_PRIO_INVERSION)? 'I':'P', t->priority, t->lock_marker,
 			t->stopped? 'T':'R', t->wakeup? 'W':'_', t->sleeping? 'S':'_', t->pending_sleep? 'P':'_', t->busy_wait? 'B':'_',
 			t->lock.wait? 'L':'_', t->lock.hold? 'H':'_', t->minrun? 'q':'_',
@@ -458,11 +459,10 @@ void TaskDump(u4_t flags)
 			toUnits(t->run), t->cmds,
 			t->stat1, t->units1? t->units1 : " ", t->stat2, t->units2? t->units2 : " ",
 			dline, t->stack_hiwat*100 / t->ctx->stack_size_u64, (t->flags & CTF_STACK_MED)? 'M' : ((t->flags & CTF_STACK_LARGE)? 'L' : '%'),
-			(rx_channel != -1)? "c":"", rx_channel,
-			t->name, t->where? t->where : "-"
+			rx_s, t->name, t->where? t->where : "-"
 		);
 		else
-		lfprintf(printf_type, "%c%03d %c%d%c %c%c%c%c%c%c%c%c %7.3f %9.3f %5.1f%% %6s %5d %5d %-3s %5d %-3s %5d %5d %5d %10s %3d%c %s%d %-10s %-24s %-24s\n",
+		lfprintf(printf_type, "%c%03d %c%d%c %c%c%c%c%c%c%c%c %7.3f %9.3f %5.1f%% %6s %5d %5d %-3s %5d %-3s %5d %5d %5d %10s %3d%c %s %-10s %-24s %-24s\n",
 		    (t == ct)? '*':'T', i, (t->flags & CTF_PRIO_INVERSION)? 'I':'P', t->priority, t->lock_marker,
 			t->stopped? 'T':'R', t->wakeup? 'W':'_', t->sleeping? 'S':'_', t->pending_sleep? 'P':'_', t->busy_wait? 'B':'_',
 			t->lock.wait? 'L':'_', t->lock.hold? 'H':'_', t->minrun? 'q':'_',
@@ -471,9 +471,7 @@ void TaskDump(u4_t flags)
 			t->stat1, t->units1? t->units1 : " ", t->stat2, t->units2? t->units2 : " ",
 			t->wu_count, t->no_run_same, t->spi_retry,
 			dline, t->stack_hiwat*100 / t->ctx->stack_size_u64, (t->flags & CTF_STACK_MED)? 'M' : ((t->flags & CTF_STACK_LARGE)? 'L' : '%'),
-			(rx_channel != -1)? "c":"", rx_channel,
-			t->name, t->where? t->where : "-",
-			t->long_name? t->long_name : "-"
+			rx_s, t->name, t->where? t->where : "-", t->long_name? t->long_name : "-"
 		);
 		
 		bool detail = false;
@@ -704,7 +702,7 @@ static void trampoline(int signo)
 #ifdef USE_ASAN
 	//printf("TaskResume(trampoline) fake_stack=%p stack=%p %s\n", t->ctx->fake_stack, t->ctx->stack, t->name);
     #ifdef USE_ASAN2
-	    __sanitizer_finish_switch_fiber(c->fake_stack, (const void **) &(c->stack), &(c->stack_size_bytes));
+	    __sanitizer_finish_switch_fiber(c->fake_stack, (const void **) &(c->stack), (size_t *) &(c->stack_size_bytes));
 	#else
 	    __sanitizer_finish_switch_fiber(c->fake_stack);
 	#endif
@@ -1331,7 +1329,7 @@ void _NextTask(const char *where, u4_t param, u_int64_t pc)
 #ifdef USE_ASAN
 		//printf("TaskResume(NextTask) fake_stack=%p stack=%p %s\n", t->ctx->fake_stack, t->ctx->stack, t->name);
         #ifdef USE_ASAN2
-            __sanitizer_finish_switch_fiber(ct->ctx->fake_stack, (const void **) &(ct->ctx->stack), &(ct->ctx->stack_size_bytes));
+            __sanitizer_finish_switch_fiber(ct->ctx->fake_stack, (const void **) &(ct->ctx->stack), (size_t *) &(ct->ctx->stack_size_bytes));
         #else
             __sanitizer_finish_switch_fiber(ct->ctx->fake_stack);
         #endif
