@@ -34,6 +34,15 @@ var admin_sdr = {
       qam:  { c:     0, w:  9800 }
    },
    
+   ADC_clk2_corr_s: [
+      'disabled',
+      'continuous',
+      'modulo even 2 min (WSPR-2)',
+      'modulo 5 min (FST4W-300)',
+      'modulo 15 min (FST4W-900)',
+      'modulo 30 min (FST4W-1800)'
+   ],
+   
    _last_: 0
 };
 
@@ -144,7 +153,7 @@ function config_html()
 		'<hr>' +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
 			w3_div('',
-				w3_input_get('w3-restart', 'Frequency scale offset (kHz, 1 Hz resolution)', 'freq_offset', 'admin_float_cb|3'),
+				w3_input_get('', 'Frequency scale offset (kHz, 1 Hz resolution)', 'freq_offset', 'admin_float_cb|3'),
 				w3_div('w3-text-black',
 					'Adds offset to frequency scale. <br> Useful when using a downconverter, e.g. set to <br>' +
 					'116000 kHz when 144-148 maps to 28-32 MHz.'
@@ -160,7 +169,8 @@ function config_html()
 			w3_div('',
             w3_checkbox_get_param('//w3-label-inline', 'Show 1 Hz frequency resolution', 'show_1Hz', 'admin_bool_cb', true),
             w3_checkbox_get_param('w3-margin-T-8//w3-restart w3-label-inline', 'Show AGC threshold on S-meter', 'agc_thresh_smeter', 'admin_bool_cb', true),
-            w3_checkbox_get_param('w3-margin-T-8//w3-label-inline', 'Show user geolocation info', 'show_geo', 'admin_bool_cb', true)
+            w3_checkbox_get_param('w3-margin-T-8//w3-label-inline', 'Show user geolocation info', 'show_geo', 'admin_bool_cb', true),
+            w3_checkbox_get_param('id-config-spec-inv w3-margin-T-8//w3-label-inline', 'Downconverter high-side injection', 'spectral_inversion', 'config_spec_inv_cb', false)
          )
 		) +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
@@ -258,11 +268,12 @@ function config_html()
 				w3_text('w3-text-black', 'Set exact clock frequency applied. <br> Input value stored in Hz.')
 		   ),*/
 			w3_divs('w3-restart/w3-center w3-tspace-8',
-				w3_div('', '<b>Enable GPS correction of ADC clock?</b>'),
-            w3_switch('', 'Yes', 'No', 'ADC_clk_corr', cfg.ADC_clk_corr, 'admin_radio_YN_cb'),
+            w3_select('', 'GPS correction of ADC clock', '', 'cfg.ADC_clk2_corr', cfg.ADC_clk2_corr, admin_sdr.ADC_clk2_corr_s, 'admin_select_cb'),
 				w3_text('w3-text-black w3-center',
-				   'Set "no" to keep the Kiwi GPS from correcting for <br>' +
-				   'errors in the ADC clock (internal or external).'
+				   'Set "disabled" to keep the Kiwi GPS from correcting <br>' +
+				   'for errors in the ADC clock (internal or external). <br>' +
+				   'Other settings prevent corrections from <br>' +
+				   'disturbing WSPR and FST4W reception.'
 				)
 			)
 		);
@@ -335,6 +346,24 @@ function config_html()
 		'<hr>';
 
 	return w3_div('id-config w3-hide', s1 + s2 + s3 + s4 + s5 + s6 + s7);
+}
+
+function config_spec_inv_cb(path, val, first)
+{
+   // do nothing first time to not upset possible ant switch setting
+	//console.log('config_spec_inv_cb: path='+ path +' val='+ val +' first='+ first);
+   if (first) return;
+   admin_bool_cb(path, val, first);
+}
+
+function config_status_cb(o)
+{
+   if (o.sl && !admin.spectral_inversion_lockout) {
+      admin.spectral_inversion_lockout = true;
+      var el = w3_el('id-config-spec-inv');
+      w3_add(el, 'w3-disabled');
+      w3_attribute(el, 'title', 'overriden by antenna switch extension');
+   }
 }
 
 function config_focus()
@@ -988,49 +1017,11 @@ function kiwi_reg_html()
          w3_div('id-kiwisdr_com-reg-status-container',
             w3_div('w3-container',
                w3_label('w3-show-inline-block w3-margin-R-16 w3-text-teal', 'kiwisdr.com registration status:') +
-               w3_div('id-kiwisdr_com-reg-status w3-show-inline-block w3-text-black', '')
+               w3_div('id-kiwisdr_com-reg-status w3-show-inline-block w3-padding-LR-8 w3-text-black', '')
             )
          )
 		);
 		
-      /*
-		w3_half('w3-margin-bottom', 'w3-container',
-			w3_div('',
-					'<b>Register on <a href="http://rx.kiwisdr.com" target="_blank">rx.kiwisdr.com</a>?</b> ' +
-					w3_switch('', 'Yes', 'No', 'adm.kiwisdr_com_register', adm.kiwisdr_com_register, 'kiwisdr_com_register_cb')
-			),
-			w3_div('',
-					'<b>Register on <a href="https://sdr.hu/?top=kiwi" target="_blank">sdr.hu</a>?</b> ' +
-					w3_switch('', 'Yes', 'No', 'adm.sdr_hu_register', adm.sdr_hu_register, 'sdr_hu_register_cb')
-			)
-		) +
-
-		w3_half('w3-margin-bottom', 'w3-container',
-		   //w3_div('w3-restart',
-		   //   w3_input('', 'kiwisdr.com API key', 'adm.api_key_kiwisdr_com', '', 'w3_string_set_cfg_cb')
-		   //),
-		   w3_div(),
-		   w3_div('w3-restart',
-		      w3_input('', 'sdr.hu API key', 'adm.api_key', '', 'w3_string_set_cfg_cb', 'enter value returned from sdr.hu/register process')
-		   )
-		) +
-
-		w3_half('', '',
-         w3_div('id-kiwisdr_com-reg-status-container',
-            w3_div('w3-container',
-               w3_label('w3-show-inline-block w3-margin-R-16 w3-text-teal', 'kiwisdr.com registration status:') +
-               w3_div('id-kiwisdr_com-reg-status w3-show-inline-block w3-text-black', '')
-            )
-         ),
-         w3_div('id-sdr_hu-reg-status-container',
-            w3_div('w3-container',
-               w3_label('w3-show-inline-block w3-margin-R-16 w3-text-teal', 'sdr.hu registration status:') +
-               w3_div('id-sdr_hu-reg-status w3-show-inline-block w3-text-black', '')
-            )
-         )
-      );
-		*/
-      
    var s2 =
 		'<hr>' +
 		w3_half('w3-margin-bottom w3-restart', 'w3-container',
@@ -1039,7 +1030,6 @@ function kiwi_reg_html()
 		) +
 
 		w3_half('w3-margin-bottom w3-restart', 'w3-container',
-			//w3_input('', 'Device', 'rx_device', '', 'w3_string_set_cfg_cb'),
 			w3_input('', 'Admin email', 'admin_email', '', 'w3_string_set_cfg_cb'),
 			w3_input('', 'Antenna', 'rx_antenna', '', 'w3_string_set_cfg_cb')
 		) +
@@ -1091,15 +1081,16 @@ function kiwisdr_com_register_cb(path, idx)
    idx = +idx;
    //console.log('kiwisdr_com_register_cb idx='+ idx);
    
-   var text, color;
+   var text, error = false;
    var no_url = (cfg.server_url == '');
    var bad_ip = (kiwi_inet4_d2h(cfg.server_url) != null && kiwi_inet4_d2h(cfg.server_url, true) == null);
    var no_passwordless_channels = (adm.user_password != '' && cfg.chan_no_pwd == 0);
    var no_rx_gps = (cfg.rx_gps == '' || cfg.rx_gps == '(0.000000, 0.000000)' || cfg.rx_gps == '(0.000000%2C%200.000000)');
+   var wspr_autorun_full = (cfg.WSPR.autorun >= rx_chans);
    //console.log('kiwisdr_com_register_cb has_u_pwd='+ (adm.user_password != '') +' chan_no_pwd='+ cfg.chan_no_pwd +' no_passwordless_channels='+ no_passwordless_channels);
    //console.log('cfg.server_url='+ cfg.server_url);
    
-   if (idx == w3_SWITCH_YES_IDX && (no_url || bad_ip || no_passwordless_channels || no_rx_gps)) {
+   if (idx == w3_SWITCH_YES_IDX && (no_url || bad_ip || no_passwordless_channels || no_rx_gps || wspr_autorun_full)) {
       if (no_url)
          text = 'Error, you must first setup a valid Kiwi connection URL on the admin "connect" tab';
       else
@@ -1111,51 +1102,27 @@ function kiwisdr_com_register_cb(path, idx)
       else
       if (no_rx_gps)
          text = 'Error, you must first set a valid entry in the "<i>Location (lat, lon)</i>" field';
-      color = '#ffeb3b';
+      else
+      if (wspr_autorun_full)
+         text = 'Error, cannot have WSPR autorun enabled on ALL channels!';
       w3_switch_set_value(path, w3_SWITCH_NO_IDX);    // force back to 'no'
       idx = w3_SWITCH_NO_IDX;
+      error = true;
    } else
    if (idx == w3_SWITCH_YES_IDX) {
       text = '(waiting for kiwisdr.com response, can take several minutes in some cases)';
-      color = 'hsl(180, 100%, 95%)';
    } else {    // w3_SWITCH_NO_IDX
       text = '(registration not enabled)';
-      color = 'hsl(180, 100%, 95%)';
       w3_switch_set_value(path, w3_SWITCH_NO_IDX);    // for benefit of direct callers
    }
    
    w3_innerHTML('id-kiwisdr_com-reg-status', text);
-   w3_color('id-kiwisdr_com-reg-status', null, color);
+   w3_remove_then_add_cond('id-kiwisdr_com-reg-status', error, 'w3-red w3-text-white', 'w3-pale-blue w3-text-black');
    admin_radio_YN_cb(path, idx);
-   //console.log('kiwisdr_com_register_cb adm.kiwisdr_com_register='+ adm.kiwisdr_com_register);
-}
 
-function sdr_hu_register_cb(path, idx)
-{
-   idx = +idx;
-   //console.log('sdr_hu_register_cb idx='+ idx);
-   
-   var text, color;
-   if (idx == w3_SWITCH_YES_IDX && cfg.server_url == '') {
-      text = 'Error, you must first setup a valid Kiwi connection URL on the admin "connect" tab';
-      color = '#ffeb3b';
-      w3_switch_set_value(path, w3_SWITCH_NO_IDX);    // force back to 'no'
-      idx = w3_SWITCH_NO_IDX;
-   } else
-   if (idx == w3_SWITCH_YES_IDX) {
-      text = '(waiting for sdr.hu response, can take several minutes in some cases)';
-      color = 'hsl(180, 100%, 95%)';
-   } else {    // w3_SWITCH_NO_IDX
-      text = '(registration not enabled)';
-      color = 'hsl(180, 100%, 95%)';
-   }
-   
-   /*
-   w3_innerHTML('id-sdr_hu-reg-status', text);
-   w3_color('id-sdr_hu-reg-status', null, color);
-   */
-   admin_radio_YN_cb(path, idx);
-   //console.log('sdr_hu_register_cb adm.sdr_hu_register='+ adm.sdr_hu_register);
+   // make sure server side notices change promptly
+	ext_send("SET public_wakeup");
+   //console.log('kiwisdr_com_register_cb adm.kiwisdr_com_register='+ adm.kiwisdr_com_register);
 }
 
 var sdr_hu_interval;
@@ -1165,12 +1132,10 @@ function sdr_hu_focus()
 {
 	admin_set_decoded_value('rx_name');
 	admin_set_decoded_value('rx_location');
-	//admin_set_decoded_value('rx_device');
 	admin_set_decoded_value('rx_antenna');
 	admin_set_decoded_value('rx_grid');
 	admin_set_decoded_value('rx_gps');
 	admin_set_decoded_value('admin_email');
-	//admin_set_decoded_value('adm.api_key');
 
 	// The default in the factory-distributed kiwi.json is the kiwisdr.com NZ location.
 	// Detect this and ask user to change it so sdr.hu/map doesn't end up with multiple SDRs
@@ -1199,7 +1164,6 @@ function sdr_hu_focus()
 	
 	// display initial switch state
 	kiwisdr_com_register_cb('adm.kiwisdr_com_register', adm.kiwisdr_com_register? w3_SWITCH_YES_IDX : w3_SWITCH_NO_IDX);
-	sdr_hu_register_cb('adm.sdr_hu_register', adm.sdr_hu_register? w3_SWITCH_YES_IDX : w3_SWITCH_NO_IDX);
 }
 
 function sdr_hu_input_grid(path, val)
@@ -1269,13 +1233,6 @@ function public_update(p)
 	if (adm.kiwisdr_com_register && admin.reg_status.kiwisdr_com != undefined && admin.reg_status.kiwisdr_com != '') {
 	   w3_innerHTML('id-kiwisdr_com-reg-status', 'rx.kiwisdr.com registration: successful');
 	}
-	
-	// sdr.hu registration status
-	/*
-	if (adm.sdr_hu_register && admin.reg_status.sdr_hu != undefined && admin.reg_status.sdr_hu != '') {
-	   w3_innerHTML('id-sdr_hu-reg-status', admin.reg_status.sdr_hu);
-	}
-	*/
 	
 	// GPS has had a solution, show buttons
 	if (admin.reg_status.lat != undefined) {

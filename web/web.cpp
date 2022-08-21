@@ -34,6 +34,7 @@ Boston, MA  02110-1301, USA.
 #include "clk.h"
 #include "ext_int.h"
 #include "debug.h"
+#include "services.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -635,7 +636,7 @@ int web_request(struct mg_connection *mc, enum mg_event evt) {
     // access to the local HTTP port should only come from local ip addresses
     if (mc->local_port == net.port_http_local && !isLocal_ip(ip_unforwarded)) {
         if (evt == MG_REQUEST) {
-            printf("webserver: HTTP but not local ip evt=%d %s:%d <%s>\n", evt, ip_unforwarded, mc->local_port, mc->uri);
+            lprintf("webserver: HTTP but not local ip evt=%d %s:%d <%s>\n", evt, ip_unforwarded, mc->local_port, mc->uri);
             mg_send_status(mc, 403);    // 403 = "forbidden"
             mg_send_data(mc, NULL, 0);
             return MG_TRUE;
@@ -697,12 +698,28 @@ int web_request(struct mg_connection *mc, enum mg_event evt) {
 	// Note that this code always sets remote_ip[] as a side-effect for later use (the real client ip).
 	char ip_forwarded[NET_ADDRSTRLEN];
     check_if_forwarded("WEB", mc, ip_forwarded);
-    if (check_ip_blacklist(ip_forwarded) || check_ip_blacklist(ip_unforwarded)) {
-		//printf("WEB: IP BLACKLISTED: %s/%s url=<%s> qs=<%s>\n", ip_unforwarded, ip_forwarded, mc->uri, mc->query_string);
+    bool bl_ufw = check_ip_blacklist(ip_unforwarded);
+    bool bl_fwd = check_ip_blacklist(ip_forwarded);
+    
+    //#define IP_BL_TEST
+    #ifdef IP_BL_TEST
+        bool bl_test = (mc->query_string && strstr(mc->query_string, "bl_test_jks") != NULL)? check_ip_blacklist((char *) "199.247.0.22") : false;
+    #else
+        #define bl_test false
+    #endif
+    if (bl_ufw || bl_fwd || bl_test) {
+		lprintf("WEB: IP BLACKLISTED: %d|%d %s|%s url=<%s> qs=<%s>\n",
+		    bl_ufw, bl_fwd, ip_unforwarded, ip_forwarded, mc->uri, mc->query_string);
         mg_send_status(mc, 403);    // 403 = "forbidden"
         mg_send_data(mc, NULL, 0);
         return MG_TRUE;
     }
+    
+    #ifdef IP_BL_TEST
+        if (mc->query_string && strstr(mc->query_string, "bl_get_jks") != NULL) {
+            bl_GET(TO_VOID_PARAM(1));
+        }
+    #endif
     
     //#define WEB_PRINTF_ON_URL
     #ifdef WEB_PRINTF_ON_URL
@@ -768,7 +785,7 @@ int web_request(struct mg_connection *mc, enum mg_event evt) {
     bool acme = (strncmp(o_uri, "/.well-known/", 13) == 0);
     if ((isPort80 || acme) && evt == MG_CACHE_INFO) return MG_FALSE;
     if ((isPort80 && !acme) || (acme && !isPort80)) {
-        printf("webserver: bad ACME request evt=%d %s:%d <%s>\n", evt, ip_forwarded, mc->local_port, o_uri);
+        lprintf("webserver: bad ACME request evt=%d %s:%d <%s>\n", evt, ip_forwarded, mc->local_port, o_uri);
         mg_send_status(mc, 403);    // 403 = "forbidden"
         mg_send_data(mc, NULL, 0);
         return MG_TRUE;

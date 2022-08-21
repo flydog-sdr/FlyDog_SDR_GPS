@@ -254,9 +254,18 @@ void update_vars_from_config(bool called_at_init)
     kiwi_reg_lo_kHz = cfg_default_int("sdr_hu_lo_kHz", 0, &update_cfg);
     kiwi_reg_hi_kHz = cfg_default_int("sdr_hu_hi_kHz", 32000, &update_cfg);
     cfg_default_bool("index_html_params.RX_PHOTO_LEFT_MARGIN", true, &update_cfg);
+
     cfg_default_bool("ext_ADC_clk", false, &update_cfg);
     cfg_default_int("ext_ADC_freq", (int) round(ADC_CLOCK_TYP), &update_cfg);
-    cfg_default_bool("ADC_clk_corr", true, &update_cfg);
+    bool ADC_clk_corr = cfg_bool("ADC_clk_corr", &err, CFG_OPTIONAL);
+    if (!err) {     // convert from yes/no switch to multiple-entry menu
+        int ADC_clk2_corr = ADC_clk_corr? ADC_CLK_CORR_CONTINUOUS : ADC_CLK_CORR_DISABLED;
+        cfg_default_int("ADC_clk2_corr", ADC_clk2_corr, &update_cfg);
+        cfg_rem_bool("ADC_clk_corr");
+    } else {
+        cfg_default_int("ADC_clk2_corr", ADC_CLK_CORR_CONTINUOUS, &update_cfg);
+    }
+
     cfg_default_string("tdoa_id", "", &update_cfg);
     cfg_default_int("tdoa_nchans", -1, &update_cfg);
     cfg_default_int("ext_api_nchans", -1, &update_cfg);
@@ -277,6 +286,10 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_int("ident_len", IDENT_LEN_MIN, &update_cfg);
     cfg_default_bool("show_geo", true, &update_cfg);
     cfg_default_bool("show_1Hz", false, &update_cfg);
+
+    bool want_inv = cfg_default_bool("spectral_inversion", false, &update_cfg);
+    if (called_at_init || !kiwi.spectral_inversion_lockout)
+        kiwi.spectral_inversion = want_inv;
 
     cfg_default_int("nb_algo", 0, &update_cfg);
     cfg_default_int("nb_wf", 1, &update_cfg);
@@ -332,9 +345,10 @@ void update_vars_from_config(bool called_at_init)
     }
     
     #ifdef USE_SDR
-        if (wspr_update_vars_from_config()) update_cfg = true;
+        if (wspr_update_vars_from_config(called_at_init)) update_cfg = true;
 
         // fix corruption left by v1.131 dotdot bug
+        // i.e. "WSPR.autorun": N instead of "WSPR": { "autorun": N ... }"
         _cfg_int(&cfg_cfg, "WSPR.autorun", &err, CFG_OPTIONAL|CFG_NO_DOT);
         if (!err) {
             _cfg_set_int(&cfg_cfg, "WSPR.autorun", 0, CFG_REMOVE|CFG_NO_DOT, 0);
@@ -473,6 +487,15 @@ void update_vars_from_config(bool called_at_init)
         admcfg_set_bool("kiwisdr_com_register", sdr_hu_register);
         update_admcfg = true;
     }
+
+    // disable public registration if all the channels are full of WSPR autorun
+	bool isPublic = admcfg_bool("kiwisdr_com_register", NULL, CFG_REQUIRED);
+	int wspr_autorun = cfg_int("WSPR.autorun", NULL, CFG_REQUIRED);
+	if (isPublic && wspr_autorun >= rx_chans) {
+	    lprintf("REG: WSPR.autorun(%d) >= rx_chans(%d) -- DISABLING PUBLIC REGISTRATION\n", wspr_autorun, rx_chans);
+        admcfg_set_bool("kiwisdr_com_register", false);
+        update_admcfg = true;
+	}
 
     // historical uses of options parameter:
     //int new_find_local = admcfg_int("options", NULL, CFG_REQUIRED) & 1;
