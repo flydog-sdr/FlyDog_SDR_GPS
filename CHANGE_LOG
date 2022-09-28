@@ -2,6 +2,135 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.562  Sep 16, 2022
+    Fixed bug causing Kiwi 8 and 14-channel (BBAI et al) modes to fail loading page displaying
+    audio FFT instead of the full waterfall. For example channels 3-8 in 8-channel mode.
+
+v1.560,561  Sep 13, 2022
+    New audio "pre-record time" menu (located to the left of the squelch tail length menu).
+    Allows audio samples stored from before the "record" button is pressed, or before the
+    squelch opens, to be included in file recordings.
+    
+        Handy for when you hear something you want to record but it takes you a few seconds to hit
+        the record key ('r') or click the record button. Or you find critical content missing from
+        the recorded file because the squelch opens too slowly (e.g. preamble to a data burst).
+    
+    The (non-NBFM) squelch has this feature/problem that it only responds to relative changes in
+    signal strength. For example, if it is set to 10 dB then the squelch will only open when there
+    is a 10 dB *increase* in signal strength. This means if you had a non-zero squelch value set
+    while tuned to a strong signal, and then reload the page, the squelch remains open (no audio).
+    This happens because there has never been a 10 dB increase in signal strength from the
+    squelch's perspective.
+
+        To fix this you must tune to a quiet part of the band, set the squelch to zero to establish
+        the noise floor, then set it back to the desired value (10 dB in our example).
+        To make this operation easier a new button just before the squelch slider will momentarily
+        zero the squelch value while pressed. Wait a few seconds with the button pressed for the
+        squelch to establish a new noise floor.
+        
+        In case you're wondering, the NBFM squelch doesn't have this problem because it constantly
+        measures the threshold noise power above the voice frequencies in the FM channel. So it
+        is able to make a continuous relative measurement. This is difficult in the non-NBFM
+        environment. Somewhat related to our difficulties in automating SNR measurement.
+
+    "SAM options" menu now works for the other SAM modes (SAL, SAU, SAS, QAM).
+    
+    S-meter extension now has its own menu for setting the timestamps to UTC or local time.
+    Previously the value from the waterfall extension UTC/local menu was used.
+    
+    Waterfall and S-meter timestamps now appended with "UTC" or "L".
+
+    Fixed a somewhat strange problem with proxied Kiwis: If you had a low value in the menu on the
+    admin control tab "Number of simultaneous channels available for connection by non-Kiwi apps"
+    (like "none" or "1") then some non-local, legitimate browser connections would sometimes get
+    flagged as a "non-Kiwi app" and denied a connection. The details are hard to explain.
+    
+        Anyway, it is fixed. So if you had to increase the menu value as a workaround you should be
+        able to decrease it again. A lower value is helpful if you have lots of bots connecting that
+        you're trying to limit (the bots are classified as non-Kiwi connections). You usually want
+        at least one non-Kiwi connection to handle legitimate TDoA or kiwirecorder use.
+    
+        As usual, connections from the local network are exempt from all this. So for example
+        wsprdaemon running on an RPi on the local network won't be subject to this limit.    
+
+v1.559  Sep 7, 2022
+    Added DC block to the SAM/QAM modes. There is a temporary menu on the main control panel,
+        audio tab, to allow A/B testing of the DC block against the existing fade leveler that was
+        already part of the SAM code. Thanks to Daz for pointing out this problem.
+
+v1.558  Sep 4, 2022
+    Passband adjustment improvements:
+        Adjust left/right passband edges individually
+            The arrow up/down keys now adjust the passband. With the shift key added the right
+            passband alone is adjusted (passband high in USB). With alt/ctrl passband low is adjusted.
+            With no modifier keys pressed both passband edges are adjusted (like the "p" and "P" keys).
+            
+            Also for a shift or alt/ctrl during a mouse wheel while positioned in the frequency scale.
+            
+            Also for alt/ctrl or shift-alt/shift-ctrl when clicking the zoom buttons (different from
+            the above since no-shift/shift is already used to distinguish zoom from passband adjust.
+            The tooltip popup when you mouse over the zoom buttons shows which type of passband
+            adjustment will occur depending on the modifier keys.
+            
+        BFO/PBT indicator
+            When you mouse over the passband with the shift key pressed the tooltip popups will
+            include "BFO" or "PBT" to remind you of the alternate passband operation about to
+            be performed when you begin click-dragging the passband.
+    
+    Added a "Close all admin connections" button to the admin connection exclusion panel.
+        The usual admin page automatic reconnect will not occur. Whatever operation you were
+        performing (e.g. DX label edit) will have to be repeated since it did not take effect.
+
+    Fix for external ADC clock when Kiwi GPS correction disabled.
+        
+v1.557  Aug 30, 2022
+    Make GPS clock corrections insensitive to type of connection to Kiwi.
+    Added URL parameter "sndw=N" (N=0-4) to set alternate passband FFT filter window functions.
+    Prevent admin "Daily restart?" option from triggering more than once during update window.
+
+v1.556  Aug 27, 2022
+    New feature: Send current tuned frequency as CAT "FA" command to attached USB tty device.
+        Only works for serial devices at 115.2k baud due to realtime limitations
+        (i.e. otherwise Kiwi audio and waterfall get glitched). Enabled on admin page, config tab.
+        Format of sent string: "FAfffffffffff;" where "f" is 11-digit, zero padded frequency in Hz.
+    
+    New parameter returned by /status query: "clk_ext_gps=0,0" where first digit is =1 if an external
+    ADC clock is being used, =0 otherwise. Second digit reflects state of admin config setting
+    "GPS correction of ADC clock" with values: 0 = disabled, 1 = continuous, 2 = every even 2 minutes,
+    3 = every 5 minutes, 4 = every 15 minutes, 5 = every 30 minutes.
+    
+    Hopefully, a fix for the long-standing problem of the system log filling up with these strange
+    messages: "... action 'action 17' suspended, next retry is Fri Aug 26 03:17:10 2022 ..."
+    Should not disturb anyone who has already implemented a fix by having made a custom change to
+    the /etc/rsyslog.conf file.
+
+v1.555  Aug 25, 2022
+    Improvements to build process:
+        Better error messages when admin update tab "check now" or "build now" fails.
+        Similarly, better error messages in log file.
+        Console tab, new button "re-clone Beagle_SDR_GPS".
+            If the build returns the error message "Git clone damaged!" use this button to recover.
+            The latest Kiwi software will be re-cloned from github.com
+            Understand consequences before using:
+            1. The Kiwi configuration information in /root/kiwi.config will NOT be changed.
+            2. The Kiwi git clone (source files) in /root/Beagle_SDR_GPS will be completely removed
+                and re-cloned. In the unlikely event you have made custom changes they will be lost.
+                You must restart after the re-clone and let a full build occur.
+
+    iframe extension now accepts arbitrary HTML/Javascript in addition to existing URL parameter.
+    Examples (see admin extensions tab, iframe entry)
+        URL:
+            https://services.swpc.noaa.gov/images/planetary-k-index.gif
+        HTML:
+            <center>
+              <a href="https://www.hamqsl.com/solar.html"
+                 title="Click to add Solar-Terrestrial Data to your website!">
+                 <img src="https://www.hamqsl.com/solarbrief.php">
+              </a>
+            </center>
+
+    BBAI-64: Expand main memory available from 2 GB to 4 GB.
+
 v1.554  Aug 15, 2022
     Admin page
         Console tab: added buttons with common commands, e.g. monitor build progress, disk free,

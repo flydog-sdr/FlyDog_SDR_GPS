@@ -39,6 +39,7 @@ Boston, MA  02110-1301, USA.
 #include "rx_noise.h"
 #include "wdsp.h"
 #include "security.h"
+#include "options.h"
 
 #ifdef DRM
  #include "DRM.h"
@@ -325,12 +326,15 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_float("nr_specAlpha", 0.95, &update_cfg);
     cfg_default_int("nr_specSNR", 30, &update_cfg);
 
+    // the auto speed process is only run at restart time -- only handle forced speed changes here
     int espeed = cfg_default_int("ethernet_speed", 0, &update_cfg);
     static int current_espeed;
     if (espeed != current_espeed) {
-        printf("ETH0 espeed %d\n", espeed? 10:100);
-        non_blocking_cmd_system_child(
-            "kiwi.ethtool", stprintf("ethtool -s eth0 speed %d duplex full", espeed? 10:100), NO_WAIT);
+        printf("ETH0 ethernet speed %s\n", (espeed == 0)? "auto" : ((espeed == 1)? "10M" : "100M"));
+        if (espeed) {
+            non_blocking_cmd_system_child("kiwi.ethtool",
+                stprintf("ethtool -s eth0 speed %d duplex full", (espeed == 1)? 10:100), NO_WAIT);
+        }
         current_espeed = espeed;
     }
     
@@ -963,6 +967,10 @@ void SNR_meas(void *param)
 
             meas->valid = true;
             rx_server_websocket(WS_MODE_CLOSE, &iconn.wf_mc);
+            
+            #ifdef HONEY_POT
+                snr_all = snr_HF = 55;
+            #endif
         }
         
         //TaskSleepSec(60);

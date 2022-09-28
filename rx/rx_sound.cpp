@@ -117,6 +117,7 @@ static str_hashes_t snd_cmd_hashes[] = {
     { "SET seq=", CMD_SEQ },
     { "SET lms_", CMD_LMS_AUTONOTCH },
     { "SET sam_", CMD_SAM_PLL },
+    { "SET wind", CMD_SND_WINDOW_FUNC },
     { 0 }
 };
 
@@ -171,7 +172,8 @@ void c2s_sound(void *param)
 	const char *s;
 	
 	double freq=-1, _freq, gen=-1, _gen, locut=0, _locut, hicut=0, _hicut, mix;
-	int mode=-1, _mode, genattn=0, _genattn, mute, test=0, de_emp=0, mparam=0;
+	int mode=-1, _mode, genattn=0, _genattn, mute=0, test=0, de_emp=0;
+	u4_t mparam=0;
 	double z1 = 0;
 
 	double frate = ext_update_get_sample_rateHz(rx_chan);      // FIXME: do this in loop to get incremental changes
@@ -208,9 +210,9 @@ void c2s_sound(void *param)
 
 	int agc = 1, _agc, hang = 0, _hang;
 	int thresh = -90, _thresh, manGain = 0, _manGain, slope = 0, _slope, decay = 50, _decay;
-	int chan_null = 0;
+	u4_t SAM_mparam = 0;
 	int arate_in, arate_out, acomp;
-	int adc_clk_corrections = 0;
+	double adc_clock_corrected = 0;
 	bool spectral_inversion = kiwi.spectral_inversion;
 	
 	int tr_cmds = 0;
@@ -230,7 +232,7 @@ void c2s_sound(void *param)
 	#define N_RSSI 65
 	float rssi_q[N_RSSI];
 	int squelch=0, squelch_on_seq=-1, tail_delay=0;
-	bool sq_init=false, squelched=false;
+	bool sq_changed=false, squelched=false;
 
 	// Overload muting stuff
 	int mute_overload = 0; // activate the muting when overloaded
@@ -280,16 +282,16 @@ void c2s_sound(void *param)
 		
 		// reload freq NCO if adc clock has been corrected
 		// reload freq NCO if spectral inversion changed
-		if (freq >= 0 && (adc_clk_corrections != clk.adc_clk_corrections || spectral_inversion != kiwi.spectral_inversion)) {
-			adc_clk_corrections = clk.adc_clk_corrections;
+		if (freq >= 0 && (adc_clock_corrected != conn->adc_clock_corrected || spectral_inversion != kiwi.spectral_inversion)) {
+			adc_clock_corrected = conn->adc_clock_corrected;
             spectral_inversion = kiwi.spectral_inversion;
 
 			double freq_kHz = freq * kHz;
 			double freq_inv_kHz = ui_srate - freq_kHz;
 			f_phase = (spectral_inversion? freq_inv_kHz : freq_kHz) / conn->adc_clock_corrected;
             i_phase = (u64_t) round(f_phase * pow(2,48));
-            //cprintf(conn, "SND UPD freq %.3f kHz i_phase 0x%08x|%08x clk %.3f\n",
-            //    freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected);
+            //cprintf(conn, "SND UPD freq %.3f kHz i_phase 0x%08x|%08x clk %.3f(%d)\n",
+            //    freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected, clk.adc_clk_corrections);
             if (do_sdr) spi_set3(CmdSetRXFreq, rx_chan, (i_phase >> 16) & 0xffffffff, i_phase & 0xffff);
 		    //cprintf(conn, "SND freq updated due to ADC clock correction\n");
 		}
@@ -311,7 +313,7 @@ void c2s_sound(void *param)
             #endif
 
 			// SECURITY: this must be first for auth check
-			if (rx_common_cmd("SND", conn, cmd)) {
+			if (rx_common_cmd(STREAM_SOUND, conn, cmd)) {
                 #ifdef TR_SND_CMDS
                     if (tr_cmds++ < 32)
                         clprintf(conn, "SND #%02d <%s> cmd_recv 0x%x/0x%x\n", tr_cmds, cmd, cmd_recv, CMD_ALL);
@@ -392,12 +394,15 @@ void c2s_sound(void *param)
                                 memset(&snd->adpcm_snd, 0, sizeof(ima_adpcm_state_t));
                             }
                     
-                            if (_mode == MODE_SAM && n == 5) {
-                                chan_null = mparam;
+                            bool SAM_modes = (_mode >= MODE_SAM && _mode <= MODE_QAM);
+                            if (SAM_modes && n == 5) {
+                                SAM_mparam = mparam & MODE_FLAGS_SAM;
+                                cprintf(conn, "SAM DC_block=%d fade_leveler=%d chan_null=%d\n",
+                                    (SAM_mparam & DC_BLOCK)? 1:0, (SAM_mparam & FADE_LEVELER)? 1:0, SAM_mparam & CHAN_NULL);
                             }
 
                             // reset SAM demod on non-SAM to SAM transition
-                            if ((_mode >= MODE_SAM && _mode <= MODE_QAM) && !(mode >= MODE_SAM && mode <= MODE_QAM)) {
+                            if (SAM_modes && !(mode >= MODE_SAM && mode <= MODE_QAM)) {
                                 //cprintf(conn, "SAM_PLL_RESET\n");
                                 wdsp_SAM_PLL(rx_chan, PLL_RESET);
                             }
@@ -446,8 +451,8 @@ void c2s_sound(void *param)
                         //cprintf(conn, "SND LOcut %.0f HIcut %.0f BW %.0f/%.0f\n", locut, hicut, bw, frate/2);
                     
                         #define CW_OFFSET 0		// fixme: how is cw offset handled exactly?
-                        m_PassbandFIR[rx_chan].SetupParameters(0, locut, hicut, CW_OFFSET, frate);
-                        m_chan_null_FIR[rx_chan].SetupParameters(1, locut, hicut, CW_OFFSET, frate);
+                        m_PassbandFIR[rx_chan].SetupParameters(SND_INSTANCE_FFT_PASSBAND, locut, hicut, CW_OFFSET, frate);
+                        m_chan_null_FIR[rx_chan].SetupParameters(SND_INSTANCE_FFT_CHAN_NULL, locut, hicut, CW_OFFSET, frate);
                         conn->half_bw = bw;
                     
                         // post AM detector filter
@@ -489,6 +494,16 @@ void c2s_sound(void *param)
 			    break;
 			}
 			
+            case CMD_SND_WINDOW_FUNC:
+                if (sscanf(cmd, "SET window_func=%d", &n) == 1) {
+                    if (n < 0 || n >= N_SND_WINF) n = 0;
+                    snd->window_func = n;
+                    m_PassbandFIR[rx_chan].SetupWindowFunction(snd->window_func);
+                    cprintf(conn, "SND window_func=%d\n", snd->window_func);
+                    did_cmd = true;                
+                }
+                break;
+
             case CMD_COMPRESSION: {
                 int _comp;
                 n = sscanf(cmd, "SET compression=%d", &_comp);
@@ -586,15 +601,17 @@ void c2s_sound(void *param)
                     if (n == 2) {
                         squelch = _squelch;
                         squelched = false;
-                        //cprintf(conn, "SND SET squelch=%d param=%.2f %s\n", squelch, _squelch_param, mode_s[mode]);
+                        //cprintf(conn, "SND SET squelch=%d param=%.2f %s", squelch, _squelch_param, mode_s[mode]);
                         if (mode == MODE_NBFM) {
                             m_Squelch[rx_chan].SetSquelch(squelch, _squelch_param);
                         } else {
                             float squelch_tail = _squelch_param;
                             tail_delay = roundf(squelch_tail * snd_rate / LOOP_BC);
                             squelch_on_seq = -1;
-                            sq_init = true;
+                            sq_changed = true;
+                            //cprintf(conn, " squelch_tail=%.2f tail_delay=%d", squelch_tail, tail_delay);
                         }
+                        //cprintf(conn, "\n");
                     }
                 }
                 break;
@@ -694,7 +711,7 @@ void c2s_sound(void *param)
                 n = sscanf(cmd, "SET ovld_mute=%d", &mute_overload);
                 if (n == 1) {
                     did_cmd = true;
-                    //printf("mute %d\n", mute);
+                    //printf("ovld_mute %d\n", mute);
                     // FIXME: stop audio stream to save bandwidth?
                 }
 
@@ -1166,8 +1183,8 @@ void c2s_sound(void *param)
 
                 // NB:
                 //      MODE_SAS/QAM stereo mode: output samples put back into a_samps
-                //      chan_null mode: in addition to r_samps output, compute FFT of nulled a_samps
-                wdsp_SAM_demod(rx_chan, mode, chan_null, ns_out, a_samps, r_samps);
+                //      chan null mode: in addition to r_samps output, compute FFT of nulled a_samps
+                wdsp_SAM_demod(rx_chan, mode, SAM_mparam, ns_out, a_samps, r_samps);
                 if (snd->secondary_filter) {
                     //real_printf("2"); fflush(stdout);
                     m_chan_null_FIR[rx_chan].ProcessData(rx_chan, ns_out, a_samps, NULL);
@@ -1266,19 +1283,19 @@ void c2s_sound(void *param)
                 }
             }
             
-            
-            if ((squelch || sq_init) && !isNBFM && mode != MODE_DRM) {
+            if ((squelch || sq_changed) && !isNBFM && mode != MODE_DRM) {
                 if (!rssi_filled || squelch_on_seq == -1) {
                     rssi_q[rssi_p++] = sMeter_dBm;
                     if (rssi_p >= N_RSSI) { rssi_p = 0; rssi_filled = true; }
                 }
+
                 bool squelch_off = (squelch == 0);
                 bool rtn_is_open = squelch_off? true:false;
                 if (!squelch_off && rssi_filled) {
                     float median_nf = median_f(rssi_q, N_RSSI);
                     float rssi_thresh = median_nf + squelch;
                     bool is_open = (squelch_on_seq != -1);
-                    if (is_open) rssi_thresh -= 6;
+                    if (is_open) rssi_thresh -= 6;      // hysteresis
                     bool rssi_green = (sMeter_dBm >= rssi_thresh);
                     if (rssi_green) {
                         squelch_on_seq = snd->seq;
@@ -1291,10 +1308,16 @@ void c2s_sound(void *param)
                         squelch_on_seq = -1;
                         rtn_is_open = false; 
                     }
+
+                    //cprintf(conn, "squelch=%d rssi_p=%02d rssi_filled=%d median_nf=%.0f mute=%d sMeter_dBm=%.0f >= rssi_thresh=%.0f(%d) rssi_green=%d squelch_on_seq=%d squelched=%d\n",
+                    //    squelch, rssi_p, rssi_filled, median_nf, mute, sMeter_dBm, rssi_thresh, is_open, rssi_green, squelch_on_seq, squelched);
+                } else {
+                    //cprintf(conn, "squelch=%d rssi_p=%02d rssi_filled=%d mute=%d sMeter_dBm=%.0f squelch_on_seq=%d squelched=%d\n",
+                    //    squelch, rssi_p, rssi_filled, mute, sMeter_dBm, squelch_on_seq, squelched);
                 }
-                if (sq_init) sq_init = false;
-                
+
                 squelched = (!rtn_is_open);
+                if (sq_changed) sq_changed = false;
             }
 
             // mute receiver if overload is detected
@@ -1335,9 +1358,11 @@ void c2s_sound(void *param)
             // copy to output buffer and send to client
             ////////////////////////////////
             
-            bool send_silence = (masked || squelched || squelched_overload);
+            #define SILENCE_VALUE 1     // non-zero to prevent triggering the Firefox "goes silent" watchdog
+            //bool send_silence = (masked || squelched || squelched_overload);
+            bool send_silence = masked;     // enforced on server side to prevent clients from cheating
 
-            // IQ output modes (except non-monitor mode DRM)
+            // IQ/stereo output modes (except non-monitor mode DRM)
             if (mode == MODE_IQ || mode == MODE_SAS || mode == MODE_QAM
             #ifdef DRM
                 // DRM monitor mode is effectively the same as MODE_IQ
@@ -1372,7 +1397,7 @@ void c2s_sound(void *param)
                 
                 if (send_silence) {
                     TYPECPX *sp = cp;
-                    for (int i = 0; i < ns_out; i++) { sp->re = sp->im = 1; sp++; }
+                    for (int i = 0; i < ns_out; i++) { sp->re = sp->im = SILENCE_VALUE; sp++; }
                 }
                 
                 if (little_endian) {
@@ -1412,7 +1437,7 @@ void c2s_sound(void *param)
     
                 if (send_silence) {
                     TYPEMONO16 *rs = r_samps;
-                    for (int i = 0; i < ns_out; i++) *rs++ = 1;
+                    for (int i = 0; i < ns_out; i++) *rs++ = SILENCE_VALUE;
                 }
                 
                 if (compression) {
@@ -1466,15 +1491,15 @@ void c2s_sound(void *param)
                         if (little_endian) {
                             bc += pkt_remain * NIQ * sizeof(s2_t);
                             for (j=0; j < pkt_remain; j++) {
-                                *bp_iq_s2++ = 0x1;     // arm native little-endian (put any swap burden on client)
-                                *bp_iq_s2++ = 0x1;
+                                *bp_iq_s2++ = SILENCE_VALUE;     // arm native little-endian (put any swap burden on client)
+                                *bp_iq_s2++ = SILENCE_VALUE;
                             }
                         } else {
                             for (j=0; j < pkt_remain; j++) {
                                 *bp_iq_u1++ = 0; bc++;     // choose a network byte-order (big-endian)
-                                *bp_iq_u1++ = 1; bc++;
+                                *bp_iq_u1++ = SILENCE_VALUE; bc++;
                                 *bp_iq_u1++ = 0; bc++;
-                                *bp_iq_u1++ = 1; bc++;
+                                *bp_iq_u1++ = SILENCE_VALUE; bc++;
                             }
                         }
                     } else {

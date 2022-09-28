@@ -19,7 +19,7 @@ This file is part of OpenWebRX.
 
 */
 
-// Copyright (c) 2015 - 2016 John Seamons, ZL/KF6VO
+// Copyright (c) 2015 - 2022 John Seamons, ZL/KF6VO
 
 // Note: we don't support older browsers using the Mozilla audio API since it is now depreciated
 // see https://wiki.mozilla.org/Audio_Data_API
@@ -48,6 +48,7 @@ var audio = {
    SND_FLAG_TUNE_ACK:      0x0400,
    
    cur_flags2: 0,
+   last_msec: 0,
    
    _last: 0
 };
@@ -128,7 +129,7 @@ var comp_lpf_taps_length;
 var audio_buffer_size;
 var audio_buffer_min_length_sec; // actual number of samples are calculated from sample rate
 var audio_buffer_max_length_sec; // actual number of samples are calculated from sample rate
-var audio_data;
+var audio_data, audio_data_unsquelched;
 var audio_last_output_buffer, audio_last_output_buffer2;
 var audio_silence_buffer;
 var audio_stats_interval;
@@ -364,6 +365,7 @@ function audio_init(is_local, less_buffering, compression)
    }
    
 	audio_data = new Int16Array(audio_buffer_size);
+	audio_data_unsquelched = new Int16Array(audio_buffer_size);
 	audio_last_output_buffer = new Float32Array(audio_buffer_size)
 	audio_last_output_buffer2 = new Float32Array(audio_buffer_size)
 	audio_silence_buffer = new Float32Array(audio_buffer_size);
@@ -583,6 +585,8 @@ function audio_connect(reconnect)
 		else
 			audio_source.connect(audio_watchdog);
 	}
+
+   audio_pre_record_buf_init();
 }
 
 // NB: always use kiwi_log() instead of console.log() in here
@@ -674,7 +678,7 @@ function audio_onprocess(ev)
 	// synchronize squelch UI changes with delayed time of actual audio squelch
 	var sq = (flags & audio.SND_FLAG_SQUELCH_UI)? true:false;
 	if (sq != audio_last_sq && isDefined(squelch_action)) {
-      setTimeout(function(sq) { squelch_action(sq); }, 1, sq);
+      setTimeout(function(_sq) { squelch_action(_sq); }, 1, sq);
 	   audio_last_sq = sq;
 	}
 
@@ -775,6 +779,30 @@ function audio_adpcm_state(index, previousValue)
    audio_camping = 2;
 }
 
+function audio_pre_record_buf_init()
+{
+   if (pre_record == 0 || isUndefined(cur_mode)) {
+      kiwi.pre_buf = null;
+      return;
+   }
+   
+   var srate = Math.round(audio_input_rate || 12000);
+   var nch = ext_is_IQ_or_stereo_curmode()? 2 : 1;
+   var secs = pre_record_v[pre_record] + 1;     // for some reason have to add 1 sec here
+   var pre_samps = Math.round(secs * nch * srate);
+   if (pre_samps & 1) pre_samps++;     // even # samps for nch == 2
+   console.log('AUDIO pre_record init: samps='+ pre_samps +' time='+ pre_record_v[pre_record]);
+   kiwi.pre_samps = pre_samps;
+   kiwi.pre_size = pre_samps * 2;
+   kiwi.pre_last = kiwi.pre_size - 2;
+   kiwi.pre_buf = new ArrayBuffer(kiwi.pre_size);
+   kiwi.pre_data = new DataView(kiwi.pre_buf);
+   kiwi.pre_off = 0;
+   kiwi.pre_wrapped = false;
+   kiwi.pre_captured = false;
+   kiwi.pre_ping_pong = 0;
+}
+
 function audio_recv(data)
 {
    //if (!audio_running) console.log('AUDIO audio_recv running='+ audio_running);
@@ -782,6 +810,7 @@ function audio_recv(data)
    
 	var h8 = new Uint8Array(data, 0, 8);   // data, offset, length
    var flags = h8[3];
+   var squelched = flags & audio.SND_FLAG_SQUELCH_UI;
    //console.log('AUDIO flags='+ flags.toHex(+4));
    //if (flags != audio.last_flags) { console.log('AUDIO flags='+ flags.toHex(+4)); audio.last_flags = flags; }
 
@@ -878,22 +907,31 @@ function audio_recv(data)
    audio_channels = audio_mode_iq? 2 : 1;
 
 	if (audio_compression) {
-	   if (audio.d) console.log('AC Q'+ audio_prepared_buffers.length +' #'+ audio_channels);
+	   if (audio.d) {
+	      var now = Date.now();
+	      var msec = now - audio.last_msec;
+	      audio.last_msec = now;
+	      console.log('AC Q'+ audio_prepared_buffers.length +' '+ audio_channels +'ch '+ msec);
+	   }
       //console.log('AUDIO COMP bytes='+ bytes);
-		decode_ima_adpcm_e8_i16(data_view, audio_data, bytes, audio_adpcm);
+		decode_ima_adpcm_e8_i16(data_view, audio_data, audio_data_unsquelched, squelched, bytes, audio_adpcm);
 		samps = bytes*2;		// i.e. 1024 8b bytes -> 2048 16b real samps, 1KB -> 4KB, 4:1 over uncompressed
 	} else {
 	   if (audio.d) {
+	      var now = Date.now();
+	      var msec = now - audio.last_msec;
+	      audio.last_msec = now;
 	      if (isIQ)
-	         console.log('ANC IQ Q'+ audio_prepared_buffers.length +'/'+ audio_prepared_buffers2.length +' #'+ audio_channels);
+	         console.log('ANC IQ Q'+ audio_prepared_buffers.length +'/'+ audio_prepared_buffers2.length +' '+ audio_channels +'ch '+ msec);
 	      else
-	         console.log('ANC Q'+ audio_prepared_buffers.length +' #'+ audio_channels);
+	         console.log('ANC Q'+ audio_prepared_buffers.length +' '+ audio_channels +'ch '+ msec);
 	   }
       //console.log('AUDIO NO_COMP bytes='+ bytes);
 		samps = bytes/2;		// i.e. non-IQ: 1024 8b bytes ->  512 16b real samps,                     1KB -> 1KB, 1:1 no compression
 		                     // i.e.     IQ: 2048 8b bytes -> 1024 16b  I,Q samps (512 IQ samp pairs), 2KB -> 2KB, 1:1 never compression
       for (i=0; i < samps; i++) {
-         audio_data[i] = data_view.getInt16(i*2, (flags & audio.SND_FLAG_LITTLE_ENDIAN)? true:false);   // convert from network byte-order
+         audio_data_unsquelched[i] = data_view.getInt16(i*2, (flags & audio.SND_FLAG_LITTLE_ENDIAN)? true:false);   // convert from network byte-order
+         audio_data[i] = squelched? 1 : audio_data_unsquelched[i];
       }
 	}
 	
@@ -914,30 +952,117 @@ function audio_recv(data)
 
 	extint_audio_data(audio_data, samps);
 
-
    // audio FFT hook
    if (wf.audioFFT_active) {
       wf_audio_FFT(audio_data, samps);
    }
+	
+	audio_record(audio_compression);
+}
 
-
+function audio_record(compressed)
+{
 	// Recording hooks
-	if (window.recording && audio_last_sq == false) {
-		var samples = audio_mode_iq ? 1024 : (compressed ? 2048 : 512);
+   var samples = audio_mode_iq ? 1024 : (compressed ? 2048 : 512);
 
-		// There are 2048 or 512 little-endian samples in each audio_data, the rest of the elements are zeroes
-		for (var i = 0; i < samples; ++i) {
-			window.recording_meta.data.setInt16(window.recording_meta.offset, audio_data[i], true);
-			window.recording_meta.offset += 2;
-		}
-		window.recording_meta.total_size += samples * 2;
+   // maintain the pre-record / pre-squelch buffer
+   var pre_record_buffer = function() {
+      if (!kiwi.pre_buf) return;
+      
+      for (var i = 0; i < samples; i++) {
+         //var samp = Math.floor(10000 * (kiwi.pre_ping_pong? (kiwi.pre_size - kiwi.pre_off) : kiwi.pre_off) / kiwi.pre_size);
+         var samp = audio_data_unsquelched[i];
+         kiwi.pre_data.setInt16(kiwi.pre_off, samp, true);
+         kiwi.pre_off += 2;
+         if (kiwi.pre_off >= kiwi.pre_size) {
+            kiwi.pre_off = 0;
+            kiwi.pre_wrapped = true;
+            kiwi.pre_ping_pong ^= 1;
+         }
+      }
+      kiwi.pre_captured = true;
+   }
 
-		// Check if it's time for a new buffer yet
-		if (window.recording_meta.offset == 65536) {
-			window.recording_meta.buffers.push(new ArrayBuffer(65536));
-			window.recording_meta.data = new DataView(window.recording_meta.buffers[window.recording_meta.buffers.length - 1]);
-			window.recording_meta.offset = 0;
-		}
+	if (window.recording) {
+      
+      // Check if it's time for a new buffer yet
+      var check_grow = function() {
+         if (window.recording_meta.offset == 65536) {
+            window.recording_meta.buffers.push(new ArrayBuffer(65536));
+            window.recording_meta.data = new DataView(window.recording_meta.buffers[window.recording_meta.buffers.length - 1]);
+            window.recording_meta.offset = 0;
+         }
+      };
+
+	   if (audio_last_sq == true) {
+
+	      // recording, maintain pre-record buffer while squelch open
+	      pre_record_buffer();
+	   } else {
+
+         // insert pre record buffer:
+         // either first time through after recording started
+         // or squelch open during recording
+	      if (kiwi.pre_captured) {
+	         if (kiwi.pre_wrapped) {
+	            /*
+	               // test
+                  for (var i = 0; i < kiwi.pre_size; i += 2) {
+                     var samp = kiwi.pre_data.getInt16(i, true);
+                     window.recording_meta.data.setInt16(window.recording_meta.offset, samp, true);
+                     window.recording_meta.offset += 2;
+                     check_grow();
+                  }
+                  window.recording_meta.total_size += kiwi.pre_size;
+	            */
+	            // buffer is completely filled, if wrapped (likely case) copy the two separate pieces
+	            console.log('AUDIO pre_record WRAPPED insert pre_off='+ kiwi.pre_off +' '+
+	               (kiwi.pre_size - kiwi.pre_off) +'+'+ kiwi.pre_off +'='+ kiwi.pre_size +' ping_pong='+ kiwi.pre_ping_pong);
+               for (var i = kiwi.pre_off; i < kiwi.pre_size; i += 2) {
+                  var samp = kiwi.pre_data.getInt16(i, true);
+                  window.recording_meta.data.setInt16(window.recording_meta.offset, samp, true);
+                  window.recording_meta.offset += 2;
+                  check_grow();
+               }
+               window.recording_meta.total_size += kiwi.pre_size - kiwi.pre_off;
+
+               for (var i = 0; i < kiwi.pre_off; i += 2) {
+                  var samp = kiwi.pre_data.getInt16(i, true);
+                  window.recording_meta.data.setInt16(window.recording_meta.offset, samp, true);
+                  window.recording_meta.offset += 2;
+                  check_grow();
+               }
+               window.recording_meta.total_size += kiwi.pre_off;
+	         } else {
+	            // buffer is partially filled
+	            console.log('AUDIO pre_record NOT-WRAPPED insert pre_off='+ kiwi.pre_off +'/'+ kiwi.pre_size +' ping_pong='+ kiwi.pre_ping_pong);
+               for (var i = 0; i < kiwi.pre_off; i += 2) {
+                  var samp = kiwi.pre_data.getInt16(i, true);
+                  window.recording_meta.data.setInt16(window.recording_meta.offset, samp, true);
+                  window.recording_meta.offset += 2;
+                  check_grow();
+               }
+               window.recording_meta.total_size += kiwi.pre_off;
+            }
+            
+            kiwi.pre_off = 0;
+            kiwi.pre_wrapped = false;
+            kiwi.pre_captured = false;
+            kiwi.pre_ping_pong = 0;
+	      }
+
+         // There are 2048 or 512 little-endian samples in each audio_data, the rest of the elements are zeroes
+         for (var i = 0; i < samples; ++i) {
+            window.recording_meta.data.setInt16(window.recording_meta.offset, audio_data[i], true);
+            window.recording_meta.offset += 2;
+            check_grow();
+         }
+         window.recording_meta.total_size += samples * 2;
+      }
+	} else {
+
+	   // not recording, maintain pre-record buffer for use when recording is started
+	   pre_record_buffer();
 	}
 }
 

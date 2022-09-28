@@ -38,6 +38,7 @@ Boston, MA  02110-1301, USA.
 #include "ext_int.h"
 #include "wspr.h"
 #include "security.h"
+#include "options.h"
 
 #ifdef USE_SDR
  #include "data_pump.h"
@@ -135,6 +136,7 @@ static str_hashes_t rx_common_cmd_hashes[] = {
     { "SET dbug_v", CMD_DEBUG_VAL },
     { "SET dbug_m", CMD_DEBUG_MSG },
     { "SET is_adm", CMD_IS_ADMIN },
+    { "SET close_", CMD_FORCE_CLOSE_ADMIN },
     { "SET get_au", CMD_GET_AUTHKEY },
     { "SET clk_ad", CMD_CLK_ADJ },
     { "SERVER DE ", CMD_SERVER_DE_CLIENT },
@@ -175,9 +177,10 @@ bool rx_auth_okay(conn_t *conn)
     return true;
 }
 
-bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
+bool rx_common_cmd(int stream_type, conn_t *conn, char *cmd)
 {
 	int i, j, k, n;
+	const char *stream_name = rx_streams[stream_type].uri;
 	struct mg_connection *mc = conn->mc;
 	char *sb;
 	int slen;
@@ -208,6 +211,14 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
             conn->kick = true;
 		    return true;	// fake that we accepted command so it won't be further processed
 	}
+	
+	#ifdef HONEY_POT
+	    if ((stream_type == STREAM_SOUND || stream_type == STREAM_WATERFALL) &&
+	        (strcmp(cmd, "SET keepalive") && strcmp(cmd, "SET GET_USERS") && strncmp(cmd, "SET STATS_UPD", 13))) {
+	        cprintf(conn, "HONEY_POT %s %s%d <%s>\n", stream_name,
+	            (stream_type == STREAM_WATERFALL && conn->isMaster)? "-------- " : "", slen, cmd);
+	    }
+	#endif
 
     // CAUTION: because rx_common_cmd() can pass cmds it doesn't match there can be false hash matches
     // because not all possible commands are in the rx_common_cmd_hashes[] list.
@@ -394,7 +405,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
                 check_ip_against_restricted = false;
             }
 
-            pdb_printf("PWD %s %s conn #%d from %s %s internal_conn=%d check_ip_against_restricted=%d restricted_ip_match=%d\n",
+            pdb_printf("PWD %s %s conn #%d from %s/%s internal_conn=%d check_ip_against_restricted=%d restricted_ip_match=%d\n",
                 type_m, uri, conn->self_idx, ip_remote(mc), conn->remote_ip,
                 conn->internal_connection, check_ip_against_restricted, restricted_ip_match);
             pdb_printf("PWD %s %s conn #%d force_notLocal=%d isLocal=%d is_local=%d auth=%d auth_kiwi=%d auth_prot=%d auth_admin=%d\n",
@@ -1099,7 +1110,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
         
             //cprintf(conn, "DX_FILTER setup <%s> <%s> case=%d wild=%d grep=%d\n",
             //    conn->dx_filter_ident, conn->dx_filter_notes, conn->dx_filter_case, conn->dx_filter_wild, conn->dx_filter_grep);
-            //show_conn("DX FILTER ", conn);
+            //show_conn("DX FILTER ", PRINTF_REG, conn);
             send_msg(conn, false, "MSG request_dx_update");	// get client to request updated dx list
             return true;
         }
@@ -1374,7 +1385,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
                     fn_flags = conn->dx_filter_case? 0 : FNM_CASEFOLD;
                     //cprintf(conn, "DX_MKR FILTERING on <%s> <%s> case=%d wild=%d grep=%d\n",
                     //    conn->dx_filter_ident, conn->dx_filter_notes, conn->dx_filter_case, conn->dx_filter_wild, conn->dx_filter_grep);
-                    //show_conn("DX FILTER ", conn);
+                    //show_conn("DX FILTER ", PRINTF_REG, conn);
                 }
         
                 //if (drx->db == DB_EiBi) cprintf(conn, "EiBi BSEARCH len=%d %.2f\n", cur_len, dp->freq);
@@ -1846,11 +1857,12 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 	
     case CMD_BROWSER: {
         char *browser_m = NULL;
-        n = sscanf(cmd, "SET browser=%256ms", &browser_m);
+        n = sscanf(cmd, "SET browser=%256m[^\n]", &browser_m);
         if (n == 1) {
             kiwi_str_decode_inplace(browser_m);
             //clprintf(conn, "SET browser=<%s>\n", browser_m);
-            kiwi_ifree(browser_m);
+            kiwi_ifree(conn->browser);
+            conn->browser = browser_m;
             return true;
         }
 	    break;
@@ -2022,6 +2034,26 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
         }
 	    break;
 
+	// SECURITY: should be okay: checks for conn->auth_admin first
+    case CMD_FORCE_CLOSE_ADMIN:
+        if (strcmp(cmd, "SET close_admin_force") == 0) {
+            if (conn->auth_admin == false) {
+                cprintf(conn, "force_admin_close NO ADMIN AUTH %s\n", conn->remote_ip);
+                return true;
+            }
+            conn_t *c = conns;
+            for (i=0; i < N_CONNS; i++, c++) {
+                if (!c->valid || !(c->type == STREAM_ADMIN || c->type == STREAM_MFG))
+                    continue;
+                send_msg(c, false, "MSG no_admin_reopen_retry");
+	            show_conn("force_close_admin ", PRINTF_REG, c);
+                rx_server_remove(c);
+            }
+            return true;
+        }
+	    break;
+
+	// SECURITY: should be okay: checks for conn->auth_admin first
     case CMD_GET_AUTHKEY:
     if (strcmp(cmd, "SET get_authkey") == 0) {
         if (conn->auth_admin == false) {
@@ -2036,6 +2068,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
     }
 	    break;
 
+	// SECURITY: should be okay: checks for conn->auth_admin first
     case CMD_CLK_ADJ: {
         int clk_adj;
         n = sscanf(cmd, "SET clk_adj=%d", &clk_adj);

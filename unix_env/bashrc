@@ -37,6 +37,7 @@ alias e100="ethtool -s eth0 speed 100 duplex full"
 alias ip="ifconfig eth0 | grep 'eth0\|inet'"
 alias mac='cat /sys/class/net/eth0/address'
 alias df="/bin/df -h"
+alias d.="/bin/df -h ."
 alias tr="traceroute"
 alias cdp="cd \${PROJ}"
 alias cd2="cd \${PROJ2}"
@@ -83,6 +84,8 @@ alias clr='printf "\f"'
 alias ansi='for fgbg in 38 48 ; do for color in $(seq 0 255) ; do printf "\e[${fgbg};5;%sm %3s \e[0m" "$color" "$color" ; if [ $(( (color + 1) % 6)) == 4 ] ; then echo ; fi done ; echo ; done'
 alias ansi2='for color in $(seq 0 255) ; do printf "\e[48;5;%sm %3s \e[0m" "$color" "$color" ; if [ $(( (color + 1) % 6)) == 4 ] ; then echo ; fi done ; echo'
 alias ansi3='for c in $(seq 0 255) ; do printf "\e[48;5;%sm %3s \e[97m %3s \e[0m" "$c" "$c" "$c" ; done ; echo'
+# 2d console
+alias li='for l in $(seq -40 -2); do printf "%s\n" "$l" ; done'
 
 # make
 alias m="make"
@@ -147,9 +150,12 @@ sp="[[:space:]]"
 d_gr_exclude="--exclude-dir .git --exclude-dir .svn --exclude-dir ./web/pkgs_maps/leaflet ${no_grep}"
 alias grep="grep \$COLOR"
 alias gr="grep -i \$COLOR"
+alias grs="grep \$COLOR"
+alias grctx="grep -i -B3 -A3 \$COLOR"
 alias nogrep="echo ${no_grep}"
 alias g="function _g () { grep -riI ${d_gr_exclude} --exclude \*.min.\*  --exclude \*\ copy.\* \$* . ; } ; _g"
 alias gs="function _gs () { grep -rI ${d_gr_exclude} --exclude \*.min.\* --exclude \*\ copy.\* \$* . ; } ; _gs"
+alias gctx="function _g () { grep -riI -B3 -A3 ${d_gr_exclude} --exclude \*.min.\*  --exclude \*\ copy.\* \$* . ; } ; _g"
 alias gl="function _gl () { grep -riIl ${d_gr_exclude} --exclude \*.min.\*  --exclude \*\ copy.\* \$* . ; } ; _gl"
 alias gc="function _gc () { grep -riI ${d_gr_exclude} --exclude=\* --include=\*.c --include=\*.cpp \$* . ; } ; _gc"
 alias gh="function _gh () { grep -riI ${d_gr_exclude} --exclude=\* --include=\*.h --include=\*.hpp \$* . ; } ; _gh"
@@ -286,6 +292,7 @@ alias wdt="strings /boot/dtbs/${d_sys}/${f_dtb} | grep '.dts'"
 alias cdi2c="cd /sys/bus/i2c/devices"
 alias ver="/opt/scripts/tools/version.sh"
 alias ht="htop"
+# disk i/o
 alias it="iotop"
 alias io="iotop -obtqqq"
 #alias kai="function _kai () { ../build/kiwi.bin -debian 8 -use_spidev 1 \$* ; } ; _kai"
@@ -311,7 +318,7 @@ alias cf15="\$_cfp userspace; \$_cfs 1.5GHz; cpufreq-info | grep -i 'current cpu
 alias cm="while true; do date; ct; cf; vmstat; sleep 2; done"
 alias opp="omapconf show opp"
 
-# BBB
+# BBG/BBB
 type lsb_release >/dev/null 2>&1 || { lsb_release() { :; } ; }
 alias dog="echo Debian `cat /etc/debian_version`; more /etc/dogtag; uname -a; lsb_release -ds"
 alias tag=dog
@@ -322,13 +329,19 @@ alias unslot7="echo > /sys/devices/bone_capemgr.*/slots"
 alias unslot8="echo > /sys/devices/platform/bone_capemgr/slots"
 alias pins="more /sys/kernel/debug/pinctrl/44e10800.pinmux/pins"
 #alias pmux="more /sys/kernel/debug/pinctrl/44e10800.pinmux/pinmux-pins"
-alias bbser="screen -h 1024 /dev/ttyUSB0 115200"
 alias db="systemctl reload-or-restart dropbear.socket"
 alias dk="diff -r . merge"
 led=/sys/class/leds/beaglebone\:green\:usr
 # cpu busy indication is not is the list of possibilities if you do a "cat ${led}0/trigger ?
 alias leds="echo heartbeat >${led}0/trigger; echo mmc0 >${led}1/trigger; echo none >${led}2/trigger; echo mmc1 >${led}3/trigger"
 alias hbeat="echo heartbeat >${led}0/trigger; echo heartbeat >${led}1/trigger; echo heartbeat >${led}2/trigger; echo heartbeat >${led}3/trigger"
+
+# BB USB-to-serial (outbound)
+# probably need "pki screen". In screen do "^A?" (ctrl-A ?) for help. "^A\" (ctrl-A \) to exit.
+# /dev/ttyUSB0 is created by plugging in a Keyspan USA-19H device to USB port.
+# Same for BB-specific FTDI FT232RL cables with 6-pin 3.3V serial interface headers
+#   e.g. successfully used one to connect one BB USB port to 6-pin serial console port of another
+alias bbser="screen -h 1024 /dev/ttyUSB0 115200"
 
 # BB MMC
 # CAUTION: on the BBAI everything is on mmcblk[01]p1 (i.e. no sep /boot & / anymore)
@@ -365,11 +378,17 @@ alias whilek="while true; do ./k; done"
 alias whiled="while true; do ./d; done"
 alias bbpp="ping -c 1 proxy.kiwisdr.com"
 alias bbfp="ping -c 1 forum.kiwisdr.com"
+alias mblog="tail -fn 100 ~/build.log"
+alias st="stty -a"
 
 # networking
 alias nt="iptraf"
-# after iftop starts use: "L" log plot, "B" toggle 2/10/40s avg, "T" dsp cum totals
-alias ift="iftop -nNBP -m 1G"
+# after iftop starts use "tTL": "t" one line display, "L" log plot, "T" dsp cum totals, "B" toggle 2/10/40s avg (default 10s)
+# -m params is in b/s, so must x8 to get B/s, e.g. "-m 4M" will display 512KB max in byte mode
+# -f filter: 5353 is mDNS on multicast
+alias ift="iftop -nNBP -m 1G -f 'not port 22 and not port 80 and not port 5353 and not port 53 and not port 137'"
+# for linear display (without "L")
+alias iftl="iftop -nNBP -m 4M -f 'not port 22 and not port 80 and not port 5353 and not port 53 and not port 137'"
 alias ipt="function _ipt () { iptables -n -v -L \$* ; } ; _ipt"
 alias ipti="ipt INPUT"
 alias iptio="ipt INPUT; ipt OUTPUT"
@@ -424,8 +443,8 @@ alias gk="gdb ../build/kiwi.bin"
 # aliases added to ~/.gdbinit
 # to detect leaks type "leaks" before gk and use asan
 # gdb> asan // sets ASAN breakpoint
-# gdb> {ng,ng10,ngai,ng7}   // no gps, leds
-# gdb> {k,k10,kai,k7}       // normal run
+# gdb> {ng,ng7} // no gps, leds
+# gdb> {k,k7}   // normal run
 
 # KiwiSDR valgrind with gdb (deprecated, use clang ASAN)
 #   'vgh' alias below is a reminder of the sequence of commands

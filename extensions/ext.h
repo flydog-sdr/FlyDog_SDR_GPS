@@ -30,9 +30,9 @@ typedef void (*ext_main_t)();
 typedef void (*ext_close_conn_t)(int rx_chan);
 typedef bool (*ext_receive_msgs_t)(char *msg, int rx_chan);
 typedef bool (*ext_receive_cmds_t)(u2_t key, char *cmd, int rx_chan);
-typedef bool (*ext_receive_FFT_samps_t)(int rx_chan, int ch, int flags, int ratio, int ns_out, TYPECPX *samps);
-typedef void (*ext_receive_iq_samps_t)(int rx_chan, int ch, int ns_out, TYPECPX *samps);
-typedef void (*ext_receive_real_samps_t)(int rx_chan, int ch, int ns_out, TYPEMONO16 *samps, int freqHz);
+typedef bool (*ext_receive_FFT_samps_t)(int rx_chan, int instance, int flags, int ratio, int ns_out, TYPECPX *samps);
+typedef void (*ext_receive_iq_samps_t)(int rx_chan, int instance, int ns_out, TYPECPX *samps);
+typedef void (*ext_receive_real_samps_t)(int rx_chan, int instance, int ns_out, TYPEMONO16 *samps, int freqHz);
 typedef void (*ext_receive_S_meter_t)(int rx_chan, float S_meter_dBm);
 typedef void (*ext_poll_t)(int rx_chan);
 
@@ -82,7 +82,6 @@ void ext_unregister_receive_cmds(int rx_chan);
 
 // general routines
 double ext_update_get_sample_rateHz(int rx_chan);		// return sample rate of audio channel
-void ext_adjust_clock_offset(int rx_chan, double offset);
 typedef enum { AUTH_USER = 0, AUTH_LOCAL = 1, AUTH_PASSWORD = 2 } ext_auth_e;
 ext_auth_e ext_auth(int rx_chan);
 void ext_notify_connected(int rx_chan, u4_t seq, char *msg);
