@@ -9,7 +9,7 @@ var cw = {
    threshold: 49,
 
    // must set "remove_returns" so output lines with \r\n (instead of \n alone) don't produce double spacing
-   console_status_msg_p: { scroll_only_at_bottom: true, process_return_alone: false, remove_returns: true, ncol: 135 },
+   console_status_msg_p: { scroll_only_at_bottom: true, process_return_alone: false, remove_returns: true, cols: 135 },
 
    log_mins: 0,
    log_interval: null,
@@ -115,14 +115,16 @@ function cw_decoder_controls_setup()
 
 	var controls_html =
 		w3_div('id-cw-controls w3-text-white',
-			w3_divs('/w3-tspace-8',
+			w3_divs('',
             w3_col_percent('',
-				   w3_div('w3-medium w3-text-aqua', '<b>CW decoder</b>'), 30,
+               w3_div('',
+				      w3_div('w3-medium w3-text-aqua', '<b>CW decoder</b>'),
+                  w3_div('id-cw-wpm w3-margin-T-4', '0 WPM')
+				   ), 30,
 					w3_div('', 'From Loftur Jonasson, TF3LJ / VE2LJX <br> and the <b><a href="https://github.com/df8oe/UHSDR" target="_blank">UHSDR project</a></b> &copy; 2016'), 55
 				),
-				w3_inline('/w3-margin-between-16',
+				w3_inline('w3-margin-T-4/w3-margin-between-16',
                w3_button('w3-padding-smaller', 'Clear', 'cw_clear_button_cb', 0),
-               w3_div('id-cw-wpm', '0 WPM'),
                w3_checkbox('w3-label-inline w3-label-not-bold', 'word space<br>correction', 'cw.wspace', true, 'cw_decoder_wsc_cb'),
                w3_input('id-cw-threshold/w3-label-not-bold/|padding:0;width:auto|size=4', 'threshold', 'cw.threshold', cw.threshold, 'cw_decoder_threshold_cb'),
                w3_button('w3-padding-smaller', 'Reset', 'cw_reset_cb', 0),

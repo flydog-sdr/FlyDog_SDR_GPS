@@ -8,6 +8,7 @@ var admin = {
    console_open: false,
    
    long_running: false,
+   no_admin_reopen_retry: false,
    is_multi_core: false,
    reg_status: {},
    
@@ -238,7 +239,7 @@ function control_html()
             w3_switch('', 'Yes', 'No', 'adm.daily_restart', adm.daily_restart, 'admin_radio_YN_cb'),
 				w3_div('w3-text-black',
 					"Set if you're having problems with the server<br>after it has run for a period of time.<br>" +
-					"Restart occurs at the same time as updates (0200-0600 UTC)<br> and will wait until there are no connections."
+					"Restart occurs at the same time as updates (0100-0600 Local)<br> and will wait until there are no connections."
 				)
 			)
       );
@@ -661,7 +662,7 @@ function connect_update_url()
       host_and_port += ':'+ adm.port_ext;
       w3_set_label('Based on above selection, and external port from Network tab, the URL to connect to your Kiwi is:', 'connect-url-text');
    } else {
-      host_and_port += '';
+      // host_and_port += ':8073';
       if (adm.port_ext != 8073)
          host_and_port += ' (proxy always uses port 80 even though your external port is '+ adm.port_ext +')';
       w3_set_label('Based on the above selection the URL to connect to your Kiwi is:', 'connect-url-text');
@@ -983,12 +984,16 @@ var update_restart_u = { 0: 'restart server', 1: 'reboot Beagle' };
 function update_check_now_cb(id, idx)
 {
 	ext_send('SET force_check=1 force_build=0');
-	w3_el('msg-update').innerHTML = w3_icon('', 'fa-refresh fa-spin', 20);
+	w3_el('id-msg-update').innerHTML =
+	   w3_icon('', 'fa-refresh fa-spin', 24) + ' &nbsp; Checking for software update..';
 }
 
 function update_build_now_cb(id, idx)
 {
 	ext_send('SET force_check=1 force_build=1');
+	w3_el('id-msg-update').innerHTML = w3_icon('', 'fa-refresh fa-spin', 24) +
+      ' &nbsp; Monitor build progress using console tab, "monitor build progress" button.';
+
 	if (adm.update_restart == 0)
 	   w3_show_block('id-build-restart');
 	else
@@ -1099,7 +1104,8 @@ var network = {
    ip_blacklist_file_base: 'kiwisdr.com/ip_blacklist/ip_blacklist3.cjson',
    ip_blacklist_check_mtime: true,
    
-   ethernet_speed_s: [ '100 Mbps', '10 Mbps' ],
+   // this ordering gives a remapping of the old 0/1 values: 100M(0) => auto, 10M(1) => same
+   ethernet_speed_s: [ 'auto', '10 Mbps', '100 Mbps' ],
    ethernet_mtu_s: [ '1500 (default)', '1440', '1400' ]
 };
 
@@ -1339,7 +1345,7 @@ function network_use_ssl_cb(path, idx, first)
 function network_download_button_cb(id, idx, first)
 {
    if (first) return;
-   w3_innerHTML('id-ip-blacklist-status', 'updating..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 20));
+   w3_innerHTML('id-ip-blacklist-status', 'updating..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 24));
    //kiwi_ajax(network.ip_blacklist_file_SSL, 'network_download_blacklist_cb', 0, -2000);
    kiwi_ajax(network.ip_blacklist_file_SSL, 'network_download_blacklist_cb', 0, 10000);
 }
@@ -1383,7 +1389,7 @@ function network_download_blacklist_cb(bl)
          w3_innerHTML('id-ip-blacklist-status', 'download failed: could not contact kiwisdr.com or find default file');
          return;
       } else {
-         w3_innerHTML('id-ip-blacklist-status', 'download failed, using default..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 20));
+         w3_innerHTML('id-ip-blacklist-status', 'download failed, using default..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 24));
          network.show_updating = false;
       }
       
@@ -1560,7 +1566,7 @@ function network_ip_blacklist_cb(path, val)
 
    ext_send('SET network_ip_blacklist_clear');
    if (network.show_updating) {
-      w3_innerHTML('id-ip-blacklist-status', 'updating..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 20));
+      w3_innerHTML('id-ip-blacklist-status', 'updating..'+ w3_icon('w3-margin-left', 'fa-refresh fa-spin', 24));
    }
    
    network.seq = 0;
@@ -2853,7 +2859,10 @@ function log_update()
 
 // must set "remove_returns" since pty output lines are terminated with \r\n instead of \n alone
 // otherwise the \r overwrite logic in kiwi_output_msg() will be triggered
-var console_status_msg_p = { scroll_only_at_bottom: true, inline_returns: true, process_return_alone: false, remove_returns: false, ncol: 160 };
+admin.console = {
+   scroll_only_at_bottom: true, inline_returns: true, process_return_alone: false, remove_returns: false,
+   rows: 10, cols: 140
+};
 
 function console_html()
 {
@@ -2863,20 +2872,37 @@ function console_html()
 		   w3_div('',
             w3_label('w3-show-inline', 'Beagle Debian console'),
             w3_button('w3-aqua|margin-left:10px', 'Connect', 'console_connect_cb'),
-            w3_button('w3-green|margin-left:32px', 'monitor build progress', 'console_cmd_cb', 'console_input_cb|tail -n 500 -f /root/build.log'),
-            w3_button('w3-yellow|margin-left:16px', 'disk free', 'console_cmd_cb', 'console_input_cb|df .'),
-            w3_button('w3-blue|margin-left:16px', 'check github.com', 'console_cmd_cb', 'console_input_cb|git show origin:Makefile&vbar;head -n 2'),
-            w3_button('w3-blue|margin-left:16px', 'ping 1.1.1.1', 'console_cmd_cb', 'console_input_cb|ping -c3 1.1.1.1'),
-            w3_button('w3-blue|margin-left:16px', 'ping kiwisdr.com', 'console_cmd_cb', 'console_input_cb|ping -c3 kiwisdr.com'),
-            w3_button('w3-blue|margin-left:16px', 'ping forum.kiwisdr.com', 'console_cmd_cb', 'console_input_cb|ping -c3 forum.kiwisdr.com')
+
+            dbgUs?
+               w3_button('w3-aqua|margin-left:16px', 'ht', 'console_cmd_cb', 'console_input_cb|ht')
+               :
+               w3_button('w3-green|margin-left:32px', 'monitor build progress', 'console_cmd_cb',
+                  'console_input_cb|tail -fn 500 /root/build.log'),
+
+            dbgUs?
+               w3_button('w3-aqua|margin-left:16px', 'nano j', 'console_cmd_cb', 'console_input_cb|nano j')
+               :
+               w3_button('w3-yellow|margin-left:16px', 'disk free', 'console_cmd_cb', 'console_input_cb|df .'),
+
+            w3_button('w3-red|margin-left:16px', 're-clone sources', 'console_cmd_cb',
+               'console_input_cb|cd /root; rm -rf Beagle_SDR_GPS; git clone https://github.com/jks-prv/Beagle_SDR_GPS.git'),
+
+            w3_button('w3-blue|margin-left:16px', 'check github', 'console_cmd_cb',
+               'console_input_cb|cdp; git show origin:Makefile &vbar; head -n 2'),
+
+            w3_button('w3-blue|margin-left:16px', 'ping DNS', 'console_cmd_cb',
+               'console_input_cb|ping -c3 1.1.1.1'),
+
+            w3_button('w3-blue|margin-left:16px', 'ping kiwisdr', 'console_cmd_cb',
+               'console_input_cb|ping -c3 kiwisdr.com')
          ),
 			w3_div('id-console-msg w3-margin-T-8 w3-text-output w3-scroll-down w3-small w3-text-black|background-color:#a8a8a8',
 			   '<pre><code id="id-console-msgs"></code></pre>'
 			),
-         w3_div('w3-margin-top',
-            w3_input('id-console-input', '', 'console_input', '', 'console_input_cb|console_ctrl_cb', 'enter shell command')
+         w3_div('w3-margin-T-8',
+            w3_input('id-console-input w3-input-any-key', '', 'console_input', '', 'console_input_cb|console_key_cb', 'enter shell command')
          ),
-         w3_text('w3-text-black w3-margin-top',
+         w3_text('id-console-debug w3-text-black w3-margin-T-8',
             'Control characters (^C, ^D, ^\\) and empty lines may now be typed directly into shell command field.'
          )
 		)
@@ -2886,20 +2912,107 @@ function console_html()
 
 function console_input_cb(path, val)
 {
-	//console.log('console_w2c '+ val.length +' <'+ val +'>');
+   if (admin.console.isAltBuf) {
+	   //console.log('console_w2c IGNORED due to isAltBuf');
+	   return;
+   }
+   
+	console.log('console_w2c '+ val.length +' <'+ val +'>');
 	ext_send('SET console_w2c='+ encodeURIComponent(val +'\n'));
    w3_set_value(path, '');    // erase input field
+   w3_scrollDown('id-console-msg');    // scroll to bottom on input
+}
+
+function console_calc_rows_cols(init)
+{
+   var h_msgs = parseInt(w3_el('id-console-msg').style.height) - /* margins +5 */ 25;
+   var h_msg = 15.6;
+   var h_ratio = h_msgs / h_msg;
+   var rows = Math.floor(h_ratio);
+   if (dbgUs)
+      w3_innerHTML('id-console-debug', 'h_msgs='+ h_msgs +' rows: '+ h_ratio.toFixed(2) +' '+ rows);
+   if (init || rows != admin.console.rows) {
+      admin.console.init = false;
+      ext_send('SET console_rows_cols='+ rows +','+ admin.console.cols);
+      admin.console.rows = rows;
+   }
 }
 
 function console_connect_cb()
 {
 	ext_send('SET console_open');
+   console_calc_rows_cols(1);
    admin.console_open = true;
 }
 
-function console_ctrl_cb(c)
+function console_key_cb(ev, input_any_key, input_any_change)
 {
-	ext_send('SET console_ctrl='+ c);
+   if (!ev || !ev.key) return;
+   var k = ev.key;
+   var ord_k = ord(k);
+
+   if (!input_any_change) {
+      var ctrl_k = k.toUpperCase();
+      var ok = true;
+      if (ev.ctrlKey && 'CDPN\\'.includes(ctrl_k)) ; else
+      if (k == 'ArrowUp') k = '\x1b[A'; else
+      if (k == 'ArrowDown') k = '\x1b[B'; else
+      if (k == 'ArrowRight') k = '\x1b[C'; else
+      if (k == 'ArrowLeft') k = '\x1b[D'; else
+         ok = false;
+
+      if (ok) {
+         if (ev.ctrlKey) {
+            ord_k &= 0x1f;
+            console.log('console_key_cb CTRL ^'+ ctrl_k +'('+ ord_k +')');
+            ext_send('SET console_oob_key='+ ord_k);
+         } else {
+	         ext_send('SET console_w2c='+ encodeURIComponent(k));
+         }
+         w3_scrollDown('id-console-msg');    // scroll to bottom on input
+         return;
+      }
+   }
+
+   if (admin.console.isAltBuf || input_any_change) {
+      var ok = true, redo = false;
+
+      if (k.length == 1) ; else
+      if (k == 'ArrowUp') k = '\x1b[A'; else
+      if (k == 'ArrowDown') k = '\x1b[B'; else
+      if (k == 'ArrowRight') k = '\x1b[C'; else
+      if (k == 'ArrowLeft') k = '\x1b[D'; else
+      if (k == 'Enter') { k = '\n'; redo = true; } else
+         ok = false;
+      
+      if (redo) { ord_k = ord(k); }
+      var ctrl = ev.ctrlKey;
+      var ctrl1 = (k.length == 1 && ord_k < 32);
+      var isCtrl = (ctrl || ctrl1);
+
+      if (1) {
+         var k_s = ctrl? k.toUpperCase() : (ctrl1? ('\\'+ chr(ord_k + 32)) : k);
+         var ord_s =  '('+ (ctrl? (ord_k & 0x1f) : ord_k) +')';
+         console.log('console_key_cb '+ (ctrl? 'CTRL ^':'') + k_s + ord_s +' len=1:'+ (k.length == 1) +' ok='+ ok);
+      }
+
+      if (ok) {
+         if (ctrl) {
+            ext_send('SET console_oob_key='+ (ord_k & 0x1f));
+         } else {
+	         ext_send('SET console_w2c='+ encodeURIComponent(k));
+	         /*
+            for (var i = 0; i < k.length; i++) {
+               if (k.length > 1)
+                  console.log(k[i] +'('+ ord(k[i]) +')');
+               ext_send('SET console_key='+ ord(k[i]));
+            }
+            */
+         }
+         w3_scrollDown('id-console-msg');    // scroll to bottom on input
+         return;
+      }
+   }
 }
 
 function console_cmd_cb(id, cb_param)
@@ -2908,6 +3021,7 @@ function console_cmd_cb(id, cb_param)
    
    if (!admin.console_open) {
 	   ext_send('SET console_open');
+      console_calc_rows_cols(1);
       admin.console_open = true;
       delay = 1000;
    }
@@ -2929,8 +3043,11 @@ function console_resize()
 {
 	var el = w3_el('id-console-msg');
 	if (!el) return;
-	var console_height = window.innerHeight - w3_el("id-admin-header-container").clientHeight - 200;
+	var console_height = window.innerHeight - w3_el("id-admin-header-container").clientHeight - 150;
 	el.style.height = px(console_height);
+	//w3_innerHTML('id-console-debug', window.innerHeight +' '+ w3_el("id-admin-header-container").clientHeight +' '+ console_height);
+
+   console_calc_rows_cols();
 }
 
 function console_focus(id)
@@ -3256,6 +3373,11 @@ function admin_close()
 {
    // don't show message if reload countdown running
    kiwi_clearTimeout(admin.keepalive_timeoout);
+   if (admin.no_admin_reopen_retry) {
+	      w3_hide('id-kiwi-msg-container');      // in case password entry panel is being shown
+         w3_show_block('id-kiwi-container');
+         admin_wait_then_reload(0, 'Server has closed connection.');
+   } else
    if (!admin.reload_rem && !admin.long_running) {
       //kiwi_show_msg('Server has closed connection.');
       //if (dbgUs) console.log('admin close'); else
@@ -3456,10 +3578,10 @@ function admin_recv(data)
 				
 			case "console_c2w":
 		      // kiwi_output_msg() does decodeURIComponent()
-		      console_status_msg_p.s = param[1];
+		      admin.console.s = param[1];
 		      //console.log('console_c2w:');
-		      //console.log(console_status_msg_p);
-				kiwi_output_msg('id-console-msgs', 'id-console-msg', console_status_msg_p);
+		      //console.log(admin.console);
+				kiwi_output_msg('id-console-msgs', 'id-console-msg', admin.console);
 				break;
 
 			case "console_done":

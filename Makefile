@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 554
+VERSION_MIN = 562
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
@@ -1229,6 +1229,7 @@ endif
 	install -D -o root -g root -m 0644 unix_env/gdb_valgrind ~root/.gdb_valgrind
 #
 	install -D -o root -g root -m 0644 $(DIR_CFG_SRC)/v.sed $(DIR_CFG)/v.sed
+	install -D -o root -g root -m 0644 $(DIR_CFG_SRC)/rsyslog.sed $(DIR_CFG)/rsyslog.sed
 #
 	rsync -av --delete $(DIR_CFG_SRC)/samples/ $(DIR_CFG)/samples
 	install -D -o root -g root tools/backup_sdr_config.sh /usr/local/bin/backup_sdr_config.sh

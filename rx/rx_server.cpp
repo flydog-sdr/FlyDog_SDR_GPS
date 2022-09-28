@@ -147,7 +147,7 @@ int rx_chan_free_count(rx_free_count_e flags, int *idx, int *heavy)
 	return free_cnt;
 }
 
-void show_conn(const char *prefix, conn_t *cd)
+void show_conn(const char *prefix, u4_t printf_type, conn_t *cd)
 {
     if (!cd->valid) {
         lprintf("%sCONN not valid\n", prefix);
@@ -159,7 +159,8 @@ void show_conn(const char *prefix, conn_t *cd)
     char *other_s = cd->other? stnprintf(2, " +CONN-%02d", cd->other-conns) : (char *) "";
     char *ext_s = (cd->type == STREAM_EXT)? (cd->ext? stnprintf(3, " %s", cd->ext->name) : (char *) " (ext name?)") : (char *) "";
     
-    lprintf("%sCONN-%02d %p %3s %-3s %s%s%s%s%s%s%s%s%s isPwd%d tle%d%d sv=%02d KA=%02d/60 KC=%05d mc=%9p %s:%d:%016llx%s%s%s%s\n",
+    lfprintf(printf_type,
+        "%sCONN-%02d %p %3s %-3s %s%s%s%s%s%s%s%s%s isPwd%d tle%d%d sv=%02d KA=%02d/60 KC=%05d mc=%9p %s:%d:%016llx%s%s%s%s\n",
         prefix, cd->self_idx, cd, type_s, rx_s,
         cd->auth? "*":"_", cd->auth_kiwi? "K":"_", cd->auth_admin? "A":"_",
         cd->isMaster? "M":"_", cd->internal_connection? "I":(cd->ext_api? "E":"_"), cd->ext_api_determined? "D":"_",
@@ -196,7 +197,7 @@ void dump()
 
 	for (cd = conns, i=0; cd < &conns[N_CONNS]; cd++, i++) {
 		if (!cd->valid) continue;
-        show_conn("", cd);
+        show_conn("", PRINTF_LOG, cd);
 	}
 	
 	TaskDump(TDUMP_LOG | TDUMP_HIST | PRINTF_LOG);
@@ -315,7 +316,7 @@ void rx_loguser(conn_t *c, logtype_e type)
 	
 	const char *mode = "";
 	if (c->type == STREAM_WATERFALL)
-	    mode = "WF";
+	    mode = "WF";    // for WF-only connections (i.e. c->isMaster set)
 	else
 	    mode = kiwi_enum2str(c->mode, mode_s, ARRAY_LEN(mode_s));
 	
@@ -364,6 +365,7 @@ void rx_server_remove(conn_t *c)
 	kiwi_ifree(c->geo);
 	kiwi_ifree(c->pref_id);
 	kiwi_ifree(c->pref);
+	kiwi_ifree(c->browser);
 	kiwi_ifree(c->dx_filter_ident);
 	kiwi_ifree(c->dx_filter_notes);
     if (c->dx_has_preg_ident) { regfree(&c->dx_preg_ident); c->dx_has_preg_ident = false; }
@@ -423,12 +425,13 @@ int rx_count_server_conns(conn_count_e type, conn_t *our_conn)
 	        if (our_conn && c->other && c->other == our_conn) continue;
 
 	        if (sound && (c->isLocal || c->auth_prot)) {
-                //show_conn("LOCAL_OR_PWD_PROTECTED_USERS ", c);
+                //show_conn("LOCAL_OR_PWD_PROTECTED_USERS ", PRINTF_LOG, c);
 	            users++;
 	        }
 	    } else
 	    if (type == ADMIN_USERS) {
-	        if (c->type == STREAM_ADMIN || c->type == STREAM_MFG)
+	        // don't count admin connections awaiting password input (!c->auth)
+	        if ((c->type == STREAM_ADMIN || c->type == STREAM_MFG) && c->auth)
                 users++;
 	    } else {
             if (sound) users++;
@@ -586,15 +589,15 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 
 	// iptables will stop regular connection attempts from a blacklisted ip.
 	// But when proxied we need to check the forwarded ip address.
-	// Note that this code always sets remote_ip[] as a side-effect for later use (the real client ip).
+	// Note that this code always sets ip_forwarded[] as a side-effect for later use (the real client ip).
 	//
 	// check_ip_blacklist() is always called (not just for proxied connections as done previously)
 	// since the internal blacklist is now used by the 24hr auto ban mechanism.
-	char remote_ip[NET_ADDRSTRLEN];
-    check_if_forwarded("CONN", mc, remote_ip);
+	char ip_forwarded[NET_ADDRSTRLEN];
+    check_if_forwarded("CONN", mc, ip_forwarded);
 	char *ip_unforwarded = ip_remote(mc);
     
-    if (check_ip_blacklist(remote_ip) || check_ip_blacklist(ip_unforwarded)) return NULL;
+    if (check_ip_blacklist(ip_forwarded) || check_ip_blacklist(ip_unforwarded)) return NULL;
     
     if (!kiwi.allow_admin_conns && timer_sec() > 60) {
         kiwi.allow_admin_conns = true;
@@ -603,7 +606,7 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
     
 	if (down || update_in_progress || backup_in_progress) {
 		conn_printf("down=%d UIP=%d stream=%s\n", down, update_in_progress, st->uri);
-        conn_printf("URL <%s> <%s> %s\n", mc->uri, mc->query_string, remote_ip);
+        conn_printf("URL <%s> <%s> %s\n", mc->uri, mc->query_string, ip_forwarded);
 
         // internal STREAM_SOUND connections don't understand "reason_disabled" API,
         // so just close connection in non-STREAM_ADMIN case below.
@@ -628,19 +631,19 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 			send_msg_mc(mc, SM_NO_DEBUG, "MSG reason_disabled=%s down=%d", reason_enc, type);
 			cfg_string_free(reason_disabled);
 			kiwi_ifree(reason_enc);
-            //printf("DOWN %s %s\n", rx_streams[st->type].uri, remote_ip);
+            //printf("DOWN %s %s\n", rx_streams[st->type].uri, ip_forwarded);
 			return NULL;
 		} else
 
 		// always allow admin connections
 		if (st->type != STREAM_ADMIN) {
-            //printf("DOWN %s %s\n", rx_streams[st->type].uri, remote_ip);
+            //printf("DOWN %s %s\n", rx_streams[st->type].uri, ip_forwarded);
 			return NULL;
 		}
 	}
 	
 	conn_printf("CONN LOOKING for free conn for type=%d(%s) ip=%s:%d:%016llx mc=%p\n",
-	    st->type, st->uri, remote_ip, mc->remote_port, tstamp, mc);
+	    st->type, st->uri, ip_forwarded, mc->remote_port, tstamp, mc);
 	bool multiple = false;
 	int cn, cnfree;
 	conn_t *cfree = NULL, *cother = NULL;
@@ -668,7 +671,7 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 		    c->remote_ip, c->remote_port, c->tstamp, c->rx_channel, c->auth, c->other? "CONN-":"", c->other? c->other-conns:-1, c->mc);
 
         // link streams to each other, e.g. snd <=> wf, snd => ext
-		if (c->tstamp == tstamp && (strcmp(remote_ip, c->remote_ip) == 0)) {
+		if (c->tstamp == tstamp && (strcmp(ip_forwarded, c->remote_ip) == 0)) {
 			if (snd_or_wf_or_ext && c->type == st->type) {
 				conn_printf("CONN-%02d DUPLICATE!\n", cn);
 				return NULL;
@@ -849,12 +852,14 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 	
 	if (st->type == STREAM_EXT) {
 	    if (c->other == NULL) {
-            printf("NEW EXT, DID NOT FIND OTHER SND CONN!\n");
+	        printf("NEW EXT, DID NOT FIND OTHER SND CONN! (NULL) type=%d(%s) ip=%s:%d:%016llx\n",
+	            st->type, st->uri, ip_forwarded, mc->remote_port, tstamp);
             dump();
 	        return NULL;
 	    }
 	    if (c->other->rx_channel == -1) {
-            printf("NEW EXT, DID NOT FIND OTHER SND CONN!\n");
+	        printf("NEW EXT, DID NOT FIND OTHER SND CONN! (rx_channel == -1) type=%d(%s) ip=%s:%d:%016llx\n",
+	            st->type, st->uri, ip_forwarded, mc->remote_port, tstamp);
             dump();
 	        return NULL;
 	    }
@@ -862,7 +867,7 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 	}
   
 	c->mc = mc;
-    kiwi_strncpy(c->remote_ip, remote_ip, NET_ADDRSTRLEN);
+    kiwi_strncpy(c->remote_ip, ip_forwarded, NET_ADDRSTRLEN);
 	c->remote_port = mc->remote_port;
 	bool is_loopback;
 	c->isLocal_ip = isLocal_ip(c->remote_ip, &is_loopback);

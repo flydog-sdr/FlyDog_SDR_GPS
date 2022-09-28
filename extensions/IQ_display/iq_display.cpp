@@ -243,10 +243,10 @@ private:
 
 std::array<iq_display::sptr, MAX_RX_CHANS> iqs;
 
-void iq_display_data(int rx_chan, int ch, int nsamps, TYPECPX *samps)
+void iq_display_data(int rx_chan, int instance, int nsamps, TYPECPX *samps)
 {
     if (iqs[rx_chan])
-        iqs[rx_chan]->display_data(ch, nsamps, samps);
+        iqs[rx_chan]->display_data(instance, nsamps, samps);
 }
 
 void iq_display_close(int rx_chan) {
@@ -269,14 +269,6 @@ bool iq_display_msgs(char *msg, int rx_chan)
         } else {
             ext_unregister_receive_iq_samps(rx_chan);
         }
-        return true;
-    }
-
-    // SECURITY
-    // FIXME: need a per-user PLL instead of just changing the clock offset
-    float offset = 0.0f;
-    if (sscanf(msg, "SET offset=%f", &offset) == 1) {
-        ext_adjust_clock_offset(rx_chan, offset);
         return true;
     }
 
