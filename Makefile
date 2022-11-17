@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 562
+VERSION_MIN = 569
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
@@ -256,7 +256,7 @@ else
 	LIBS += -lfftw3f -lutil
 	LIBS_DEP += /usr/lib/$(LIB_ARCH)/libfftw3f.a
 	CMD_DEPS = $(CMD_DEPS_DEBIAN) /usr/sbin/avahi-autoipd /usr/bin/upnpc /usr/bin/dig /usr/bin/pgmtoppm /sbin/ethtool /usr/bin/sshpass
-	CMD_DEPS += /usr/bin/killall /usr/bin/dtc /usr/bin/curl /usr/bin/wget
+	CMD_DEPS += /usr/bin/killall /usr/bin/dtc /usr/bin/curl /usr/bin/wget /usr/bin/htop
 	DIR_CFG = /root/kiwi.config
 	CFG_PREFIX =
 
@@ -348,6 +348,9 @@ $(INSTALL_CERTIFICATES):
 /usr/bin/wget:
 	-apt-get --no-install-recommends -y install wget
 
+/usr/bin/htop:
+	-apt-get --no-install-recommends -y install htop
+
 /usr/sbin/avahi-autoipd:
 	#-apt-get --no-install-recommends -y install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
 
@@ -375,6 +378,9 @@ $(INSTALL_CERTIFICATES):
 ifeq ($(DEBIAN_10_AND_LATER),true)
 /usr/include/openssl/ssl.h:
 	-apt-get --no-install-recommends -y install openssl libssl1.1 libssl-dev
+
+/usr/bin/connmanctl:
+	#-apt-get --no-install-recommends -y install connman
 endif
 
 ifeq ($(BBAI_64),true)
@@ -413,7 +419,7 @@ GEN_OTHER_ASM = $(GEN_DIR)/other.gen.h verilog/other.gen.vh
 OUT_ASM = $(GEN_DIR)/kiwi.aout
 GEN_VERILOG = $(addprefix verilog/rx/,cic_rx1_12k.vh cic_rx1_20k.vh cic_rx2_12k.vh cic_rx2_20k.vh cic_rx3_12k.vh cic_rx3_20k.vh cic_wf1.vh cic_wf2.vh)
 GEN_NOIP2 = $(GEN_DIR)/noip2
-SUB_MAKE_DEPS = $(INSTALL_CERTIFICATES) $(CMD_DEPS) $(LIBS_DEP) $(GEN_ASM) $(GEN_OTHER_ASM) $(OUT_ASM) $(GEN_VERILOG) $(GEN_NOIP2)
+SUB_MAKE_DEPS = $(INSTALL_CERTIFICATES) $(CMD_DEPS) $(LIBS_DEP) $(GEN_ASM) $(GEN_OTHER_ASM) $(GEN_OTHER) $(OUT_ASM) $(GEN_VERILOG) $(GEN_NOIP2)
 
 
 ################################
@@ -1509,9 +1515,14 @@ endif
 
 # other_rsync is a rule that can be defined in an extension Makefile (i.e. CFG = other) to do additional source installation
 other_rsync:
+# other_post_rsync is invoked after the rsync, e.g. for augmenting server sources
+other_post_rsync:
 
 rsync_bit: $(BIN_DEPS) other_rsync
 	sudo $(RSYNC) $(RSYNC_ARGS)
+    ifneq ($(OTHER_DIR),)
+	    make other_post_rsync
+    endif
 
 endif
 
