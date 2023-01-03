@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 569
+VERSION_MIN = 573
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
@@ -306,9 +306,9 @@ ifeq ($(DEBIAN_VERSION),7)
 	sed -e 's/ftp\.us/archive/' < /etc/apt/sources.list >/tmp/sources.list
 	mv /tmp/sources.list /etc/apt/sources.list
 endif
-	-apt-get -y update
-	-apt-get --no-install-recommends -y install debian-archive-keyring
-	-apt-get -y update
+	-apt-get -y --force-yes update
+	-apt-get --no-install-recommends -y --force-yes install debian-archive-keyring
+	-apt-get -y --force-yes update
 	@mkdir -p $(DIR_CFG)
 	touch $(KEYRING)
 
@@ -316,86 +316,86 @@ INSTALL_CERTIFICATES := /tmp/.kiwi-ca-certs
 $(INSTALL_CERTIFICATES):
 	@echo "INSTALL_CERTIFICATES.."
 	make $(KEYRING)
-	-apt-get --no-install-recommends -y install ca-certificates
-	-apt-get -y update
+	-apt-get --no-install-recommends -y --force-yes install ca-certificates
+	-apt-get -y --force-yes update
 	touch $(INSTALL_CERTIFICATES)
 
 /usr/lib/$(LIB_ARCH)/libfftw3f.a:
-	apt-get --no-install-recommends -y install libfftw3-dev
+	apt-get --no-install-recommends -y --force-yes install libfftw3-dev
 
 # NB not a typo: "clang-6.0" vs "clang-7"
 
 /usr/bin/clang-6.0:
 	# only available recently?
-	-apt-get -y update
-	apt-get --no-install-recommends -y install clang-6.0
+	-apt-get -y --force-yes update
+	apt-get --no-install-recommends -y --force-yes install clang-6.0
 
 /usr/bin/clang-7:
-	-apt-get -y update
-	apt-get --no-install-recommends -y install clang-7
+	-apt-get -y --force-yes update
+	apt-get --no-install-recommends -y --force-yes install clang-7
 
 /usr/bin/clang-8:
-	-apt-get -y update
-	apt-get --no-install-recommends -y install clang-8
+	-apt-get -y --force-yes update
+	apt-get --no-install-recommends -y --force-yes install clang-8
 
 /usr/bin/clang-11:
-	-apt-get -y update
-	apt-get --no-install-recommends -y install clang-11
+	-apt-get -y --force-yes update
+	apt-get --no-install-recommends -y --force-yes install clang-11
 
 /usr/bin/curl:
-	-apt-get --no-install-recommends -y install curl
+	-apt-get --no-install-recommends -y --force-yes install curl
 
 /usr/bin/wget:
-	-apt-get --no-install-recommends -y install wget
+	-apt-get --no-install-recommends -y --force-yes install wget
 
 /usr/bin/htop:
-	-apt-get --no-install-recommends -y install htop
+	-apt-get --no-install-recommends -y --force-yes install htop
 
 /usr/sbin/avahi-autoipd:
-	#-apt-get --no-install-recommends -y install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
+	#-apt-get --no-install-recommends -y --force-yes install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
 
 /usr/bin/upnpc:
-	#-apt-get --no-install-recommends -y install miniupnpc
+	#-apt-get --no-install-recommends -y --force-yes install miniupnpc
 
 /usr/bin/dig:
-	-apt-get --no-install-recommends -y install dnsutils
+	-apt-get --no-install-recommends -y --force-yes install dnsutils
 
-/usr/bin/netpbm:
-	-apt-get --no-install-recommends -y install netpbm
+/usr/bin/pgmtoppm:
+	-apt-get --no-install-recommends -y --force-yes install netpbm
 
 /sbin/ethtool:
-	#-apt-get --no-install-recommends -y install ethtool
+	#-apt-get --no-install-recommends -y --force-yes install ethtool
 
 /usr/bin/sshpass:
-	-apt-get --no-install-recommends -y install sshpass
+	-apt-get --no-install-recommends -y --force-yes install sshpass
 
 /usr/bin/killall:
-	-apt-get --no-install-recommends -y install psmisc
+	-apt-get --no-install-recommends -y --force-yes install psmisc
 
 /usr/bin/dtc:
-	#-apt-get --no-install-recommends -y install device-tree-compiler
+	#-apt-get --no-install-recommends -y --force-yes install device-tree-compiler
 
 ifeq ($(DEBIAN_10_AND_LATER),true)
 /usr/include/openssl/ssl.h:
-	-apt-get --no-install-recommends -y install openssl libssl1.1 libssl-dev
+	-apt-get --no-install-recommends -y --force-yes install openssl libssl1.1 libssl-dev
 
 /usr/bin/connmanctl:
-	#-apt-get --no-install-recommends -y install connman
+	#-apt-get --no-install-recommends -y --force-yes install connman
 endif
 
 ifeq ($(BBAI_64),true)
 /usr/bin/cpufreq-info:
-	#-apt-get --no-install-recommends -y install cpufrequtils
+	#-apt-get --no-install-recommends -y --force-yes install cpufrequtils
 endif
 
 ifeq ($(BBAI),true)
 /usr/bin/cpufreq-info:
-	-apt-get --no-install-recommends -y install cpufrequtils
+	-apt-get --no-install-recommends -y --force-yes install cpufrequtils
 endif
 
 ifneq ($(DEBIAN_VERSION),7)
 /usr/bin/jq:
-	-apt-get --no-install-recommends -y install jq
+	-apt-get --no-install-recommends -y --force-yes install jq
 endif
 
 endif
@@ -715,6 +715,7 @@ c_ext_clang_conv_vars: check_device_detect
 	@echo PLATFORMS = $(PLATFORMS)
 	@echo BUILD_DIR = $(BUILD_DIR)
 	@echo OTHER_DIR = $(OTHER_DIR)
+	@echo EXISTS_OTHER_BITFILE = $(shell test -f $(V_DIR)/KiwiSDR.other.bit && echo true)
 	@echo OBJ_DIR = $(OBJ_DIR)
 	@echo OBJ_DIR_O3 = $(OBJ_DIR_O3)
 	@echo OBJ_DIR_DEFAULT = $(OBJ_DIR_DEFAULT)
@@ -1593,7 +1594,7 @@ endif
 ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 
 /usr/bin/xz: $(INSTALL_CERTIFICATES)
-	#apt-get --no-install-recommends -y install xz-utils
+	#apt-get --no-install-recommends -y --force-yes install xz-utils
 
 #
 # DANGER: "count=2400M" below (i.e. 1.6 GB) must be larger than the partition size (currently ~2.1 GB)

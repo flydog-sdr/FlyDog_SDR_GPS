@@ -151,6 +151,7 @@ void c2s_sound_setup(void *param)
 	wdsp_SAM_demod_init();
 
     //cprintf(conn, "rx%d c2s_sound_setup\n", conn->rx_channel);
+	send_msg(conn, SM_SND_DEBUG, "MSG freq_offset=%.3f", freq_offset_kHz);
 	send_msg(conn, SM_SND_DEBUG, "MSG center_freq=%d bandwidth=%d adc_clk_nom=%.0f", (int) ui_srate/2, (int) ui_srate, ADC_CLOCK_NOM);
 	send_msg(conn, SM_SND_DEBUG, "MSG audio_init=%d audio_rate=%d sample_rate=%.6f", conn->isLocal, snd_rate, frate);
 }
@@ -953,7 +954,7 @@ void c2s_sound(void *param)
 		int fir_pos;
 		TYPECPX *f_samps;
 
-        do {
+        do {    // while (bc < LOOP_BC)
 			while (rx->wr_pos == rx->rd_pos) {
 				evSnd(EC_EVENT, EV_SND, -1, "rx_snd", "sleeping");
 

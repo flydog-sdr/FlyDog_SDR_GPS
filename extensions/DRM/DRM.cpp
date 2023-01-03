@@ -3,6 +3,7 @@
 #include "ext.h"	// all calls to the extension interface begin with "ext_", e.g. ext_register()
 
 #include "DRM.h"
+#include "mem.h"
 
 #ifdef DRM
     #include "DRM_main.h"
@@ -50,7 +51,6 @@ void drm_task(void *param)
 
 #endif
 
-#ifdef DRM_TEST_FILE
 static void drm_pushback_file_data(int rx_chan, int instance, int nsamps, TYPECPX *samps)
 {
     drm_t *d = &DRM_SHMEM->drm[rx_chan];
@@ -76,7 +76,6 @@ static void drm_pushback_file_data(int rx_chan, int instance, int nsamps, TYPECP
         d->tsamp++;
     }
 }
-#endif
 
 bool DRM_msgs(char *msg, int rx_chan)
 {
@@ -182,6 +181,10 @@ bool DRM_msgs(char *msg, int rx_chan)
     if (sscanf(msg, "SET test=%d", &test) == 1) {
         printf("DRM test=%d rx_chan=%d\n", test, rx_chan);
         d->test = test;
+        if (drm_info.s2p_start1 == NULL || drm_info.s2p_start2 == NULL) {
+            d->test = 0;
+            return true;
+        }
 
         if (d->test) {
             d->s2p = ((d->test == 1)? d->info->s2p_start1 : d->info->s2p_start2);
@@ -198,6 +201,14 @@ bool DRM_msgs(char *msg, int rx_chan)
     int svc = 0;
     if (sscanf(msg, "SET svc=%d", &svc) == 1) {
         d->audio_service = svc - 1;
+        return true;
+    }
+    
+    int objID = 0;
+    if (sscanf(msg, "SET journaline_objID=%d", &objID) == 1) {
+        printf("DRM journaline_objID=0x%x\n", objID);
+        d->journaline_objID = objID;
+        d->journaline_objSet = true;
         return true;
     }
     
@@ -223,14 +234,18 @@ bool DRM_msgs(char *msg, int rx_chan)
         d->reset = true;
         d->i_epoch = d->i_samples = d->i_tsamples = 0;
         d->no_input = d->sent_silence = 0;
+        d->journaline_objID = 0;
+        d->journaline_objSet = true;
         return true;    
     }
     
     return false;
 }
 
-void DRM_msg(drm_t *drm, kstr_t *ks)
+// pass msg & data via shared mem buf since DRM_SHMEM might be enabled
+void DRM_msg_encoded(drm_t *drm, const char *cmd, kstr_t *ks)
 {
+    kiwi_strncpy(drm->msg_cmd, cmd, N_MSGCMD);
     kiwi_strncpy(drm->msg_buf, kstr_sp(ks), N_MSGBUF);
     drm->msg_tx_seq++;
     DRM_YIELD();
@@ -252,20 +267,32 @@ void DRM_poll(int rx_chan)
     
     drm_t *d = &DRM_SHMEM->drm[rx_chan];
     if (d->msg_rx_seq != d->msg_tx_seq) {
-        //printf("%d %s\n", rx_chan, d->msg_buf);
-        ext_send_msg_encoded(rx_chan, false, "EXT", "drm_status_cb", "%s", d->msg_buf);
+        //printf("%d %s=%s\n", rx_chan, d->msg_cmd, d->msg_buf);
+        ext_send_msg_encoded(rx_chan, false, "EXT", d->msg_cmd, "%s", d->msg_buf);
         d->msg_rx_seq = d->msg_tx_seq;
     }
     
     if (d->data_rx_seq != d->data_tx_seq) {
-        //printf("%d %s\n", rx_chan, d->msg_buf);
         ext_send_msg_data(rx_chan, false, d->data_cmd, d->data_buf, d->data_nbuf);
         d->data_rx_seq = d->data_tx_seq;
     }
+    
+    #if 0
+        conn_t *conn = rx_channels[rx_chan].conn;
+        if (conn->ident_user) {
+            static u4_t last_journaline_objID;
+            int objID;
+            if (sscanf(conn->ident_user, "%x", &objID) == 1 && objID != last_journaline_objID) {
+                d->journaline_objID = objID;
+                d->journaline_objSet = true;
+                last_journaline_objID = objID;
+                printf("DRM journaline_objID=0x%x\n", objID);
+            }
+        }
+    #endif
 }
 
-#ifdef DRM_TEST_FILE
-static s2_t *drm_mmap(const char *fn, int *words)
+static s2_t *drm_mmap(char *fn, int *words)
 {
     int n;
     char *file;
@@ -273,17 +300,21 @@ static s2_t *drm_mmap(const char *fn, int *words)
     struct stat st;
 
     printf("DRM: mmap %s\n", fn);
-    scall("drm open", (fd = open(fn, O_RDONLY)));
+    if ((fd = open(fn, O_RDONLY)) < 0) {
+        printf("DRM: open failed\n");
+        return NULL;
+    }
     scall("drm fstat", fstat(fd, &st));
     printf("DRM: size=%d\n", st.st_size);
     file = (char *) mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (file == MAP_FAILED) sys_panic("DRM mmap");
     close(fd);
-
+    if (file == MAP_FAILED) {
+        printf("DRM: mmap failed\n");
+        return NULL;
+    }
     *words = st.st_size / sizeof(s2_t);
     return (s2_t *) file;
 }
-#endif
 
 void DRM_main();
 
@@ -319,26 +350,36 @@ void DRM_main()
                 shmem_ipc_setup(stprintf("kiwi.drm-%02d", i), SIG_IPC_DRM + i, DRM_loop);
             #endif
 
-            #ifdef DRM_TEST_FILE
-                d->tsamp = 0;
-            #endif
+            d->tsamp = 0;
         }
     
         ext_register(&DRM_ext);
+
+        int words;
+        const char *fn;
+        char *fn2;
+    
+        fn = cfg_string("DRM.test_file1", NULL, CFG_OPTIONAL);
+        if (!fn || *fn == '\0') return;
+        asprintf(&fn2, "%s/samples/%s", DIR_CFG, fn);
+        cfg_string_free(fn);
+        drm_info.s2p_start1 = drm_mmap(fn2, &words);
+        kiwi_ifree(fn2);
+        if (drm_info.s2p_start1 == NULL) return;
+        drm_info.s2p_end1 = drm_info.s2p_start1 + words;
+        drm_info.tsamps1 = words / NIQ;
+
+        fn = cfg_string("DRM.test_file2", NULL, CFG_OPTIONAL);
+        if (!fn || *fn == '\0') return;
+        asprintf(&fn2, "%s/samples/%s", DIR_CFG, fn);
+        cfg_string_free(fn);
+        drm_info.s2p_start2 = drm_mmap(fn2, &words);
+        kiwi_ifree(fn2);
+        if (drm_info.s2p_start2 == NULL) return;
+        drm_info.s2p_end2 = drm_info.s2p_start2 + words;
+        drm_info.tsamps2 = words / NIQ;
     #else
         printf("ext_register: \"DRM\" not configured\n");
         return;
     #endif
-
-#ifdef DRM_TEST_FILE
-    int words;
-    
-    drm_info.s2p_start1 = drm_mmap(DIR_CFG "/samples/drm.test1.be12", &words);
-    drm_info.s2p_end1 = drm_info.s2p_start1 + words;
-    drm_info.tsamps1 = words / NIQ;
-
-    drm_info.s2p_start2 = drm_mmap(DIR_CFG "/samples/drm.test2.be12", &words);
-    drm_info.s2p_end2 = drm_info.s2p_start2 + words;
-    drm_info.tsamps2 = words / NIQ;
-#endif
 }

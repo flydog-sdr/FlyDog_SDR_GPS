@@ -19,8 +19,6 @@
     #define DRM_CHECK_ALT(x,y) y
 #endif
 
-#define DRM_TEST_FILE
-
 enum { DRM_DAT_IQ=0 } drm_dat_e;
 
 typedef struct {
@@ -34,12 +32,9 @@ typedef struct {
 typedef struct {
     int drm_chan;
     
-    #ifdef DRM_TEST_FILE
-        s2_t *s2p_start1, *s2p_end1;
-        s2_t *s2p_start2, *s2p_end2;
-        u4_t tsamps1, tsamps2;
-    #endif
-
+    s2_t *s2p_start1, *s2p_end1;
+    s2_t *s2p_start2, *s2p_end2;
+    u4_t tsamps1, tsamps2;
 } drm_info_t;
 
 typedef struct {
@@ -60,18 +55,21 @@ typedef struct {
 	
 	int audio_service;
 	bool send_iq;
+	
+	int journaline_objID;
+	bool journaline_objSet;
 
-    #ifdef DRM_TEST_FILE
-        int test;
-        s2_t *s2p;
-        u4_t tsamp;
-    #endif
+    int test;
+    s2_t *s2p;
+    u4_t tsamp;
 
     // stats
     u4_t no_input;
     u4_t sent_silence;
 
     u4_t msg_tx_seq, msg_rx_seq;
+    #define N_MSGCMD 32
+    char msg_cmd[N_MSGCMD];
     #define N_MSGBUF 4096
     char msg_buf[N_MSGBUF];
     
@@ -141,5 +139,5 @@ typedef struct {
     #endif
 #endif
 
-void DRM_msg(drm_t *drm, kstr_t *ks);
+void DRM_msg_encoded(drm_t *drm, const char *cmd, kstr_t *ks);
 void DRM_data(drm_t *drm, u1_t cmd, u1_t *data, u4_t nbuf);
