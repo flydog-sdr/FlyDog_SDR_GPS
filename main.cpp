@@ -74,11 +74,25 @@ int p0=0, p1=0, p2=0, wf_sim, wf_real, wf_time, ev_dump=0, wf_flip, wf_start=1, 
 u4_t ov_mask, snd_intr_usec;
 
 bool create_eeprom, need_hardware, kiwi_reg_debug, have_ant_switch_ext, gps_e1b_only,
-    disable_led_task, is_multi_core, kiwi_restart, debug_printfs, cmd_debug;
+    disable_led_task, is_multi_core, debug_printfs, cmd_debug;
 
 int main_argc;
 char **main_argv;
 char *fpga_file;
+static bool _kiwi_restart;
+
+void kiwi_restart()
+{
+    #ifdef USE_ASAN
+        // leak detector needs exit while running on main() stack
+        _kiwi_restart = true;
+        TaskWakeupF(TID_MAIN, TWF_CANCEL_DEADLINE);
+        while (1)
+            TaskSleepSec(1);
+    #else
+        kiwi_exit(0);
+    #endif
+}
 
 #ifdef USE_OTHER
 void other_task(void *param)
@@ -277,8 +291,9 @@ int main(int argc, char *argv[])
 
     #ifndef PLATFORM_raspberrypi
         // on reboot let ntpd and other stuff settle first
-        if (background_mode) {
+        if (background_mode && !kiwi_file_exists("/tmp/.kiwi_no_restart_delay")) {
             lprintf("background mode: delaying start 30 secs...\n");
+            system("touch /tmp/.kiwi_no_restart_delay");    // removed on reboot
             sleep(30);
         }
     #endif
@@ -451,8 +466,6 @@ int main(int argc, char *argv[])
 
 		TaskSleepReasonSec("main loop", 10);
 		
-		#ifdef USE_ASAN
-		    if (kiwi_restart) kiwi_exit(0);
-		#endif
+        if (_kiwi_restart) kiwi_exit(0);
 	}
 }
