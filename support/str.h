@@ -46,6 +46,7 @@ void kiwi_get_chars(char *field, char *value, size_t size);
 void kiwi_set_chars(char *field, const char *value, const char fill, size_t size);
 char *kiwi_str_replace(char *s, const char *from, const char *to, bool *caller_must_free=NULL);
 void kiwi_str_unescape_quotes(char *str);
+void kiwi_remove_unprintable_chars_inplace(char *str, int *printable=NULL, int *UTF=NULL);
 char *kiwi_str_escape_HTML(char *str, int *printable=NULL, int *UTF=NULL);
 char *kiwi_str_encode(char *s, bool alt=FALSE);
 char *kiwi_str_encode_static(char *src, bool alt=FALSE);
@@ -53,16 +54,21 @@ char *kiwi_str_decode_inplace(char *src);
 char *kiwi_str_decode_static(char *src, int which=0);
 char *kiwi_str_ASCII_static(char *src, int which=0);
 char *kiwi_str_clean(char *s);
-int kiwi_str2enum(const char *s, const char *strs[], int len);
-const char *kiwi_enum2str(int e, const char *strs[], int len);
 void kiwi_chrrep(char *str, const char from, const char to);
 bool kiwi_str_begins_with(char *s, const char *cs);
 char *kiwi_str_ends_with(char *s, const char *cs);
 char *kiwi_skip_over(char *s, const char *skip);
+
 char *kiwi_overlap_strcpy(char *dst, const char *src);
 int kiwi_strnlen(const char *s, int limit);
 char *kiwi_strncpy(char *dst, const char *src, size_t n);
 char *kiwi_strncat(char *dst, const char *src, size_t n);
+
+int kiwi_snprintf_int(const char *buf, size_t buflen, const char *fmt, ...);
+// NB: check that caller buf is const (i.e. not a pointer) so sizeof(buf) is valid
+#define kiwi_snprintf_buf(buf, fmt, ...) kiwi_snprintf_int(buf, sizeof(buf), fmt, ## __VA_ARGS__)
+#define kiwi_snprintf_ptr(ptr, buflen, fmt, ...) kiwi_snprintf_int(ptr, buflen, fmt, ## __VA_ARGS__)
+
 bool kiwi_sha256_strcmp(char *str, const char *key);
 
 enum { FEWER_ENCODED = true };
@@ -71,9 +77,7 @@ char *kiwi_str_decode_selective_inplace(char *src, bool fewer_encoded = false);
 enum { KSPLIT_NO_SKIP_EMPTY_FIELDS = 0x1, KSPLIT_HANDLE_EMBEDDED_DELIMITERS = 0x2 };
 int kiwi_split(char *ocp, char **mbuf, const char *delims, char *argv[], int nargs, int flags = 0);
 
-
 extern char ASCII[128][4];
-
 
 #define STR_HASH_MISS 0
 
