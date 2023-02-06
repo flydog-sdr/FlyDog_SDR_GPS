@@ -28,10 +28,16 @@ var kiwi = {
 
    queued: 0,
    
-   // must match rx_cmd.cpp
-   modes_l: [ 'am', 'amn', 'usb', 'lsb', 'cw', 'cwn', 'nbfm', 'iq', 'drm', 'usn', 'lsn', 'sam', 'sal', 'sau', 'sas', 'qam' ],
-   modes_u: [],
-   modes_s: {},
+   // CAUTION: must match order in kiwi.h
+   // CAUTION: add new entries at the end
+   modes_lc: [ 'am', 'amn', 'usb', 'lsb', 'cw', 'cwn', 'nbfm', 'iq', 'drm',
+              'usn', 'lsn', 'sam', 'sau', 'sal', 'sas', 'qam', 'nnfm' ],
+   modes_uc: [],
+   modes_idx: {},
+   
+   // order that modes appear in menus as opposed to new-entry-appending behavior of kiwi.modes_lc
+   mode_menu: [ 'AM', 'AMN', 'USB', 'USN', 'LSB', 'LSN', 'CW', 'CWN', 'NBFM', 'NNFM',
+                'IQ', 'DRM', 'SAM', 'SAU', 'SAL', 'SAS', 'QAM' ],
 
    
    // cfg.bands
@@ -56,8 +62,8 @@ var kiwi = {
    
    // colormap definitions needed by admin config
    cmap_s: [
-      'Kiwi', 'CuteSDR', 'grey', 'linear', 'turbo', 'SdrDx',
-      'custom 1', 'custom 2', 'custom 3', 'custom 4'
+      'Kiwi', 'CSDR', 'grey', 'linear', 'turbo', 'SdrDx',
+      'cust1', 'cust2', 'cust3', 'cust4'
    ],
    cmap_e: {
       kiwi:0, CuteSDR:1, greyscale:2, linear:3, turbo:4, SdrDx:5,
@@ -86,12 +92,13 @@ var kiwi = {
    pre_wrapped: false,
    pre_ping_pong: 0,
    
+   _ver_: 1.577,
    _last_: null
 };
 
-kiwi.modes_l.forEach(function(e,i) { kiwi.modes_u.push(e.toUpperCase()); kiwi.modes_s[e] = i});
-//console.log(kiwi.modes_u);
-//console.log(kiwi.modes_s);
+kiwi.modes_lc.forEach(function(e,i) { kiwi.modes_uc.push(e.toUpperCase()); kiwi.modes_idx[e] = i});
+//console.log(kiwi.modes_uc);
+//console.log(kiwi.modes_idx);
 
 var WATERFALL_CALIBRATION_DEFAULT = -13;
 var SMETER_CALIBRATION_DEFAULT = -13;
@@ -432,10 +439,9 @@ function kiwi_get_init_settings()
 	init_f = ext_get_cfg_param('init.freq', init_f, EXT_NO_SAVE);
 	init_frequency = override_freq? override_freq : init_f;
 
-	var init_m = (init_mode == undefined)? kiwi.modes_s['lsb'] : kiwi.modes_s[init_mode];
-	init_m = ext_get_cfg_param('init.mode', init_m, EXT_NO_SAVE);
-	//console.log('INIT init_mode='+ init_mode +' init.mode='+ init_m +' override_mode='+ override_mode);
-	init_mode = override_mode? override_mode : kiwi.modes_l[init_m];
+	var init_m = ext_get_cfg_param('init.mode', init_mode || 'lsb', EXT_NO_SAVE);
+	console.log('INIT init_mode='+ init_mode +' init.mode='+ init_m +' override_mode='+ override_mode);
+	init_mode = override_mode? override_mode : init_m;
 	if (init_mode === 'drm') init_mode = 'am';      // don't allow inherited drm mode from another channel
 
 	var init_z = (init_zoom == undefined)? 0 : init_zoom;

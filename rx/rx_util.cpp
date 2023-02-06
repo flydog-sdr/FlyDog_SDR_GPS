@@ -171,6 +171,12 @@ void update_vars_from_config(bool called_at_init)
 
     inactivity_timeout_mins = cfg_default_int("inactivity_timeout_mins", 0, &update_cfg);
     ip_limit_mins = cfg_default_int("ip_limit_mins", 0, &update_cfg);
+    
+	double prev_freq_offset_kHz = freq_offset_kHz;
+    update_freqs(&update_cfg);
+	if (freq_offset_kHz != prev_freq_offset_kHz) {
+	    update_masked_freqs();
+	}
 
     int srate_idx = cfg_default_int("max_freq", -1, &update_cfg);
     switch(srate_idx) {
@@ -189,7 +195,7 @@ void update_vars_from_config(bool called_at_init)
         case 3:
             ui_srate = 62*MHz;
             break;
-    }
+	}
 
     // force DC offsets to the default value if not configured
     // also if set to the previous default value
@@ -242,8 +248,20 @@ void update_vars_from_config(bool called_at_init)
     // (the very first time if it doesn't exist) from C code
     drm_nreg_chans = cfg_int("DRM.nreg_chans", &err, CFG_OPTIONAL);
     if (err) drm_nreg_chans = DRM_NREG_CHANS_DEFAULT;
-    cfg_default_string("DRM.test_file1", "Kuwait.15110.1.12k.iq.au", &update_cfg);
-    cfg_default_string("DRM.test_file2", "Delhi.828.1.12k.iq.au", &update_cfg);
+    //cfg_default_string("DRM.test_file1", "Kuwait.15110.1.12k.iq.au", &update_cfg);
+    s = cfg_string("DRM.test_file1", NULL, CFG_OPTIONAL);
+	if (!s || strcmp(s, "Kuwait.15110.1.12k.iq.au") == 0) {
+	    cfg_set_string("DRM.test_file1", "DRM.BBC.Journaline.au");
+	    update_cfg = true;
+    }
+    cfg_string_free(s);
+    //cfg_default_string("DRM.test_file2", "Delhi.828.1.12k.iq.au", &update_cfg);
+    s = cfg_string("DRM.test_file2", NULL, CFG_OPTIONAL);
+	if (!s || strcmp(s, "Delhi.828.1.12k.iq.au") == 0) {
+	    cfg_set_string("DRM.test_file2", "DRM.KTWR.slideshow.au");
+	    update_cfg = true;
+    }
+    cfg_string_free(s);
 
     // fix any broken UTF-8 sequences via cfg_default_string()
     cfg_default_string("index_html_params.HTML_HEAD", "", &update_cfg);
@@ -464,6 +482,21 @@ void update_vars_from_config(bool called_at_init)
 
     DRM_enable = cfg_bool("DRM.enable", &err, CFG_OPTIONAL);
     if (err) DRM_enable = true;
+    
+    // change init.mode from mode menu idx to a mode string
+	n = cfg_int("init.mode", &err, CFG_OPTIONAL);
+	if (err) {
+	    s = cfg_string("init.mode", &err, CFG_OPTIONAL);
+	    if (err) {
+	        cfg_set_string("init.mode", "lsb");     // init.mode never existed?
+	        update_cfg = true;
+	    }
+        cfg_string_free(s);
+	} else {
+	    cfg_rem_int("init.mode");
+	    cfg_set_string("init.mode", mode_lc[n]);
+	    update_cfg = true;
+	}
 
 	if (update_cfg)
 		cfg_save_json(cfg_cfg.json);
@@ -652,6 +685,20 @@ void update_vars_from_config(bool called_at_init)
     }
 }
 
+int rx_mode2enum(const char *mode)
+{
+	for (int i = 0; i < ARRAY_LEN(mode_lc); i++) {
+		if (strcasecmp(mode, mode_lc[i]) == 0) return i;
+	}
+	return NOT_FOUND;
+}
+
+const char *rx_enum2mode(int e)
+{
+	if (e < 0 || e >= ARRAY_LEN(mode_lc)) return NULL;
+	return (mode_lc[e]);
+}
+
 // Pass result json back to main process via shmem->status_str_large
 // since _geo_task runs in context of child_task()'s child process.
 // This presumes the returned JSON size is < N_SHMEM_STATUS_STR_LARGE.
@@ -723,27 +770,27 @@ void geoloc_task(void *param)
 	conn_t *conn = (conn_t *) param;
 	char *ip = (isLocal_ip(conn->remote_ip) && net.pub_valid)? net.ip_pub : conn->remote_ip;
 
-    char *geo_host_ip_s = (char *) kiwi_imalloc("geoloc_task", 128);
+    char *geo_host_ip_s;
     u4_t i = timer_sec();   // mix it up a bit
     int retry = 0;
     bool okay = false;
     do {
         i = (i+1) % 3;
         if (i == 0) {
-            sprintf(geo_host_ip_s, "https://ipapi.co/%s/json", ip);
+            asprintf(&geo_host_ip_s, "https://ipapi.co/%s/json", ip);
             okay = geoloc_json(conn, geo_host_ip_s, "country_name", "region");
         } else
         if (i == 1) {
-            sprintf(geo_host_ip_s, "https://get.geojs.io/v1/ip/geo/%s.json", ip);
+            asprintf(&geo_host_ip_s, "https://get.geojs.io/v1/ip/geo/%s.json", ip);
             okay = geoloc_json(conn, geo_host_ip_s, "country", "region");
         } else
         if (i == 2) {
-            sprintf(geo_host_ip_s, "http://ip-api.com/json/%s?fields=49177", ip);
+            asprintf(&geo_host_ip_s, "http://ip-api.com/json/%s?fields=49177", ip);
             okay = geoloc_json(conn, geo_host_ip_s, "country", "regionName");
         }
+        kiwi_ifree(geo_host_ip_s);
         retry++;
     } while (!okay && retry < 10);
-    kiwi_ifree(geo_host_ip_s);
     if (okay)
         clprintf(conn, "GEOLOC: %s sent no geoloc info, we got \"%s\" from geo host #%d\n",
             conn->remote_ip, conn->geo, i);
@@ -828,7 +875,7 @@ char *rx_users(bool include_ip)
                     "\"e\":\"%s\",\"a\":\"%s\",\"c\":%.1f,\"fo\":%.3f,\"ca\":%d,"
                     "\"nc\":%d,\"ns\":%d}",
                     need_comma? ",":"", i, user? user:"", geo? geo:"", c->freqHz,
-                    kiwi_enum2str(c->mode, mode_s, ARRAY_LEN(mode_s)), c->zoom,
+                    rx_enum2mode(c->mode), c->zoom,
                     (c->type == STREAM_WATERFALL)? 1:0,
                     hr, min, sec, rtype, rn, r_hr, r_min, r_sec,
                     ext? ext:"", ip,
