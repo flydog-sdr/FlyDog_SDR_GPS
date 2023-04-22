@@ -30,7 +30,21 @@ var wspr = {
    hop_period: 20,
    //hop_period: 6,
    SYNC: true,
-   NO_SYNC: false
+   NO_SYNC: false,
+
+   // order matches wspr_main.cpp:wspr_cfs[]
+   // only add new entries to the end so as not to disturb existing values stored in config
+   autorun_u: [
+      'regular use', 'LF', 'MF', '160m', '80m_JA', '80m', '60m', '60m_EU',
+      '40m', '30m', '20m', '17m', '15m', '12m', '10m',
+      '6m', '4m', '2m', '440', '1296', 'ISM_6', 'ISM_13', 'IWBP'
+   ],
+
+   PREEMPT_NO: 0,
+   PREEMPT_YES: 1,
+   preempt_u: ['no', 'yes'],
+
+   last_last: 0
 };
 
 var wspr_canvas_width = 1024;
@@ -69,6 +83,7 @@ var WSPR_F_IMAGE =		0x8000;
 
 function wspr_recv(data)
 {
+   var s, i, el;
 	var firstChars = arrayBufferToStringLen(data, 3);
 	
 	if (firstChars == "DAT") {
@@ -131,7 +146,7 @@ function wspr_recv(data)
 	var stringData = arrayBufferToString(data);
 	var params = stringData.substring(4).split(" ");
 
-	for (var i=0; i < params.length; i++) {
+	for (i=0; i < params.length; i++) {
 		var param = params[i].split("=");
 
 		if (0 && param[0] != "keepalive") {
@@ -174,9 +189,9 @@ function wspr_recv(data)
 				break;
 
 			case "WSPR_DECODED":
-				var s = decodeURIComponent(param[1]);
+				s = decodeURIComponent(param[1]);
 				//console.log('WSPR: '+ s);
-				var el = w3_el('id-wspr-decode');
+				el = w3_el('id-wspr-decode');
 				var wasScrolledDown = w3_isScrolledDown(el);
 				el.innerHTML += s +'<br>';
 				
@@ -185,12 +200,12 @@ function wspr_recv(data)
 				break;
 			
 			case "WSPR_UPLOAD":
-				var s = decodeURIComponent(param[1]);
+				s = decodeURIComponent(param[1]);
 				wspr_upload(wspr_report_e.SPOT, s);
 				break;
 			
 			case "WSPR_PEAKS":
-				var s = decodeURIComponent(param[1]);
+				s = decodeURIComponent(param[1]);
 				var p, npk = 0;
 				if (s != '') {
 					p = s.split(':');
@@ -199,7 +214,7 @@ function wspr_recv(data)
 				//console.log('WSPR: '+ npk +' '+ s);
 				var xscale = 2;
 
-				for (var i=0; i < npk; i++) {
+				for (i=0; i < npk; i++) {
 					var bin0 = parseInt(p[i*2]);
 					var flags = bin0 & ~WSPR_F_BIN;
 					bin0 &= WSPR_F_BIN;
@@ -233,7 +248,7 @@ function wspr_recv(data)
 						w3_div('cl-wspr-line '+ color +'|width:1px; height:10px; position:absolute; left:'+ x +'px; bottom:0px;');
 				}
 				
-				html('id-wspr-peaks-labels').innerHTML = s;
+				w3_el('id-wspr-peaks-labels').innerHTML = s;
 				break;
 
 			case "nbins":
@@ -249,7 +264,7 @@ function wspr_recv(data)
 			   if (wspr.testing) {
                var pct = w3_clamp(parseInt(param[1]), 0, 100);
                //if (pct > 0 && pct < 3) pct = 3;    // 0% and 1% look weird on bar
-               var el = w3_el('id-wspr-bar');
+               el = w3_el('id-wspr-bar');
                if (el) el.style.width = pct +'%';
                //console.log('bar_pct='+ pct);
             }
@@ -303,7 +318,7 @@ function wspr_controls_setup()
    		'<canvas id="id-wspr-scale-canvas" width="1024" height="20" style="position:absolute"></canvas>'
       );
    
-   var call = ext_get_cfg_param_string('WSPR.callsign', '');
+   var call = ext_get_cfg_param_string('WSPR.callsign', '', EXT_NO_SAVE);
    if (call == undefined || call == null || call == '') {
    	call = '(not set)';
    	wspr_config_okay = false;
@@ -346,46 +361,55 @@ function wspr_controls_setup()
 
 	var controls_html =
 	w3_div('id-wspr-controls',
-		w3_inline('w3-halign-space-between w3-margin-B-4|width:83%/',
-         w3_div('w3-medium w3-text-aqua cl-viewer-label', '<b>WSPR<br>viewer</b>'),
-         w3_select('w3-text-red', '', 'band', 'wspr_init_band', wspr_init_band, wspr_freqs_m, 'wspr_band_select_cb'),
-         w3_button('w3-ext-btn w3-padding-smaller', 'stop', 'wspr_stop_start_cb'),
-         w3_button('cl-w3-ext-btn w3-padding-smaller w3-css-yellow', 'clear', 'wspr_clear_cb'),
-         w3_button('cl-w3-ext-btn w3-padding-smaller w3-aqua||title="test spots NOT uploaded\nto wsprnet.org"',
-            'test', 'wspr_test_cb', 1),
-         w3_checkbox('id-wspr-upload-container cl-upload-checkbox/w3-label-inline w3-label-not-bold/',
-            'upload<br>spots', 'wspr.upload', true, 'wspr_set_upload_cb'),
-         w3_div('id-wspr-bar-container w3-progress-container w3-round-large w3-white w3-hide|width:70px; height:16px',
-            w3_div('id-wspr-bar w3-progressbar w3-round-large w3-light-green|width:0%', '&nbsp;')
-         )
-		),
+	   w3_div('id-wspr-controls-top',
+         w3_inline('w3-halign-space-between w3-margin-B-4|width:83%/',
+            w3_div('w3-medium w3-text-aqua cl-viewer-label', '<b>WSPR<br>viewer</b>'),
+            w3_select('w3-text-red', '', 'band', 'wspr_init_band', wspr_init_band, wspr_freqs_m, 'wspr_band_select_cb'),
+            w3_button('w3-ext-btn w3-padding-smaller', 'stop', 'wspr_stop_start_cb'),
+            w3_button('cl-w3-ext-btn w3-padding-smaller w3-css-yellow', 'clear', 'wspr_clear_cb'),
+            w3_button('cl-w3-ext-btn w3-padding-smaller w3-aqua||title="test spots NOT uploaded\nto wsprnet.org"',
+               'test', 'wspr_test_cb', 1),
+            w3_checkbox('id-wspr-upload-container cl-upload-checkbox/w3-label-inline w3-label-not-bold/',
+               'upload<br>spots', 'wspr.upload', true, 'wspr_set_upload_cb'),
+            w3_div('id-wspr-bar-container w3-progress-container w3-round-large w3-white w3-hide|width:70px; height:16px',
+               w3_div('id-wspr-bar w3-progressbar w3-round-large w3-light-green|width:0%', '&nbsp;')
+            )
+         ),
 
-		w3_inline('w3-halign-space-between/',
-         w3_div('cl-wspr-pie|background-color:#575757',
-            kiwi_pie('id-wspr-pie', wspr.pie_size, '#eeeeee', 'deepSkyBlue')
+         w3_inline('w3-halign-space-between/',
+            w3_div('cl-wspr-pie|background-color:#575757',
+               kiwi_pie('id-wspr-pie', wspr.pie_size, '#eeeeee', 'deepSkyBlue')
+            ),
+            w3_div('',
+               w3_div('id-wspr-time cl-wspr-text'),
+               w3_div('id-wspr-status cl-wspr-text')
+            ),
+            // FIXME: field validation
+            w3_div('',
+               w3_div('cl-wspr-text', 'BFO '+ wspr_bfo),
+               w3_div('id-wspr-cf cl-wspr-text')
+            ),
+            w3_div('cl-wspr-text', 'reporter call '+ call),
+            w3_div('id-wspr-rgrid cl-wspr-text', 'reporter grid '+ grid)
          ),
-         w3_div('',
-            w3_div('id-wspr-time cl-wspr-text'),
-            w3_div('id-wspr-status cl-wspr-text')
-         ),
-         // FIXME: field validation
-         w3_div('',
-            w3_div('cl-wspr-text', 'BFO '+ wspr_bfo),
-            w3_div('id-wspr-cf cl-wspr-text')
-         ),
-         w3_div('cl-wspr-text', 'reporter call '+ call),
-         w3_div('id-wspr-rgrid cl-wspr-text', 'reporter grid '+ grid)
-		),
-		
-		w3_div('|background-color:lightGray; overflow:auto; width:100%; margin-top:5px; margin-bottom:0px; font-family:monospace; font-size:100%',
-			'<pre style="display:inline"> UTC  dB   dT      Freq dF  Call   Grid    km  dBm</pre>'
-			//                                                   dd  cccccc GGGG ddddd  nnn (n W)
-		) +
+      
+         w3_div('|background-color:lightGray; overflow:auto; width:100%; margin-top:5px; margin-bottom:0px; font-family:monospace; font-size:100%',
+            '<pre style="display:inline"> UTC  dB   dT      Freq dF  Call   Grid    km  dBm</pre>'
+            //                                                   dd  cccccc GGGG ddddd  nnn (n W)
+         )
+      ),
+      
 		w3_div('id-wspr-decode|white-space:pre; background-color:white; overflow:scroll; height:100px; width:100%; margin-top:0px; font-family:monospace; font-size:100%')
 	);
 
 	ext_panel_show(controls_html, data_html, null);
-	ext_set_controls_width_height(null, 240);
+   var wh = waterfall_height();
+   //var ch = (wh <= 546)? 240 : Math.round(wh * 0.44);    // scale control panel height on larger screens
+   var ch = Math.round(wh * 0.9);   // scale control panel height on larger screens
+   ext_set_controls_width_height(null, ch);
+   var dh = ch - w3_el('id-wspr-controls-top').clientHeight - /* borders */ 20;
+   w3_el('id-wspr-decode').style.height = px(dh);
+   //console.log('WSPR wh='+ wh +' ch='+ ch +' dh='+ dh);
 	time_display_setup('wspr');
 	wspr.saved_mode = ext_get_mode();
 	//wspr_resize();
@@ -541,32 +565,24 @@ function wspr_blur()
 
 function wspr_input_grid_cb(path, val, first)
 {
-    val = val.trim();
+   val = val.trim();
    //console.log('wspr_input_grid_cb val='+ val);
 	w3_string_set_cfg_cb(path, val);
 	
 	// need this because wspr_check_GPS_update_grid() runs asynch of server sending updated value via 10s status
-	kiwi.WSPR_rgrid = val;
+	kiwi.WSPR_rgrid = wspr.grid = val;
 }
-
-// order matches wspr_main.cpp:wspr_cfs[]
-// only add new entries to the end so as not to disturb existing values stored in config
-var wspr_autorun_u = [
-   'regular use', 'LF', 'MF', '160m', '80m_JA', '80m', '60m', '60m_EU',
-   '40m', '30m', '20m', '17m', '15m', '12m', '10m',
-   '6m', '4m', '2m', '440', '1296', 'ISM_6', 'ISM_13', 'IWBP'
-];
 
 function wspr_config_html()
 {
    var s =
-      w3_div('w3-show-inline-block w3-foo w3-width-full',
+      w3_div('w3-show-inline-block w3-width-full',
          w3_col_percent('w3-container/w3-margin-bottom',
-            w3_divs('',
-               w3_input_get('', 'Reporter callsign', 'WSPR.callsign', 'w3_string_set_cfg_cb', ''),
+            w3_divs('w3-restart',
+               w3_input_get('', 'Reporter callsign', 'WSPR.callsign', 'w3_string_set_cfg_cb', '')
             ), 22,
             '', 3,
-            w3_divs('',
+            w3_divs('w3-restart',
                w3_input_get('', w3_label('w3-bold', 'Reporter grid square ') +
                   w3_div('id-wspr-grid-set cl-admin-check w3-blue w3-btn w3-round-large w3-hide', 'set from GPS'),
                      'WSPR.grid', 'wspr_input_grid_cb', '', '4 or 6-character grid square location'
@@ -574,7 +590,7 @@ function wspr_config_html()
             ), 22,
             '', 3,
             w3_div('w3-restart',
-               w3_input_get('', 'BFO Hz (multiple of 375 Hz)', 'WSPR.BFO', 'w3_num_set_cfg_cb', '', 'typically 750 Hz'),
+               w3_input_get('', 'BFO Hz (multiple of 375 Hz)', 'WSPR.BFO', 'w3_num_set_cfg_cb', '', 'typically 750 Hz')
             ), 22,
             '', 3,
             w3_div('w3-restart',
@@ -585,29 +601,25 @@ function wspr_config_html()
 
          w3_col_percent('w3-container w3-margin-T-8 w3-margin-B-16/',
             w3_divs('w3-center w3-tspace-8',
-               w3_div('', '<b>Update grid continuously<br>from GPS?</b>'),
-               w3_switch('', 'Yes', 'No', 'cfg.WSPR.GPS_update_grid', cfg.WSPR.GPS_update_grid, 'admin_radio_YN_cb'),
+               w3_switch_label('w3-center', 'Update grid continuously<br>from GPS?', 'Yes', 'No', 'cfg.WSPR.GPS_update_grid', cfg.WSPR.GPS_update_grid, 'admin_radio_YN_cb'),
                w3_text('w3-text-black w3-center',
                   'Useful for Kiwis in motion <br> (e.g. marine mobile)'
                )
             ), 22,
-            '', 3,
+            '&nbsp;', 3,
             w3_divs('w3-center w3-tspace-8',
-               w3_div('', '<b>Log decodes to<br>syslog?</b>'),
-               w3_switch('', 'Yes', 'No', 'cfg.WSPR.syslog', cfg.WSPR.syslog, 'admin_radio_YN_cb'),
+               w3_switch_label('w3-center', 'Log decodes to<br>syslog?', 'Yes', 'No', 'cfg.WSPR.syslog', cfg.WSPR.syslog, 'admin_radio_YN_cb'),
                w3_text('w3-text-black w3-center',
                   'Use with care as over time <br> filesystem can fill up.'
                )
             ), 22,
-            '', 3,
+            '&nbsp;', 3,
             w3_divs('w3-center w3-tspace-8',
-               w3_div('', '<b>Log spot debug<br>info?</b>'),
-               w3_switch('', 'Yes', 'No', 'cfg.WSPR.spot_log', cfg.WSPR.spot_log, 'admin_radio_YN_cb'),
+               w3_switch_label('w3-center', 'Log spot debug<br>info?', 'Yes', 'No', 'cfg.WSPR.spot_log', cfg.WSPR.spot_log, 'admin_radio_YN_cb'),
                w3_text('w3-text-black w3-center',
                   'Logs the actual upload commands<br>used to assist in spot debugging.'
                )
-            ), 22,
-            ''
+            ), 22
          ),
          
          '<hr>',
@@ -623,7 +635,7 @@ function wspr_config_html()
                
                w3_div('w3-margin-T-10 w3-valign',
                   '<header class="id-wspr-warn-full w3-container w3-yellow"><h6>' +
-                  'If your Kiwi is publicly listed you must not configure all the channels to use WSPR-autorun!<br>' +
+                  'If your Kiwi is publicly listed you must <b>not</b> configure all the channels to use WSPR-autorun!<br>' +
                   'This defeats the purpose of making your Kiwi public and public registration will be disabled<br>' +
                   'until you make at least one channel available for connection. Check the Admin Public tab.' +
                   '</h6></header>'
@@ -642,7 +654,11 @@ function wspr_config_html()
 	for (var i=0; i < rx_chans;) {
 	   var s2 = '';
 	   for (var j=0; j < 8 && i < rx_chans; j++, i++) {
-	      s2 += w3_select_get_param('w3-margin-right', 'Autorun '+ i, 'WSPR band', 'WSPR.autorun'+ i, wspr_autorun_u, 'wspr_autorun_select_cb');
+	      s2 +=
+	         w3_div('',
+	            w3_select_get_param('w3-margin-right', 'Autorun '+ i, 'WSPR band', 'WSPR.autorun'+ i, wspr.autorun_u, 'wspr_autorun_select_cb'),
+	            w3_select_get_param('w3-margin-right w3-margin-T-8', '', 'preemptible?', 'WSPR.preempt'+ i, wspr.preempt_u, 'wspr_autorun_select_cb')
+	         );
 	   }
 	   s += w3_inline('w3-margin-bottom/', s2);
 	}
@@ -653,7 +669,7 @@ function wspr_autorun_public_check()
 {
    var num_autorun = 0;
 	for (var i=0; i < rx_chans; i++) {
-	   if (cfg.WSPR['autorun'+ i] != 0)
+	   if (cfg.WSPR['autorun'+ i] != 0 && cfg.WSPR['preempt'+ i] == wspr.PREEMPT_NO)
 	      num_autorun++;
 	}
 	ext_set_cfg_param('WSPR.autorun', num_autorun, EXT_SAVE);
@@ -703,11 +719,12 @@ function wspr_config_blur()
 
 function wspr_check_GPS_update_grid()
 {
-   //console.log('wspr_check_GPS_update_grid kiwi.WSPR_rgrid='+ kiwi.WSPR_rgrid);
+   //console.log('wspr_check_GPS_update_grid GPS_update_grid='+ cfg.WSPR.GPS_update_grid +' kiwi.WSPR_rgrid='+ kiwi.WSPR_rgrid +' w3_get_value:WSPR.grid='+ w3_get_value('WSPR.grid') +' cfg.WSPR.grid='+ cfg.WSPR.grid);
 
-   if (w3_get_value('WSPR.grid') != kiwi.WSPR_rgrid) {
-      w3_set_value('WSPR.grid', kiwi.WSPR_rgrid);
-      w3_input_change('WSPR.grid');
+   if (cfg.WSPR.GPS_update_grid && cfg.WSPR.grid != kiwi.WSPR_rgrid) {
+      w3_set_value('id-WSPR.grid', kiwi.WSPR_rgrid);
+      w3_input_change('WSPR.grid', 'wspr_input_grid_cb');
+      //console.log('wspr_check_GPS_update_grid SET '+ kiwi.WSPR_rgrid);
    }
    if (kiwi.GPS_fixes) w3_show_inline_block('id-wspr-grid-set');
    wspr.single_shot_update = false;
@@ -722,7 +739,7 @@ function wspr_gps_info_cb(o)
    if (wspr_gps) {
       //console.log(wspr_gps);
       kiwi.WSPR_rgrid = wspr_gps.grid;
-      w3_set_value('WSPR.grid', kiwi.WSPR_rgrid);
+      w3_set_value('id-WSPR.grid', kiwi.WSPR_rgrid);
       w3_input_change('WSPR.grid', 'wspr_input_grid_cb');
    }
    wspr.single_shot_update = false;
@@ -770,8 +787,8 @@ function wspr_clear_cb(path, idx, first)
 {
 	wspr_reset();
    wspr_test_cb('', 0);
-	html('id-wspr-decode').innerHTML = '';
-	html('id-wspr-peaks-labels').innerHTML = '';
+	w3_el('id-wspr-decode').innerHTML = '';
+	w3_el('id-wspr-peaks-labels').innerHTML = '';
 }
 
 var wspr_upload_timeout;
@@ -821,7 +838,7 @@ function wspr_set_upload_cb(path, checked)
 function wspr_upload(type, s)
 {
 	var spot = (type == wspr_report_e.SPOT)? 1:0;
-	var rcall = ext_get_cfg_param_string('WSPR.callsign', '');
+	var rcall = ext_get_cfg_param_string('WSPR.callsign', '', EXT_NO_SAVE);
    var rgrid = (kiwi.WSPR_rgrid)? kiwi.WSPR_rgrid : cfg.WSPR.grid;
 	//console.log('wspr_upload: rcall=<'+ rcall +'> rgrid=<'+ rgrid +'>');
 	var valid = wspr_rfreq && wspr_tfreq && (rcall != undefined) && (rgrid != undefined) && (rcall != null) && (rgrid != null) && (rcall != '') && (rgrid != '');
@@ -892,7 +909,7 @@ var wspr_status_color = { 0:'white', 1:'lightSkyBlue', 2:'violet', 3:'cyan', 4:'
 
 function wspr_set_status(status)
 {
-	var el = html('id-wspr-status');
+	var el = w3_el('id-wspr-status');
 	el.innerHTML = wspr_status_text[status];
 	el.style.backgroundColor = wspr_status_color[status];
 	
@@ -906,7 +923,7 @@ function wspr_server_Date()
 
 function wspr_draw_pie() {
 	var d = wspr_server_Date();
-	html('id-wspr-time').innerHTML = d.toUTCString().substr(17,8) +' UTC';
+	w3_el('id-wspr-time').innerHTML = d.toUTCString().substr(17,8) +' UTC';
 	var min = d.getUTCMinutes();
    var wspr_secs = (min&1)*60 + d.getUTCSeconds() + 1;
    kiwi_draw_pie('id-wspr-pie', wspr.pie_size, wspr_secs / 120);
@@ -927,12 +944,12 @@ function wspr_draw_pie() {
       console.log('WSPR IWBP deco: #'+ deco_hop +'/'+ min +'m='+ deco_cf +' capture: #'+ hop +'/'+ ((min+1)%60) +'m='+ cf);
       wspr_change_freq(cf, deco_cf, wspr.NO_SYNC);
    }
-};
+}
 
 // order matches menu instantiation order and autorun wspr_main.cpp:wspr_cfs[]
 // see: wsprnet.org/drupal/node/7352
 // dial freq = cf - bfo, cf aka "tx freq"
-// new entries can only be added at end due to limitations with autorun's wspr_autorun_u stored config value
+// new entries can only be added at end due to limitations with autorun's wspr.autorun_u stored config value
 // 9999 entry for IWBP makes url param &ext=wspr,iwbp work due to freq range check
 var wspr_center_freqs = [ 137.5, 475.7, 1838.1, 3570.1, 3594.1, 5288.7, 5366.2, 7040.1, 10140.2, 14097.1, 18106.1, 21096.1, 24926.1, 28126.1, 6781.5, 13555.4, 9999 ];
 var wspr_freqs_s = { 'lf':0, 'mf':1, '160m':2, '80m_ja':3, '80m':4, '60m':5, '60m_eu':6, '40m':7, '30m':8, '20m':9, '17m':10, '15m':11, '12m':12, '10m':13, 'ism_6':14, 'ism_13':15, 'iwbp':16 };

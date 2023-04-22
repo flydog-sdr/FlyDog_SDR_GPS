@@ -177,7 +177,7 @@ void printmem(const char *str, u2_t addr)
 void cmd_debug_print(conn_t *c, char *s, int slen, bool tx)
 {
     int sl = slen - 4;
-    printf("%c %s %.3s %.4s%s%d ", tx? 'T':'<', Task_s(-1), c? rx_streams[c->type].uri : "nil",
+    printf("%c %s %.3s %.4s%s%d ", tx? 'T':'<', Task_s(-1), rx_conn_type(c),
         s, (s[3] != ' ')? " " : "", sl);
     if (sl > 0) {
         char *s2 = kiwi_str_encode(&s[4], true);
@@ -189,6 +189,15 @@ void cmd_debug_print(conn_t *c, char *s, int slen, bool tx)
     }
 }
 
+
+/*
+    server: send_msg()
+    js: on_ws_recv()
+        MSG:
+            if (kiwi.js:kiwi_msg() == !claimed)
+                ws.msg_cb()
+*/
+
 void send_msg_buf(conn_t *c, char *s, int slen)
 {
     if (c->internal_connection) {
@@ -198,7 +207,7 @@ void send_msg_buf(conn_t *c, char *s, int slen)
             #if 0
                 clprintf(c, "send_msg_buf: c->mc is NULL\n");
                 clprintf(c, "send_msg_buf: CONN-%d %p valid=%d type=%d [%s] auth=%d KA=%d KC=%d mc=%p rx=%d magic=0x%x ip=%s:%d other=%s%d %s\n",
-                    c->self_idx, c, c->valid, c->type, rx_streams[c->type].uri, c->auth, c->keep_alive, c->keepalive_count, c->mc, c->rx_channel,
+                    c->self_idx, c, c->valid, c->type, rx_conn_type(c), c->auth, c->keep_alive, c->keepalive_count, c->mc, c->rx_channel,
                     c->magic, c->remote_ip, c->remote_port, c->other? "CONN-":"", c->other? c->other-conns:0, c->stop_data? "STOP":"");
             #endif
             return;
@@ -306,6 +315,32 @@ void send_msg_mc_encoded(struct mg_connection *mc, const char *dst, const char *
 	kiwi_ifree(buf, "send_msg_mc_encoded");
 }
 
+// send to the SND web socket
+// note the conn_t difference below
+int snd_send_msg(int rx_chan, bool debug, const char *msg, ...)
+{
+	va_list ap;
+	char *s;
+
+	conn_t *conn = rx_channels[rx_chan].conn;
+	if (!conn) return -1;
+	va_start(ap, msg);
+	vasprintf(&s, msg, ap);
+	va_end(ap);
+	if (debug) printf("ext_send_msg: RX%d(%p) <%s>\n", rx_chan, conn, s);
+	send_msg_buf(conn, s, strlen(s));
+	kiwi_ifree(s);
+	return 0;
+}
+
+// send to the SND web socket
+// note the conn_t difference below
+void snd_send_msg_data(int rx_chan, bool debug, u1_t cmd, u1_t *bytes, int nbytes)
+{
+	conn_t *conn = rx_channels[rx_chan].conn;
+	send_msg_data(conn, debug, cmd, bytes, nbytes);
+}
+
 void input_msg_internal(conn_t *conn, const char *fmt, ...)
 {
 	va_list ap;
@@ -338,7 +373,6 @@ float ecpu_use()
 	u4_t gated = (c->g3 << 24) | (c->g2 << 16) | (c->g1 << 8) | c->g0;
 	u4_t free_run = (c->f3 << 24) | (c->f2 << 16) | (c->f1 << 8) | c->f0;
 
-	spi_set(CmdCPUCtrClr);
 	if (free_run == 0) return 0;
 	return ((float) gated / (float) free_run * 100);
 }
@@ -646,29 +680,30 @@ static const char *field = "ABCDEFGHIJKLMNOPQR";
 static const char *square = "0123456789";
 static const char *subsquare = "abcdefghijklmnopqrstuvwx";
 
-void grid_to_latLon(char *grid, latLon_t *loc)
+bool grid_to_latLon(const char *grid, latLon_t *loc)
 {
 	double lat, lon;
 	char c;
-	int slen = strlen(grid);
 	
 	loc->lat = loc->lon = 999.0;
-	if (slen < 4) return;
+	if (grid == NULL || grid[0] == '\0') return false;
+	int slen = strlen(grid);
+	if (slen < 4) return false;
 	
 	c = tolower(grid[0]);
-	if (c < 'a' || c > 'r') return;
+	if (c < 'a' || c > 'r') return false;
 	lon = (c-'a')*20 - 180;
 
 	c = tolower(grid[1]);
-	if (c < 'a' || c > 'r') return;
+	if (c < 'a' || c > 'r') return false;
 	lat = (c-'a')*10 - 90;
 
 	c = grid[2];
-	if (c < '0' || c > '9') return;
+	if (c < '0' || c > '9') return false;
 	lon += (c-'0') * SQ_LON_DEG;
 
 	c = grid[3];
-	if (c < '0' || c > '9') return;
+	if (c < '0' || c > '9') return false;
 	lat += (c-'0') * SQ_LAT_DEG;
 
 	if (slen != 6) {	// assume center of square (i.e. "....ll")
@@ -676,11 +711,11 @@ void grid_to_latLon(char *grid, latLon_t *loc)
 		lat += SQ_LAT_DEG /2.0;
 	} else {
 		c = tolower(grid[4]);
-		if (c < 'a' || c > 'x') return;
+		if (c < 'a' || c > 'x') return false;
 		lon += (c-'a') * SUBSQ_LON_DEG;
 
 		c = tolower(grid[5]);
-		if (c < 'a' || c > 'x') return;
+		if (c < 'a' || c > 'x') return false;
 		lat += (c-'a') * SUBSQ_LAT_DEG;
 
 		lon += SUBSQ_LON_DEG /2.0;	// assume center of sub-square (i.e. "......44")
@@ -690,6 +725,7 @@ void grid_to_latLon(char *grid, latLon_t *loc)
 	loc->lat = lat;
 	loc->lon = lon;
 	//printf("GRID %s%s = (%f, %f)\n", grid, (slen != 6)? "[ll]":"", lat, lon);
+	return true;
 }
 
 int latLon_to_grid6(latLon_t *loc, char *grid6)
@@ -726,6 +762,32 @@ int latLon_to_grid6(latLon_t *loc, char *grid6)
 	grid6[5] = subsquare[i];
 	
 	return 0;
+}
+
+int grid_to_distance_km(latLon_t *r_loc, char *grid)
+{
+	if (r_loc->lat == 999.0)
+		return 0;
+	
+	latLon_t loc;
+	if (!grid_to_latLon(grid, &loc)) return 0;
+	//printf("grid_to_distance_km: grid=%s lat=%f lon=%f\n", grid, loc.lat, loc.lon);
+	latLon_deg_to_rad(loc);
+	
+	double delta_lat = loc.lat - r_loc->lat;
+	delta_lat /= 2.0;
+	delta_lat = sin(delta_lat);
+	delta_lat *= delta_lat;
+	double delta_lon = loc.lon - r_loc->lon;
+	delta_lon /= 2.0;
+	delta_lon = sin(delta_lon);
+	delta_lon *= delta_lon;
+
+	double t = delta_lat + (delta_lon * cos(loc.lat) * cos(r_loc->lat));
+	#define EARTH_RADIUS_KM 6371.0
+	double km = EARTH_RADIUS_KM * 2.0 * atan2(sqrt(t), sqrt(1.0-t));
+	//printf("grid_to_distance_km: km=%d\n", (int) ceil(km));
+	return (int) ceil(km);
 }
 
 void set_cpu_affinity(int cpu)

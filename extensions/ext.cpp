@@ -84,6 +84,16 @@ void ext_notify_connected(int rx_chan, u4_t seq, char *msg)
     kiwi_strncpy(extint.notify_msg, msg, N_NOTIFY);
 }
 
+void ext_register_receive_iq_samps_raw(ext_receive_iq_samps_t func, int rx_chan)
+{
+	ext_users[rx_chan].receive_iq_pre_fir = func;
+}
+
+void ext_unregister_receive_iq_samps_raw(int rx_chan)
+{
+	ext_users[rx_chan].receive_iq_pre_fir = NULL;
+}
+
 void ext_register_receive_iq_samps(ext_receive_iq_samps_t func, int rx_chan, int flags)
 {
     if (flags == PRE_AGC)
@@ -187,24 +197,6 @@ int ext_send_msg(int rx_chan, bool debug, const char *msg, ...)
 	char *s;
 
 	conn_t *conn = ext_users[rx_chan].conn_ext;
-	if (!conn) return -1;
-	va_start(ap, msg);
-	vasprintf(&s, msg, ap);
-	va_end(ap);
-	if (debug) printf("ext_send_msg: RX%d(%p) <%s>\n", rx_chan, conn, s);
-	send_msg_buf(conn, s, strlen(s));
-	kiwi_ifree(s);
-	return 0;
-}
-
-// send to the SND web socket, NOT the EXT web socket
-// note the conn_t difference below
-int ext_send_snd_msg(int rx_chan, bool debug, const char *msg, ...)
-{
-	va_list ap;
-	char *s;
-
-	conn_t *conn = rx_channels[rx_chan].conn;
 	if (!conn) return -1;
 	va_start(ap, msg);
 	vasprintf(&s, msg, ap);
@@ -340,7 +332,7 @@ void extint_setup_c2s(void *param)
 
 	// initialize extension for this connection
 	// NB: has to be a 'MSG' and not an 'EXT' due to sequencing of recv_cb setup
-    printf("EXT extint_setup_c2s SET: rx%d ext_client_init(is_locked)=%d\n", conn_ext->rx_channel, is_locked);
+    rcprintf(conn_ext->rx_channel, "EXT extint_setup_c2s SET: rx%d ext_client_init(is_locked)=%d\n", conn_ext->rx_channel, is_locked);
     send_msg(conn_ext, false, "MSG version_maj=%d version_min=%d debian_ver=%d", version_maj, version_min, debian_ver);
 	send_msg(conn_ext, false, "MSG ext_client_init=%d", is_locked);
 }
@@ -486,6 +478,7 @@ void extint_c2s(void *param)
 		if (keepalive_expired || conn_ext->kick) {
 			//printf("EXT %s RX%d %s\n", conn_ext->kick? "KICKED" : "KEEP-ALIVE EXPIRED", rx_channel, ext? ext->name : "(no ext)");
 			if (ext != NULL && ext->close_conn != NULL) {
+			    //printf("EXT CLOSE_CONN\n");
 				ext->close_conn(rx_channel);
                 //c2s_waterfall_no_sync(rx_channel, false);      // NB: be certain to disable waterfall no_sync mode
 			}

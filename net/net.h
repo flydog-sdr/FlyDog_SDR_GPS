@@ -31,8 +31,10 @@ Boston, MA  02110-1301, USA.
 #define KIWISDR_COM_PUBLIC_IP   "50.116.2.70"
 #define GITHUB_COM_PUBLIC_IP    "52.64.108.95"      // was "192.30.253.112"
 
-#define PORT_INTERNAL_WSPR      1138    // + 0..MAX_RX_CHANS
-#define PORT_INTERNAL_SNR       1238    // + 0..MAX_RX_CHANS
+// range of port base: + 0 .. MAX_RX_CHANS(instance) * 3(SND/WF/EXT)
+#define PORT_BASE_INTERNAL_WSPR 1138
+#define PORT_BASE_INTERNAL_FT8  1238
+#define PORT_BASE_INTERNAL_SNR  1338
 
 #define NET_DEBUG
 #ifdef NET_DEBUG
@@ -170,6 +172,7 @@ isLocal_t isLocal_if_ip(struct conn_st *conn, char *ip_addr, const char *log_pre
 bool find_local_IPs(int retry);
 u4_t inet4_d2h(char *inet4_str, bool *error, u1_t *ap=NULL, u1_t *bp=NULL, u1_t *cp=NULL, u1_t *dp=NULL);
 void inet4_h2d(u4_t inet4, u1_t *ap, u1_t *bp, u1_t *cp, u1_t *dp);
+char *inet4_h2s(u4_t inet4);
 bool is_inet4_map_6(u1_t *a);
 int inet_nm_bits(int family, void *netmask);
 bool isLocal_ip(char *ip, bool *is_loopback = NULL, u4_t *ipv4 = NULL);
@@ -195,7 +198,7 @@ typedef struct {
 
 const u4_t ICONN_WS_SND = 1, ICONN_WS_WF = 2, ICONN_WS_EXT = 4;
 
-bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port_base,
+bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port_base, u4_t ws_flags,
     const char *mode, int locut, int hicut, float freq_kHz,
     const char *ident_user, const char *geoloc, const char *client = NULL,
     int zoom = 0, float cf_kHz = 0, int min_dB = 0, int max_dB = 0, int wf_speed = 0, int wf_comp = 0);

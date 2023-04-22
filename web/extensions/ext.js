@@ -3,13 +3,13 @@
 var extint = {
    ws: null,
    extname: null,
+   isAdmin_cb: null,
    srate: 0,
    nom_srate: 0,
    param: null,
    override_pb: false,
    displayed: false,
    help_displayed: false,
-   spectrum_used: false,
    current_ext_name: null,
    using_data_container: false,
    hide_func: null,
@@ -78,30 +78,44 @@ function ext_set_controls_width_height(width, height)
 var EXT_SAVE = true;
 var EXT_NO_SAVE = false;   // set the local JSON cfg, but don't set on server which would require admin privileges.
 
-function ext_get_cfg_param(path, init_val, save)
+// init_val => (cfg|adm).path if was null|undef AND init_val not undef
+//    if isAdmin: save cfg if save = undef|EXT_SAVE
+//    update_path_var: cur_val/init_val => path [NB: w/o (cfg|adm)
+// return (cfg|adm).path
+
+function ext_get_cfg_param(path, init_val, save, update_path_var)
 {
 	var cur_val;
-	
-	path = w3_add_toplevel(path);
+	var cfg_path = w3_add_toplevel(path);
 	
 	try {
-		cur_val = getVarFromString(path);
+		cur_val = getVarFromString(cfg_path);
 	} catch(ex) {
 		// when scope is missing create all the necessary scopes and variable as well
 		cur_val = null;
 	}
 	
-   //console.log('ext_get_cfg_param: path='+ path +' cur_val='+ cur_val +' init_val='+ init_val);
-	if ((cur_val == null || cur_val == undefined) && init_val != undefined) {		// scope or parameter doesn't exist, create it
+   //console.log('ext_get_cfg_param: path='+ path +' admin='+ isAdmin() +' cur_val='+ cur_val +' init_val='+ init_val);
+   
+	if (!isArg(cur_val) && init_val != undefined) {    // scope or parameter doesn't exist, create it
 		cur_val = init_val;
 		// parameter hasn't existed before or hasn't been set (empty field)
-		//console.log('ext_get_cfg_param: creating path='+ path +' cur_val='+ cur_val);
-		setVarFromString(path, cur_val);
+		//console.log('ext_get_cfg_param: creating cfg_path='+ cfg_path +' cur_val='+ cur_val);
+		setVarFromString(cfg_path, cur_val);
 		
-		// save newly initialized value in configuration unless EXT_NO_SAVE specified
-		//console.log('ext_get_cfg_param: SAVE path='+ path +' init_val='+ init_val);
-		if (save == undefined || save == EXT_SAVE)
-			cfg_save_json('ext_get_cfg_param', path);
+		// save newly initialized value in configuration (if admin) unless EXT_NO_SAVE specified
+		//console.log('ext_get_cfg_param: SAVE cfg_path='+ cfg_path +' init_val='+ init_val);
+		if ((save == undefined && isAdmin()) || save == EXT_SAVE)
+			cfg_save_json('ext_get_cfg_param', cfg_path);
+	}
+	
+	if (update_path_var) {
+	   if (path.startsWith('cfg.') || path.startsWith('adm.')) {
+		   console.log('ext_get_cfg_param: update_path_var CAUTION: NOT SETTING path='+ path +' cur_val='+ cur_val);
+	   } else {
+		   //console.log('ext_get_cfg_param: update_path_var SETTING path='+ path +' cur_val='+ cur_val);
+	      setVarFromString(path, cur_val);
+	   }
 	}
 	
 	return cur_val;
@@ -109,7 +123,9 @@ function ext_get_cfg_param(path, init_val, save)
 
 function ext_get_cfg_param_string(path, init_val, save)
 {
-	return kiwi_decodeURIComponent(ext_get_cfg_param_string +':'+ path, ext_get_cfg_param(path, init_val, save));
+   var s = ext_get_cfg_param(path, init_val, save);
+   if (!isArg(s)) s = '';
+	return kiwi_decodeURIComponent(ext_get_cfg_param_string +':'+ path, s);
 }
 
 function ext_set_cfg_param(path, val, save)
@@ -151,10 +167,11 @@ function ext_tune(freq_dial_kHz, mode, zoom, zlevel, low_cut, high_cut, opt) {
 	//console.log('ext_tune: '+ freq_dial_kHz +', '+ mode +', '+ zoom +', '+ zlevel);
 	
 	extint_ext_is_tuning = true;
+	   freq_dial_kHz = freq_dial_kHz || (freq_displayed_Hz / 1000);
       freqmode_set_dsp_kHz(freq_dial_kHz, mode, opt);
       if (pb_specified) ext_set_passband(low_cut, high_cut);
       
-      if (zoom != undefined) {
+      if (isArg(zoom)) {
          if (zoom == ext_zoom.CUR)
             zoom_step(ext_zoom.ABS, zoom_level);
          else
@@ -337,6 +354,21 @@ function ext_get_zoom()
 	return zoom_level;
 }
 
+function ext_set_zoom(zoom_mode, zoom_level)
+{
+   zoom_step(zoom_mode, zoom_level);
+}
+
+function ext_get_audio_comp()
+{
+   return btn_compression? true:false;
+}
+
+function ext_set_audio_comp(comp)
+{
+   toggle_or_set_compression(toggle_e.SET, comp? 1:0);
+}
+
 function ext_set_scanning(scanning)
 {
 	extint.scanning = scanning? 1:0;
@@ -436,11 +468,9 @@ function ext_valpwd(conn_type, pwd, ws)
 	// the server reply then calls extint_valpwd_cb() below
 }
 
-var extint_isAdmin_cb;
-
 function ext_isAdmin(cb)
 {
-   extint_isAdmin_cb = cb;
+   extint.isAdmin_cb = cb;
 	ext_send('SET is_admin');
 }
 
@@ -706,16 +736,14 @@ function ext_panel_init()
 	   }, true);
 }
 
-function ext_show_spectrum()
+function ext_show_spectrum(which)
 {
-   w3_show_block('id-spectrum-container');
-   extint.spectrum_used = true;
+   toggle_or_set_spec(toggle_e.SET | toggle_e.NO_CLOSE_EXT, which);
 }
 
 function ext_hide_spectrum()
 {
-   w3_hide('id-spectrum-container');
-   extint.spectrum_used = false;
+   toggle_or_set_spec(toggle_e.SET | toggle_e.NO_CLOSE_EXT, spec.NONE);
 }
 
 function extint_panel_show(controls_html, data_html, show_func, hide_func, show_help_button)
@@ -726,17 +754,14 @@ function extint_panel_show(controls_html, data_html, show_func, hide_func, show_
 	//console.log('extint_panel_show using_data_container='+ extint.using_data_container);
 
 	if (extint.using_data_container) {
-		toggle_or_set_spec(toggle_e.SET, 0);
-		w3_hide('id-top-container');
+      // remove previous use of spectrum
+		toggle_or_set_spec(toggle_e.SET, spec.NONE);
 		w3_show_block(w3_innerHTML('id-ext-data-container', data_html));
 	} else {
 		w3_hide('id-ext-data-container');
-		if (!spec.source_wf)
+		if (spec.source == spec.NONE)
 			w3_show_block('id-top-container');
 	}
-
-   // remove previous use of spectrum (if any)
-   //jks ext_hide_spectrum();
 
    // remove previous help panel if displayed
    if (extint.help_displayed == true) {
@@ -789,13 +814,14 @@ function ext_panel_displayed(ext_name) {
 
 function ext_panel_redisplay(s) { w3_innerHTML('id-ext-controls-container', s); }
 
-function extint_panel_hide()
+function extint_panel_hide(skip_calling_hide_spec)
 {
-	//console.log('extint_panel_hide using_data_container='+ extint.using_data_container);
+	console.log('extint_panel_hide using_data_container='+ extint.using_data_container +' skip_calling_hide_spec='+ skip_calling_hide_spec);
 
 	if (extint.using_data_container) {
 		w3_hide('id-ext-data-container');
-      ext_hide_spectrum();
+		if (skip_calling_hide_spec != true)
+         ext_hide_spectrum();
 		w3_show_block('id-top-container');
 		extint.using_data_container = false;
 		

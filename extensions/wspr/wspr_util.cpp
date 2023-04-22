@@ -68,7 +68,7 @@ void unpack50(u1_t *d, u4_t *call_28b, u4_t *grid_pwr_22b, u4_t *grid_15b, u4_t 
     *grid_pwr_22b = ((d[3]&0xf)<<18) | (d[4]<<10) | (d[5]<<2) | (d[6]>>6);  // yes, d[6] >> 6!
 	*grid_15b = *grid_pwr_22b >> 7;
 	*pwr_7b = *grid_pwr_22b & 0x7f;
-    //wspr_gprintf("unpack50 %d|%d|%d|%d 0x%08x\n", d[0], d[1], d[2], d[3], *call_28b);
+    wspr_gprintf("unpack50 %d|%d|%d|%d 0x%08x\n", d[0], d[1], d[2], d[3], *call_28b);
 }
 
 static const char *c = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ ";		// 37 characters
@@ -259,16 +259,16 @@ static void hash_update(char *call)
 
 	for (i=0; i < htsize; i++) {
 		if (ht[i].call[0] == '\0') {
-			//wspr_gprintf("W-HASH %d 0x%04x upd new %s\n", i, hash, call);
+			wspr_gprintf("W-HASH %d 0x%04x upd new %s\n", i, hash, call);
 			ht[i].hash = hash;
 			strcpy(ht[i].call, call);
 			break;
 		}
 		if (ht[i].hash == hash) {
 			if (strcmp(ht[i].call, call) == 0) {
-				//wspr_gprintf("W-HASH %d 0x%04x upd hit %s\n", i, hash, call);
+				wspr_gprintf("W-HASH %d 0x%04x upd hit %s\n", i, hash, call);
 			} else {
-				//wspr_gprintf("W-HASH %d 0x%04x upd COLLISION %s %s\n", i, hash, ht[i].call, call);
+				wspr_gprintf("W-HASH %d 0x%04x upd COLLISION %s %s\n", i, hash, ht[i].call, call);
 				strcpy(ht[i].call, call);
 			}
 			break;
@@ -276,11 +276,11 @@ static void hash_update(char *call)
 	}
 	
 	if (i == htsize) {
-		//wspr_gprintf("W-HASH expand %d -> %d\n", htsize, htsize*2);
+		wspr_gprintf("W-HASH expand %d -> %d\n", htsize, htsize*2);
 		htsize *= 2;
 		SAN_ASSERT(htsize > 0, ht = (hashtab_t *) kiwi_irealloc("hash_update", ht, sizeof(hashtab_t) * htsize));
 		memset(ht + htsize/2, 0, sizeof(hashtab_t) * htsize/2);
-		//wspr_gprintf("W-HASH %d 0x%04x exp new %s\n", htsize/2, hash, call);
+		wspr_gprintf("W-HASH %d 0x%04x exp new %s\n", htsize/2, hash, call);
 		ht[htsize/2].hash = hash;
 		strcpy(ht[htsize/2].call, call);
 	}
@@ -294,12 +294,12 @@ static char *hash_lookup(int hash)
 		if (ht[i].call[0] == '\0')
 			break;
 		if (ht[i].hash == hash) {
-			//wspr_gprintf("W-HASH %d 0x%04x lookup %s\n", i, hash, ht[i].call);
+			wspr_gprintf("W-HASH %d 0x%04x lookup %s\n", i, hash, ht[i].call);
 			return ht[i].call;
 		}
 	}
 	
-	//wspr_gprintf("W-HASH 0x%04x lookup FAIL\n", hash);
+	wspr_gprintf("W-HASH 0x%04x lookup FAIL\n", hash);
 	return NULL;
 }
 
@@ -405,35 +405,9 @@ int freq_comp(const void *elem1, const void *elem2)
 	return r;
 }
 
-static latLon_t r_loc;
-
 void set_reporter_grid(char *grid)
 {
-	grid_to_latLon(grid, &r_loc);
-	if (r_loc.lat != 999.0)
-		latLon_deg_to_rad(r_loc);
-}
-
-double grid_to_distance_km(char *grid)
-{
-	if (r_loc.lat == 999.0 || *grid == '\0')
-		return 0;
-	
-	latLon_t loc;
-	grid_to_latLon(grid, &loc);
-	latLon_deg_to_rad(loc);
-	
-	double delta_lat = loc.lat - r_loc.lat;
-	delta_lat /= 2.0;
-	delta_lat = sin(delta_lat);
-	delta_lat *= delta_lat;
-	double delta_lon = loc.lon - r_loc.lon;
-	delta_lon /= 2.0;
-	delta_lon = sin(delta_lon);
-	delta_lon *= delta_lon;
-
-	double t = delta_lat + (delta_lon * cos(loc.lat) * cos(r_loc.lat));
-	#define EARTH_RADIUS_KM 6371.0
-	double km = EARTH_RADIUS_KM * 2.0 * atan2(sqrt(t), sqrt(1.0-t));
-	return km;
+	grid_to_latLon(grid, &wspr_c.r_loc);
+	if (wspr_c.r_loc.lat != 999.0)
+		latLon_deg_to_rad(wspr_c.r_loc);
 }

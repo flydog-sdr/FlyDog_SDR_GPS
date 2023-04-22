@@ -18,7 +18,6 @@
 // http://www.holmea.demon.co.uk/GPS/Main.htm
 //////////////////////////////////////////////////////////////////////////
 
-
 // Copyright (c) 2014-2023 John Seamons, ZL/KF6VO
 
 `default_nettype none
@@ -65,6 +64,7 @@ module KiwiSDR (
 
     //////////////////////////////////////////////////////////////////////////
     // debug
+    //////////////////////////////////////////////////////////////////////////
     
     // P9: 25 23 21 19 17 15 13 11 09 07 05 03 01
     //                    b2 b1 b0
@@ -72,10 +72,9 @@ module KiwiSDR (
     // P9: 26 24 22 20 18 16 14 12 10 08 06 04 02
     //     b3
     
-    wire [3:0] P9;
+    wire [2:0] P9;
     
-    assign P926 = P9[3];    // P9-26
-    assign P915 = P9[2];    // P9-15
+    assign P926 = P9[2];    // P9-26
     assign P913 = P9[1];    // P9-13
     assign P911 = P9[0];    // P9-11
 
@@ -101,13 +100,14 @@ module KiwiSDR (
     
     //////////////////////////////////////////////////////////////////////////
     // clocks
+    //////////////////////////////////////////////////////////////////////////
 
 `ifdef USE_SDR
     wire adc_clk;
-    IBUFG vcxo_ibufg(.I(ADC_CLKIN), .O(adc_clk));
+    IBUF vcxo_ibuf(.I(ADC_CLKIN), .O(adc_clk));
 
     wire gps_tcxo_buf;
-    IBUFG tcxo_ibufg(.I(GPS_TCXO), .O(gps_tcxo_buf));   // 16.368 MHz TCXO
+    IBUF tcxo_ibuf(.I(GPS_TCXO), .O(gps_tcxo_buf));   // 16.368 MHz TCXO
     wire cpu_clk = gps_tcxo_buf;
     wire gps_clk = gps_tcxo_buf;
 `endif
@@ -136,6 +136,7 @@ module KiwiSDR (
     
     //////////////////////////////////////////////////////////////////////////
     // global control & status registers
+    //////////////////////////////////////////////////////////////////////////
 
     reg [15:0] ctrl;
     
@@ -157,7 +158,7 @@ module KiwiSDR (
 	// keep Vivado from complaining about unused inputs and outputs
 	assign P9[0] = ctrl[CTRL_UNUSED_OUT];
 	assign P9[1] = ctrl[CTRL_UNUSED_OUT];
-	assign P9[3] = ctrl[CTRL_UNUSED_OUT];
+	assign P9[2] = ctrl[CTRL_UNUSED_OUT];
 
 	assign P8[0] = ctrl[CTRL_UNUSED_OUT];
 	assign P8[1] = ctrl[CTRL_UNUSED_OUT];
@@ -170,13 +171,14 @@ module KiwiSDR (
 	assign P8[8] = ctrl[CTRL_UNUSED_OUT];
 	assign P8[9] = ctrl[CTRL_UNUSED_OUT];
     
-	wire unused_inputs = IF_MAG | P9[2]
+	wire unused_inputs = IF_MAG | P915
 `ifdef USE_OTHER
         | unused_inputs_other
 `else
 `ifdef USE_SDR
 	    | ctrl[CTRL_0001] | ctrl[CTRL_0002] | ctrl[CTRL_0004] | ctrl[CTRL_0008]
-	    | ctrl[CTRL_0010] | ctrl[CTRL_0020] | ctrl[CTRL_0040] | ctrl[CTRL_0080]
+	    //| ctrl[CTRL_0010] | ctrl[CTRL_0020] | ctrl[CTRL_0040] | ctrl[CTRL_0080]
+	    | ctrl[CTRL_0010] | ctrl[CTRL_0020] | ctrl[CTRL_0040]
 `else
 `endif
 `ifdef USE_GPS
@@ -201,72 +203,53 @@ module KiwiSDR (
 
     //////////////////////////////////////////////////////////////////////////
     // device DNA
+    //////////////////////////////////////////////////////////////////////////
     
+    // FIXME: Vivado ML is unhappy that we clock DNA_PORT.CLK statically
     wire dna_data;
     DNA_PORT dna(.CLK(ctrl[CTRL_DNA_CLK]), .READ(ctrl[CTRL_DNA_READ]), .SHIFT(ctrl[CTRL_DNA_SHIFT]), .DIN(1'b1), .DOUT(dna_data));
 
 
     //////////////////////////////////////////////////////////////////////////
     // receiver
+    //////////////////////////////////////////////////////////////////////////
 
 	wire rx_rd, wf_rd;
 	wire [15:0] rx_dout, wf_dout;
 	wire [47:0] ticks_A;
 	
 `ifdef USE_SDR
+	wire use_gen_C = ctrl[CTRL_USE_GEN];
+	wire gen_fir_C = ctrl[CTRL_GEN_FIR];
+
     RECEIVER receiver (
-    	.adc_clk	(adc_clk),
-    	.adc_data	(reg_adc_data),
+    	.adc_clk	    (adc_clk),
+    	.adc_data	    (reg_adc_data),
+    	.adc_ovfl       (ADC_OVFL),
 
 		// these are all on the cpu_clk
-        .rx_rd_C	(rx_rd),
-        .rx_dout_C	(rx_dout),
+        .rx_rd_C	    (rx_rd),
+        .rx_dout_C	    (rx_dout),
 
-        .wf_rd_C	(wf_rd),
-        .wf_dout_C	(wf_dout),
+        .wf_rd_C	    (wf_rd),
+        .wf_dout_C	    (wf_dout),
 
-        .ticks_A	(ticks_A),
+        .ticks_A	    (ticks_A),
+        .adc_ovfl_C     (rx_ovfl_C),
+        .adc_count_C    (adc_count),
         
-		.cpu_clk	(cpu_clk),
-        .ser		(ser[1]),        
-        .tos		(tos),
-        .op			(op),        
-        .rdReg      (rdReg),
-        .wrReg2     (wrReg2),
-        .wrEvt2     (wrEvt2),
+		.cpu_clk	    (cpu_clk),
+        .ser		    (ser[1]),        
+        .tos		    (tos),
+        .op_11          (op[10:0]),        
+        .rdReg          (rdReg),
+        .wrReg          (wrReg),
+        .wrReg2         (wrReg2),
+        .wrEvt2         (wrEvt2),
         
-        .ctrl       (ctrl)
+        .use_gen_C      (use_gen_C),
+        .gen_fir_C      (gen_fir_C)
     	);
-
-//`define ADC_OVFL_ON_ONE_SAMPLE
-`ifdef ADC_OVFL_ON_ONE_SAMPLE
-	SYNC_PULSE sync_adc_ovfl (.in_clk(adc_clk), .in(ADC_OVFL), .out_clk(cpu_clk), .out(rx_ovfl_C));
-`else
-    // signal overflow only if a variable value of 64k consecutive samples have ADC overflow asserted
-    localparam ADC_OVFL_CTR_BITS = 16;
-	reg [ADC_OVFL_CTR_BITS-1:0] adc_ovfl_ctr, adc_ovfl_cnt, cnt_mask;
-    reg adc_ovfl;
-
-    always @ (posedge cpu_clk)
-        if (wrReg2 & op[SET_CNT_MASK]) cnt_mask <= tos[ADC_OVFL_CTR_BITS-1:0];
-
-    always @ (posedge adc_clk)
-    begin
-        if (adc_ovfl_ctr == ((1 << ADC_OVFL_CTR_BITS) - 1))
-        begin
-            adc_ovfl <= ((adc_ovfl_cnt & cnt_mask) != 0)? 1:0;
-            adc_ovfl_cnt <= 0;
-            adc_ovfl_ctr <= 0;
-        end else
-        begin
-            adc_ovfl = 0;
-            adc_ovfl_cnt <= adc_ovfl_cnt + ADC_OVFL;
-            adc_ovfl_ctr <= adc_ovfl_ctr + 1;
-        end
-    end
-
-	SYNC_PULSE sync_adc_ovfl (.in_clk(adc_clk), .in(adc_ovfl), .out_clk(cpu_clk), .out(rx_ovfl_C));
-`endif
 
 	wire rx_ovfl_C, rx_orst;
 	reg rx_overflow_C;
@@ -275,6 +258,8 @@ module KiwiSDR (
     	if (rx_orst) rx_overflow_C <= rx_ovfl_C; else
     	rx_overflow_C <= rx_overflow_C | rx_ovfl_C;
     end
+    
+    wire [31:0] adc_count;
 
 `else
     assign rx_rd = 0;
@@ -294,6 +279,7 @@ module KiwiSDR (
 
     //////////////////////////////////////////////////////////////////////////
     // CPU parallel port input mux
+    //////////////////////////////////////////////////////////////////////////
 	
     always @*
     begin
@@ -304,6 +290,11 @@ module KiwiSDR (
 		if (rdReg & op[GET_CPU_CTR3]) par = { cpu_ctr[1][31 -:8], cpu_ctr[0][31 -:8] }; else
 `endif
 
+`ifdef USE_SDR
+		if (rdReg2 & op[GET_ADC_CTR0]) par = { adc_count[15: 0] }; else
+		if (rdReg2 & op[GET_ADC_CTR1]) par = { adc_count[31:16] }; else
+`endif
+
 		if (rdReg & op[GET_STATUS]) par = status; else
 		par = host_dout;
 	end
@@ -311,6 +302,7 @@ module KiwiSDR (
 
     //////////////////////////////////////////////////////////////////////////
     // host SPI interface
+    //////////////////////////////////////////////////////////////////////////
 
     HOST host (
         .hb_clk		(cpu_clk),
@@ -333,8 +325,9 @@ module KiwiSDR (
         .ext_rd 	(ext_rd),
         .ext_dout	(ext_dout),
 
+        // NB: hb_clk = gps_clk = cpu_clk
         .hb_ovfl	(rx_overflow_C),
-        .hb_orst	(rx_orst),          // NB: hb_clk = gps_clk = cpu_clk
+        .hb_orst	(rx_orst),
 
         .host_dout  (host_dout),
         .mem_rd     (mem_rd),
@@ -351,6 +344,7 @@ module KiwiSDR (
 
     //////////////////////////////////////////////////////////////////////////
     // CPU cycle counters
+    //////////////////////////////////////////////////////////////////////////
 
 `ifdef USE_CPU_CTR
     reg cpu_ctr_ena;
@@ -405,7 +399,7 @@ module KiwiSDR (
         
         .ser		(ser[0]),        
         .tos		(tos),      // no clk domain crossing because gps_clk = cpu_clk
-        .op			(op),        
+        .op_8       (op[7:0]),        
         .rdBit      (rdBit0),
         .rdReg      (rdReg),
         .wrReg      (wrReg),

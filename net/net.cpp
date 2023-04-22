@@ -534,6 +534,13 @@ void inet4_h2d(u4_t inet4, u1_t *ap, u1_t *bp, u1_t *cp, u1_t *dp)
     if (dp != NULL) *dp = bf(inet4,  7,  0);
 }
 
+char *inet4_h2s(u4_t inet4)
+{
+    u1_t a,b,c,d;
+    inet4_h2d(inet4, &a,&b,&c,&d);
+    return stprintf("%d.%d.%d.%d", a,b,c,d);
+}
+
 // ::ffff:a.b.c.d/96
 bool is_inet4_map_6(u1_t *a)
 {
@@ -870,9 +877,9 @@ void ip_blacklist_dump()
 
 
 // Emulates the client-side (js) of a Kiwi sound/waterfall/extension channel API connection.
-// For use by server-side internal connections, e.g. WSPR autorun, SNR measurement.
+// For use by server-side internal connections, e.g. WSPR autorun, FT8 autorun, SNR measurement.
 
-bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port_base,
+bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port_base, u4_t ws_flags,
     const char *mode, int locut, int hicut, float freq_kHz,
     const char *ident_user, const char *geoloc, const char *client,
     int zoom, float cf_kHz, int min_dB, int max_dB, int wf_speed, int wf_comp)
@@ -880,7 +887,7 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
     struct mg_connection *mc_fail, *mcs = NULL, *mcw = NULL, *mce = NULL;
     conn_t *csnd = NULL, *cwf, *cext;
     int local_port = port_base + instance * 3;
-    u64_t tstamp = timer_ms64_1970();
+    u64_t tstamp = timer_us64();    // CAUTION: tstamp must be unique even if called in rapid succession!
     bool ident_geo_sent = false;
     memset(iconn, 0, sizeof(internal_conn_t));
     
@@ -892,7 +899,7 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
         kiwi_strncpy(mcs->remote_ip, "127.0.0.1", NET_ADDRSTRLEN);
         mcs->remote_port = local_port;
         mcs->local_port = net.port;
-        csnd = rx_server_websocket(WS_INTERNAL_CONN, mcs);
+        csnd = rx_server_websocket(WS_INTERNAL_CONN, mcs, ws_flags);
         if (csnd == NULL) goto error;
         iconn->csnd = csnd;
         input_msg_internal(csnd, (char *) "SET auth t=kiwi p=");
@@ -913,7 +920,7 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
         kiwi_strncpy(mcw->remote_ip, "127.0.0.1", NET_ADDRSTRLEN);
         mcw->remote_port = local_port + 1;
         mcw->local_port = net.port;
-        cwf = rx_server_websocket(WS_INTERNAL_CONN, mcw);
+        cwf = rx_server_websocket(WS_INTERNAL_CONN, mcw, ws_flags);
         if (cwf == NULL) goto error;
         iconn->cwf = cwf;
         input_msg_internal(cwf, (char *) "SET auth t=kiwi p=");
@@ -937,7 +944,7 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
         kiwi_strncpy(mce->remote_ip, "127.0.0.1", NET_ADDRSTRLEN);
         mce->remote_port = local_port + 2;
         mce->local_port = net.port;
-        cext = rx_server_websocket(WS_INTERNAL_CONN, mce);
+        cext = rx_server_websocket(WS_INTERNAL_CONN, mce, ws_flags);
         if (cext == NULL) goto error;
         iconn->cext = cext;
         input_msg_internal(cext, (char *) "SET auth t=kiwi p=");
@@ -948,14 +955,14 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
     return true;
 
 error:
-    printf("internal_conn_setup: couldn't get websocket instance=%d uri=%s port=%d\n",
-        instance, mc_fail->uri, mc_fail->remote_port);
+    printf("internal_conn_setup: %s couldn't get websocket instance=%d uri=%s port=%d\n",
+        ident_user, instance, mc_fail->uri, mc_fail->remote_port);
     internal_conn_shutdown(iconn);
     return false;
 
 error2:
-    printf("internal_conn_setup: need (ICONN_WS_EXT | ICONN_WS_SND) instance=%d uri=%s port=%d\n",
-        instance, mc_fail->uri, mc_fail->remote_port);
+    printf("internal_conn_setup: %s need (ICONN_WS_EXT | ICONN_WS_SND) instance=%d uri=%s port=%d\n",
+        ident_user, instance, mc_fail->uri, mc_fail->remote_port);
     internal_conn_shutdown(iconn);
     return false;
 }

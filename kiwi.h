@@ -61,7 +61,7 @@ extern kiwi_t kiwi;
 
 extern int version_maj, version_min;
 
-extern bool background_mode, need_hardware, is_multi_core,
+extern bool background_mode, need_hardware, is_multi_core, any_preempt_autorun,
 	DUC_enable_start, rev_enable_start, web_nocache, kiwi_reg_debug, cmd_debug,
 	have_ant_switch_ext, gps_e1b_only, disable_led_task, debug_printfs, force_camp,
 	snr_local_time, log_local_ip, DRM_enable, have_snd_users, admin_keepalive;
@@ -90,8 +90,8 @@ extern char *fpga_file;
 extern lock_t spi_lock;
 
 extern int p0, p1, p2;
-extern float p0_f, p1_f, p2_f, p3_f, p4_f, p5_f, p6_f, p7_f;
-extern int p0_i, p1_i, p2_i, p3_i, p4_i, p5_i, p6_i, p7_i;
+extern float p_f[8];
+extern int p_i[8];
 
 
 // CAUTION: must match order in kiwi.js

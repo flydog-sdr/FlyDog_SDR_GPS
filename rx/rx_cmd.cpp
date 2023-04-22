@@ -22,6 +22,7 @@ Boston, MA  02110-1301, USA.
 #include "kiwi.h"
 #include "rx.h"
 #include "rx_cmd.h"
+#include "rx_util.h"
 #include "clk.h"
 #include "mem.h"
 #include "misc.h"
@@ -122,6 +123,7 @@ static str_hashes_t rx_common_cmd_hashes[] = {
     { "SET ctrace", CMD_CTRACE },
     { "SET dbug_v", CMD_DEBUG_VAL },
     { "SET dbug_m", CMD_DEBUG_MSG },
+    { "SET devl.p", CMD_DEVL },
     { "SET is_adm", CMD_IS_ADMIN },
     { "SET close_", CMD_FORCE_CLOSE_ADMIN },
     { "SET get_au", CMD_GET_AUTHKEY },
@@ -194,7 +196,7 @@ bool rx_common_cmd(int stream_type, conn_t *conn, char *cmd)
 	    kiwi_str_begins_with(cmd, "SET options") == false &&    // options needed before CMD_AUTH
 	    kiwi_str_begins_with(cmd, "SET auth") == false) {
 		    clprintf(conn, "### SECURITY: NO AUTH YET: %s %s %s %d <%.64s>\n",
-		        stream_name, rx_streams[conn->type].uri, conn->remote_ip, strlen(cmd), cmd);
+		        stream_name, rx_conn_type(conn), conn->remote_ip, strlen(cmd), cmd);
             conn->kick = true;
 		    return true;	// fake that we accepted command so it won't be further processed
 	}
@@ -260,7 +262,7 @@ bool rx_common_cmd(int stream_type, conn_t *conn, char *cmd)
             const char *pwd_s = NULL;
             bool no_pwd = false;;
             int cfg_auto_login;
-            const char *uri = rx_streams[conn->type].uri;
+            const char *uri = rx_conn_type(conn);
             
             conn->awaitingPassword = true;
 
@@ -520,7 +522,7 @@ bool rx_common_cmd(int stream_type, conn_t *conn, char *cmd)
                     // Allow with no password if minimum number of channels needing password remains.
                     // This minimum number is reduced by the number of already privileged connections.
                     // If no password has been set at all we've already allowed access above.
-                    int already_privileged_conns = rx_count_server_conns(LOCAL_OR_PWD_PROTECTED_USERS, conn);
+                    int already_privileged_conns = rx_count_server_conns(LOCAL_OR_PWD_PROTECTED_USERS, 0, conn);
                     int chan_need_pwd = rx_chans - rx_chan_no_pwd() - already_privileged_conns;
                     if (chan_need_pwd < 0) chan_need_pwd = 0;
                     
@@ -664,7 +666,7 @@ bool rx_common_cmd(int stream_type, conn_t *conn, char *cmd)
                     bool snd_wf = (c->type == STREAM_SOUND || c->type == STREAM_WATERFALL);
                     if (!c->valid || c->internal_connection || !snd_wf) continue;
                     if (c->rx_channel == conn->rx_channel) continue;    // skip our own entry
-                    //pwd_printf("DUP_IP CHK rx%d %s %s\n", c->rx_channel, rx_streams[c->type].uri, c->remote_ip);
+                    //pwd_printf("DUP_IP CHK rx%d %s %s\n", c->rx_channel, rx_conn_type(c), c->remote_ip);
                     if (strcmp(conn->remote_ip, c->remote_ip) == 0) {
                         //pwd_printf("DUP_IP MATCH\n");
                         badp = 5;
@@ -1699,7 +1701,7 @@ bool rx_common_cmd(int stream_type, conn_t *conn, char *cmd)
             #endif
 
             #ifdef USE_SDR
-                //printf("ch=%d ug=%d lat=%d\n", ch, wspr_c.GPS_update_grid, (gps.StatLat != 0));
+                //printf("ch=%d ug=%d haveLat=%d\n", ch, wspr_c.GPS_update_grid, (gps.StatLat != 0));
                 if (wspr_c.GPS_update_grid && gps.StatLat) {
                     latLon_t loc;
                     loc.lat = gps.sgnLat;
@@ -2046,6 +2048,32 @@ bool rx_common_cmd(int stream_type, conn_t *conn, char *cmd)
         }
 	    break;
     }
+
+	// SECURITY: only used during debugging
+    case CMD_DEVL: {
+	    double pf;
+        n = sscanf(cmd, "SET devl.p%d=%lf", &i, &pf);
+        if (n == 2) {
+            if (i >= 0 && i <= 7) {
+                p_f[i] = pf;
+                printf("CMD_DEVL SET p_f[%d]=%lf\n", i, p_f[i]);
+                return true;
+            }
+        }
+        /*
+	    int pi;
+        n = sscanf(cmd, "SET devl.pi%d=%d", &i, &pi);
+        if (n == 2) {
+            if (i >= 0 && i <= 7) {
+                p_i[i] = pi;
+                printf("CMD_DEVL SET p_i[%d]=%d\n", i, p_i[i]);
+                return true;
+            }
+        }
+        */
+        printf("CMD_DEVL didn't parse: \"%s\"\n", cmd);
+	    break;
+	}
 
 
 ////////////////////////////////

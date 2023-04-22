@@ -16,11 +16,12 @@
 
 	link
    
-	radio_button               T
+	radio_button               T     no label option needed
 	radio_button_get_param     T
 	radio_unhighlight
 	
-	switch                     T     **Needs L added
+	switch                     T
+	switch_label               TL    rename w3_switch_label() to w3_switch()? Any external API users?
 	switch_set_value
 	
 	button                     T
@@ -1944,6 +1945,8 @@ function w3_radio_button(psa, text, path, isSelected, cb, cb_param)
 // used when current value should come from config param
 function w3_radio_button_get_param(psa, text, path, selected_if_val, init_val, cb, cb_param)
 {
+   // FIXME
+   //var update_path_var = psa.includes('w3-update');
 	//console.log('w3_radio_button_get_param: '+ path);
 	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? null : init_val);
 	
@@ -1968,19 +1971,60 @@ function w3_switch(psa, text_0, text_1, path, text_0_selected, cb, cb_param)
 	return s;
 }
 
+function w3_switch_label(psa, label, text_0, text_1, path, text_0_selected, cb, cb_param)
+{
+   //console.log('w3_switch_label psa='+ psa);
+   var hasLabel = (label != '');
+	var inline = psa.includes('w3-label-inline');
+	var centered = psa.includes('w3-center');
+	var left = psa.includes('w3-label-left');
+	var bold = !psa.includes('w3-label-not-bold');
+	
+	var spacing = (hasLabel && !inline)? 'w3-margin-T-8' : '';
+	if (hasLabel && inline) spacing += left? ' w3-margin-L-8' : ' w3-margin-R-8';
+	if (centered) spacing += ' w3-halign-center';
+
+   var psa3 = w3_psa3(psa);
+   var psa_outer = w3_psa_mix(psa3.left, (inline? 'w3-show-inline-new':'') + (centered? ' w3-halign-center w3-center':''));
+   var psa_label = w3_psa_mix(psa3.middle, (hasLabel && bold)? 'w3-bold':'');
+	var psa_inner = w3_psa();
+
+   var ls = w3_label(psa_label, label, path);
+   var cs =
+      w3_inline(spacing +'/'+ psa3.right,
+         w3_radio_button('w3int-switch-0', text_0, path, text_0_selected? 1:0, cb, cb_param) +
+         w3_radio_button('w3int-switch-1', text_1, path, text_0_selected? 0:1, cb, cb_param)
+      );
+	var s = w3_div(psa_outer, ((left || !inline)? (ls + cs) : (cs + ls)));
+	return s;
+}
+
 // used when current value should come from config param
 function w3_switch_get_param(psa, text_0, text_1, path, text_0_selected_if_val, init_val, cb, cb_param)
 {
+   // FIXME
+   //var update_path_var = psa.includes('w3-update');
 	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? null : init_val);
 
 	// set default selection of button based on current value
 	//if (w3_contains(psa, 'id-net-ssl'))
 	//   console.log('w3_switch_get_param cur_val='+ cur_val +' text_0_selected_if_val='+ text_0_selected_if_val);
 	var text_0_selected = (cur_val == text_0_selected_if_val)? w3_SELECTED : w3_NOT_SELECTED;
-	var s =
-		w3_radio_button(w3_psa_mix(psa, 'w3int-switch-0'), text_0, path, text_0_selected? 1:0, cb, cb_param) +
-		w3_radio_button(w3_psa_mix(psa, 'w3int-switch-1'), text_1, path, text_0_selected? 0:1, cb, cb_param);
-	return s;
+   return w3_switch(psa, text_0, text_1, path, text_0_selected, cb, cb_param);
+}
+
+// used when current value should come from config param
+function w3_switch_label_get_param(psa, label, text_0, text_1, path, text_0_selected_if_val, init_val, cb, cb_param)
+{
+   // FIXME
+   //var update_path_var = psa.includes('w3-update');
+	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? null : init_val);
+
+	// set default selection of button based on current value
+	//if (w3_contains(psa, 'id-net-ssl'))
+	//   console.log('w3_switch_get_param cur_val='+ cur_val +' text_0_selected_if_val='+ text_0_selected_if_val);
+	var text_0_selected = (cur_val == text_0_selected_if_val)? w3_SELECTED : w3_NOT_SELECTED;
+   return w3_switch_label(psa, label, text_0, text_1, path, text_0_selected, cb, cb_param);
 }
 
 function w3_switch_set_value(path, switch_idx)
@@ -2011,7 +2055,7 @@ function w3int_button_click(ev, path, cb, cb_param)
    
       // cb is a string because can't pass an object to onclick
       if (cb) {
-         w3_call(cb, path, cb_param, /* first */ false);    // buttons don't really have first callback
+         w3_call(cb, path, cb_param, /* first */ false, ev);   // buttons don't really have first callback
       }
    }
 
@@ -2076,9 +2120,10 @@ function w3int_button(psa, path, text, cb, cb_param)
 	
 	// w3-round-large listed first so its '!important' can be overriden by subsequent '!important's
 	var default_style = (psa.includes('w3-round') || psa.includes('w3-circle'))? '' : ' w3-round-large';
+	var noactive = psa.includes('w3-noactive')? ' class-button-noactive w3-ext-btn-noactive' : '';
    var psa3 = w3_psa3(psa);
    var psa_outer = w3_psa(psa3.left);
-	var psa_inner = w3_psa(psa3.right, path +' w3-btn w3-ext-btn'+ default_style, '', onclick);
+	var psa_inner = w3_psa(psa3.right, path +' w3-btn w3-ext-btn'+ default_style + noactive, '', onclick);
    if (psa.includes('w3-dump')) {
       console.log('w3_button');
       console.log(psa3);
@@ -2435,6 +2480,8 @@ function w3int_input_set_id_timeout(id)
 // used when current value should come from config param
 function w3_input_get(psa, label, path, cb, init_val, placeholder)
 {
+   // FIXME
+   //var update_path_var = psa.includes('w3-update');
 	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? null : init_val);
 	cur_val = kiwi_decodeURIComponent('w3_input_get:'+ path, cur_val);
 	//console.log('w3_input_get: path='+ path +' cur_val="'+ cur_val +'" placeholder="'+ placeholder +'"');
@@ -2495,6 +2542,8 @@ function w3_textarea(psa, label, path, val, rows, cols, cb)
 // used when current value should come from config param
 function w3_textarea_get_param(psa, label, path, rows, cols, cb, init_val)
 {
+   // FIXME
+   //var update_path_var = psa.includes('w3-update');
 	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? null : init_val);
 	cur_val = kiwi_decodeURIComponent('w3_textarea_get_param:'+ path, cur_val);
 	//if (psa.includes('w3-dump')) console.log('w3_textarea_get_param: path='+ path +' cur_val="'+ cur_val +'"');
@@ -2561,8 +2610,9 @@ function w3_checkbox(psa, label, path, checked, cb, cb_param)
 // used when current value should come from config param
 function w3_checkbox_get_param(psa, label, path, cb, init_val)
 {
-	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? null : init_val);
-	//console.log('w3_checkbox_get_param: path='+ path +' cur_val="'+ cur_val +'"');
+   var update_path_var = psa.includes('w3-update');
+	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? null : init_val, undefined, update_path_var);
+	//console.log('w3_checkbox_get_param: path='+ path +' update_path_var='+ update_path_var +' cur_val='+ cur_val +' init_val='+ init_val);
 	return w3_checkbox(psa, label, path, cur_val, cb);
 }
 
@@ -2818,7 +2868,8 @@ function w3_select_set_disabled(path, value, disabled)
 // used when current value should come from config param
 function w3_select_get_param(psa, label, title, path, opts, cb, init_val)
 {
-	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? 0 : init_val);
+   var update_path_var = psa.includes('w3-update');
+	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? 0 : init_val, undefined, update_path_var);
 	return w3_select(psa, label, title, path, cur_val, opts, cb);
 }
 
@@ -2827,6 +2878,20 @@ function w3_select_enum(path, func)
    var path = w3_el(path);
    if (!path) return;
 	w3_iterate_children(path, func);
+}
+
+function w3_select_get_value(path, idx)
+{
+   var found = null, last_disabled = null;
+   w3_select_enum(path,
+      function(e) {
+         if (e.value == idx)
+            found = e.innerHTML;
+         if (!found && e.disabled)
+            last_disabled = e.innerHTML;
+      }
+   );
+   return { option:found, last_disabled:last_disabled };
 }
 
 function w3_select_value(path, idx, opt)
@@ -2907,6 +2972,7 @@ function w3_slider_wheel(cb, el, cur, slow, fast)
 
 function w3_slider(psa, label, path, val, min, max, step, cb, cb_param)
 {
+   var dump = psa.includes('w3-dump');
 	var id = w3_add_id(path);
 	var inline = psa.includes('w3-label-inline');
 	var bold = !psa.includes('w3-label-not-bold');
@@ -2950,7 +3016,7 @@ function w3_slider(psa, label, path, val, min, max, step, cb, cb_param)
 			w3_call(cb, path, val, /* complete */ true, /* first */ true, cb_param);
 		}, 500);
 
-	//if (path == 'iq.pll_bw') console.log(s);
+	if (dump) console.log(s);
 	return s;
 }
 
@@ -2970,6 +3036,15 @@ function w3_slider_setup(path, min, max, step, val)
    el.step = step;
    el.value = val;
    return el;
+}
+
+// used when current value should come from config param
+function w3_slider_get_param(psa, label, path, min, max, step, cb, cb_param, init_val)
+{
+   var update_path_var = psa.includes('w3-update');
+	var cur_val = ext_get_cfg_param(path, (init_val == undefined)? 0 : init_val, undefined, update_path_var);
+	//console.log('w3_slider_get_param path='+ path +' update_path_var='+ update_path_var +' init_val='+ init_val +' cur_val='+ cur_val +' psa='+ psa);
+   return w3_slider(psa, label, path, cur_val, min, max, step, cb, cb_param);
 }
 
 
@@ -3239,7 +3314,7 @@ function w3_menu_close(from)
 
 
 ////////////////////////////////
-// standard callbacks
+// standard callbacks -- only set var
 ////////////////////////////////
 
 function w3_num_cb(path, val)
@@ -3267,6 +3342,11 @@ function w3_string_cb(path, val)
 	//console.log('w3_string_cb: path='+ path +' val='+ val);
 	setVarFromString(path, val.toString());
 }
+
+
+////////////////////////////////
+// standard callbacks -- set cfg and var
+////////////////////////////////
 
 function w3_num_set_cfg_cb(path, val, first)
 {
@@ -3345,6 +3425,7 @@ function w3_json_set_cfg_cb(path, val, first)
 	var save = (first != undefined)? (first? false : true) : true;
 	ext_set_cfg_param(path, val, save);
 }
+
 
 // path is structured to be: [el_name][sep][idx]
 // e.g. [id-dx.o.ty][_][123]
@@ -3692,12 +3773,13 @@ function w3_text(psa, text)
 	return s;
 }
 
-function w3_code(prop_outer, prop_inner)
+function w3_code(psa)
 {
-	var narg = arguments.length;
-	var s = '<pre class="'+ prop_outer +'"><code>';
-		for (var i=2; i < narg; i++) {
-			s += '<div class="'+ prop_inner +'">'+ arguments[i] + '</div>';
+   var psa3 = w3_psa3(psa);
+   var narg = arguments.length;
+	var s = '<pre '+ w3_psa(psa3.left) +'><code '+ w3_psa(psa3.middle) +'>';
+		for (var i=1; i < narg; i++) {
+			s += '<code '+ w3_psa(psa3.right) +'>'+ arguments[i] + '</code>';
 		}
 	s += '</code></pre>';
 	//console.log(s);
