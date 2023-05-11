@@ -105,9 +105,9 @@ void rx_loguser(conn_t *c, logtype_e type)
 	kiwi_ifree(s);
 }
 
-int rx_chan_free_count(rx_free_count_e flags, int *idx, int *heavy)
+int rx_chan_free_count(rx_free_count_e flags, int *idx, int *heavy, int *preempt)
 {
-	int i, free_cnt = 0, free_idx = -1, heavy_cnt = 0;
+	int i, free_cnt = 0, free_idx = -1, heavy_cnt = 0, preempt_cnt = 0;
 	rx_chan_t *rx;
 
     // When configuration has a limited number of channels with waterfalls
@@ -121,21 +121,26 @@ int rx_chan_free_count(rx_free_count_e flags, int *idx, int *heavy)
             /*printf("rx_chan_free_count rx%d: ext=%p flags=0x%x\n", i, rx->ext, rx->ext? rx->ext->flags : 0xffffffff);*/ \
             if (rx->ext && (rx->ext->flags & EXT_FLAGS_HEAVY)) \
                 heavy_cnt++; \
+            if (rx->conn && rx->conn->arun_preempt) \
+                preempt_cnt++; \
         } else { \
             free_cnt++; \
             if (free_idx == -1) free_idx = i; \
         } \
     }
 
-    if (flags == RX_COUNT_NO_WF_FIRST && wf_chans < rx_chans) {
+    if (flags != RX_COUNT_ALL && wf_chans != 0 && wf_chans < rx_chans) {
         for (i = wf_chans; i < rx_chans; i++) RX_CHAN_FREE_COUNT();
-        for (i = 0; i < wf_chans; i++) RX_CHAN_FREE_COUNT();
+        if (flags != RX_COUNT_NO_WF_AT_ALL) {
+            for (i = 0; i < wf_chans; i++) RX_CHAN_FREE_COUNT();
+        }
     } else {
         for (i = 0; i < rx_chans; i++) RX_CHAN_FREE_COUNT();
     }
 	
 	if (idx != NULL) *idx = free_idx;
 	if (heavy != NULL) *heavy = heavy_cnt;
+	if (preempt != NULL) *preempt = preempt_cnt;
 	return free_cnt;
 }
 
@@ -279,14 +284,15 @@ void rx_autorun_restart_victims()
         return;
     }
     
-    int free_chans = rx_chan_free_count(RX_COUNT_ALL);
+    // if autorun on configurations with limited wf chans (e.g. rx8_wf2) never use the wf chans at all
+    int free_chans = rx_chan_free_count(RX_COUNT_NO_WF_AT_ALL);
+    //printf("rx_autorun_restart_victims: free_chans=%d rx_chans=%d wf_chans=%d\n", free_chans, rx_chans, wf_chans);
     if (free_chans == 0) {
         //printf("rx_autorun_restart_victims: no free chans\n");
         return;
     }
     //printf("rx_autorun_restart_victims: free_chans=%d\n", free_chans);
 
-    //printf("rx_autorun_restart_victims\n");
     ft8_autorun_start();
     wspr_autorun_start();
 }

@@ -132,14 +132,13 @@ var tdoa = {
    select: undefined,
 };
 
-tdoa.url_base =   'http://tdoa.kiwisdr.com/';
-//tdoa.url_base =   'https://tdoa2.kiwisdr.com/';    // switch to using new SSL version of TDoA service
-tdoa.url =        tdoa.url_base +'tdoa/';
-tdoa.url_files =  tdoa.url +'files/';
-tdoa.rep_files =  'tdoa.kiwisdr.com/tdoa/files';   // NB: not full URL, and no trailing /
-
 function TDoA_main()
 {
+   tdoa.url_base =   kiwi_add_end(cfg.tdoa.server_url, '/');
+   tdoa.url =        tdoa.url_base +'tdoa/';
+   tdoa.url_files =  tdoa.url +'files/';
+   tdoa.rep_files =  kiwi_remove_protocol(tdoa.url) +'files';  // NB: not full URL, and no trailing /
+
 	ext_switch_to_client(tdoa.ext_name, tdoa.first_time, tdoa_recv);		// tell server to use us (again)
 	if (!tdoa.first_time)
 		tdoa_controls_setup();
@@ -1304,13 +1303,14 @@ function tdoa_host_click_status_cb(obj, field_idx)
       var arr = obj.response.split('\n');
       //console.log('tdoa_host_click_status_cb field_idx='+ field_idx +' arr.len='+ arr.length);
       //console.log(arr);
-      var offline = auth = users = users_max = fixes_min = null;
+      var offline = auth = users = users_max = preempt = fixes_min = null;
       for (var i = 0; i < arr.length; i++) {
          var a = arr[i];
          if (a.startsWith('offline=')) offline = a.split('=')[1];
          if (a.startsWith('auth=')) auth = a.split('=')[1];
          if (a.startsWith('users=')) users = a.split('=')[1];
          if (a.startsWith('users_max=')) users_max = a.split('=')[1];
+         if (a.startsWith('preempt=')) preempt = a.split('=')[1];
          if (a.startsWith('fixes_min=')) fixes_min = a.split('=')[1];
       }
 
@@ -1328,9 +1328,9 @@ function tdoa_host_click_status_cb(obj, field_idx)
       if (fixes_min == 0) {
          err = 'no recent GPS timestamps';
       } else {
-         //console.log('u='+ users +' u_max='+ users_max);
+         //console.log('u='+ users +' u_max='+ users_max +' preempt='+ preempt);
          if (users_max == null) return;      // unexpected response
-         if (users < users_max) {
+         if (users < users_max || preempt > 0) {      // also try if any preemptible channels
             tdoa_set_icon('sample', field_idx, 'fa-refresh', 20, 'lime');
             tdoa_set_icon('listen', field_idx, 'fa-volume-up', 20, 'lime', 'tdoa_listen_cb', field_idx);
             var s = fixes_min? (fixes_min +' GPS fixes/min') : 'channel available';
@@ -2762,7 +2762,21 @@ function TDoA_config_html()
          ), 40,
 
          w3_div('w3-text-black'), 5
-      );
+      ) +
+
+      w3_inline_percent('w3-container',
+         w3_div('',
+            w3_input_get('w3-restart', 'TDoA server URL', 'tdoa.server_url', 'w3_url_set_cfg_cb', 'http://tdoa.kiwisdr.com'),
+            w3_div('w3-margin-T-8 w3-text-black',
+               'Change <b>only</b> if you have implemented an alternate TDoA server. <br>' +
+               'Set to "http://tdoa.kiwisdr.com" for the default TDoA server.'
+            )
+         ), 48,
+
+         w3_div('w3-text-black'), 4,
+
+         w3_div()
+      );      
 
    ext_config_html(tdoa, 'tdoa', 'TDoA', 'TDoA configuration', s);
 }
