@@ -92,7 +92,7 @@ var kiwi = {
    pre_wrapped: false,
    pre_ping_pong: 0,
    
-   _ver_: 1.577,
+   _ver_: 1.578,
    _last_: null
 };
 
@@ -148,7 +148,7 @@ function kiwi_bodyonload(error)
 	   }
 	   */
 	   
-		conn_type = html('id-kiwi-container').getAttribute('data-type');
+		conn_type = w3_el('id-kiwi-container').getAttribute('data-type');
 		if (conn_type == 'undefined') conn_type = 'kiwi';
 		console.log('conn_type='+ conn_type);
 		
@@ -686,27 +686,54 @@ function time_display_html(ext_name, top)
 ////////////////////////////////
 
 var ansi = {
-   colors:  [  // MacOS Terminal.app colors
+   colors:  [
    
-               // regular
-               [0,0,0],
-               [194,54,33],
-               [37,188,36],
-               [173,173,39],
-               [73,46,225],
-               [211,56,211],
-               [51,187,200],
-               [203,204,205],
-               
-               // bright
-               [129,131,131],
-               [252,57,31],
-               [49,231,34],
-               [234,236,35],
-               [88,51,255],
-               [249,53,248],
-               [20,240,240],
-               [233,235,235]
+      // colors optimized for contrast against id-console-msg #a8a8a8 background
+      // regular and bright pallet are the same because MacOS regular colors were too dim
+
+      // regular
+      [0,0,0],
+      [252,57,31],
+      [49,231,34],
+      [234,236,35],
+      [88,51,255],
+      [249,53,248],
+      [20,240,240],
+      [233,235,235],
+      
+      // bright
+      [0,0,0],
+      [252,57,31],
+      [49,231,34],
+      [234,236,35],
+      [88,51,255],
+      [249,53,248],
+      [20,240,240],
+      [233,235,235]
+
+   /*
+      // MacOS Terminal.app colors
+   
+      // regular
+      [0,0,0],
+      [194,54,33],
+      [37,188,36],
+      [173,173,39],
+      [73,46,225],
+      [211,56,211],
+      [51,187,200],
+      [203,204,205],
+      
+      // bright
+      [129,131,131],
+      [252,57,31],
+      [49,231,34],
+      [234,236,35],
+      [88,51,255],
+      [249,53,248],
+      [20,240,240],
+      [233,235,235]
+   */
    ],
    
    BRIGHT: 8,
@@ -729,17 +756,18 @@ var ansi = {
 // vt100.net/docs/vt510-rm/SGR.html
 function kiwi_output_sgr(p)
 {
+   var dbg_sgr = 0;
    var msg = 'SGR', str = '';
    var sgr, saw_reset = 0, saw_color = 0;
    var sa = p.esc.s.substr(1).split(';');
    var sl = sa.length;
-   //console.log('SGR '+ kiwi_JSON(p.esc.s) +' sl='+ sl);
-   //console.log(sa);
+   if (dbg_sgr) console.log('SGR '+ kiwi_JSON(p.esc.s) +' sl='+ sl);
+   if (dbg_sgr) console.log(sa);
    if (p.isAltBuf) msg += '('+ p.r +','+ p.c +')';
 
    for (var ai = 0; ai < sl && !isNumber(msg); ai++) {
       sgr = (sa[ai] == '' || sa[ai] == 'm')? 0 : parseInt(sa[ai]);
-      //console.log('sgr['+ ai +']='+ sgr);
+      if (dbg_sgr) console.log('sgr['+ ai +']='+ sgr);
       if (sgr == 0) {      // \e[m or \e[0m  all attributes off
          p.sgr.fg = p.sgr.bg = null;
          msg += ', reset'; 
@@ -767,12 +795,12 @@ function kiwi_output_sgr(p)
       if (sgr == 27) {     // inverse off
          p.sgr.fg = p.sgr.bg = null;
          msg += ', reverse video off'; 
-         saw_color = 1;
+         saw_reset = 1;
       } else
       
       // foreground color
       if (sgr >= 30 && sgr <= 37) {
-         //console.log('SGR='+ sgr +' bright='+ p.sgr.bright);
+         if (dbg_sgr) console.log('SGR='+ sgr +' bright='+ p.sgr.bright);
          p.sgr.fg = ansi.colors[sgr-30 + p.sgr.bright];
          msg += ', fg color'; 
          saw_color = 1;
@@ -811,11 +839,11 @@ function kiwi_output_sgr(p)
       
       // 8 or 24-bit fg/bg
       if (sgr == 38 || sgr == 48) {
-         //console.log('SGR-8/24 sl='+ sl);
+         if (dbg_sgr) console.log('SGR-8/24 sl='+ sl);
          var n8, r, g, b, color, ci;
 
          if (sl == 3 && (parseInt(sa[1]) == 5) && (!isNaN(n8 = parseInt(sa[2])))) {
-            //console.log('SGR n8='+ n8);
+            if (dbg_sgr) console.log('SGR n8='+ n8);
             ai += 2;
             if (n8 <= 15) {      // standard colors
                color = ansi.colors[n8];
@@ -838,7 +866,7 @@ function kiwi_output_sgr(p)
             } else
             if (n8 <= 255) {     // grayscale ramp
                ci = 8 + (n8-232)*10;
-               //console.log('n8='+ n8 +' ci='+ ci);
+               if (dbg_sgr) console.log('n8='+ n8 +' ci='+ ci);
                color = [ci,ci,ci];
                if (sgr == 38) p.sgr.fg = color; else p.sgr.bg = color;
                msg += ', grayscale ramp'; 
@@ -863,21 +891,23 @@ function kiwi_output_sgr(p)
    }
    
    if (saw_reset) {  // \e[m or \e[0m
-      //console.log('SGR DONE');
+      if (dbg_sgr) console.log('SGR DONE');
       if (p.sgr.span) {
          str += '</span>';
          p.sgr.span = 0;
       }
    } else
    if (saw_color) {
-      //console.log('SGR saw_color fg='+ kiwi_rgb(p.sgr.fg) +' bg='+ kiwi_rgb(p.sgr.bg));
-      //console.log(p.sgr.fg);
-      //console.log(p.sgr.bg);
+      if (dbg_sgr) {
+         console.log('SGR saw_color fg='+ kiwi_rgb(p.sgr.fg) +' bg='+ kiwi_rgb(p.sgr.bg));
+         console.log(p.sgr.fg);
+         console.log(p.sgr.bg);
+      }
       if (p.sgr.span) str += '</span>';
       str += '<span style="'+ (p.sgr.fg? ('color:'+ kiwi_rgb(p.sgr.fg) +';') :'') + (p.sgr.bg? ('background-color:'+ kiwi_rgb(p.sgr.bg) +';') :'') +'">';
       p.sgr.span = 1;
    } else {
-      //console.log('SGR ERROR');
+      if (dbg_sgr) console.log('SGR ERROR');
    }
    
    return { msg: msg, str: str };
@@ -886,10 +916,10 @@ function kiwi_output_sgr(p)
 function kiwi_output_msg(id, id_scroll, p)
 {
    var i, j;
-   var dbg = (1 && dbgUs);
+   var dbg = (0 && dbgUs);
    if (dbg) kiwi.d.p = p;
    
-   if (0 && dbg) {
+   if (1 && dbg) {
       console.log('$kiwi_output_msg id='+ id +' init='+ p.init +' isAltBuf='+ p.isAltBuf +' s='+ p.s);
       console.log('$ '+ kiwi_JSON(p));
       if (!p.init) kiwi_trace();
@@ -901,8 +931,22 @@ function kiwi_output_msg(id, id_scroll, p)
 	   return;
 	}
 	
-	var appendEmptyLine = function(parent_el) { return w3_create_appendElement(parent_el, 'pre', ''); };
-	var removeAllLines = function(parent_el) { while (parent_el.firstChild) { parent_el.removeChild(parent_el.firstChild); } };
+	var appendEmptyLine = function(parent_el) {
+	   var el = w3_create_appendElement(parent_el, 'pre', '');
+	   p.nlines++;
+	   while (p.nlines > p.max_lines) {
+	      parent_el.removeChild(parent_el.firstChild);
+	      p.nlines--;
+	   }
+	   return el;
+	};
+
+	var removeAllLines = function(parent_el) {
+	   while (parent_el.firstChild) {
+	      parent_el.removeChild(parent_el.firstChild);
+	   }
+	   p.nlines = 0;
+	};
 
    var console_cursor = function(ch) {
       ch = ch || '&nbsp;';
@@ -1083,23 +1127,31 @@ function kiwi_output_msg(id, id_scroll, p)
    var line_join = function(col_start, col_stop) {
       col_stop = col_stop || p.cols;
       var s = '';
-      for (var c = col_start; c < col_stop; c++) {
-         if (isString(p.line_sgr[c])) s += p.line_sgr[c];
-         if (isString(p.line_html[c])) s += p.line_html[c];
-         if (isString(p.line[c])) s += p.line[c];
+      var a = [];
+      var i;
+      for (var c = col_start, i = 0; c < col_stop; c++, i++) {
+         var sgr = (isString(p.line_sgr[c]))? p.line_sgr[c] : '';
+         var html = (isString(p.line_html[c]))? p.line_html[c] : '';
+         var ch = (isString(p.line[c]))? p.line[c] : '';
+         s += sgr + html + ch;
+         a[i] = { sgr:sgr, html:html, ch:ch, s:s };
       }
-      return s;
+      return { s:s, a:a };
    };
    
 	var s;
-	try {
-      //if (dbg) console.log(kiwi_JSON(p.s));
-	   s = kiwi_decodeURIComponent('kiwi_output_msg', p.s);
-	} catch(ex) {
-	   console.log('decodeURIComponent FAIL:');
-	   console.log(p.s);
-	   s = p.s;
-	}
+	if (!isArg(p.no_decode) || p.no_decode != true) {
+      try {
+         //if (dbg) console.log(kiwi_JSON(p.s));
+         s = kiwi_decodeURIComponent('kiwi_output_msg', p.s);
+      } catch(ex) {
+         console.log('decodeURIComponent FAIL:');
+         console.log(p.s);
+         s = p.s;
+      }
+   } else {
+      s = p.s;
+   }
 	
    if (p.init != true) {
       //if (dbg) console.log('$console INIT '+ p.init);
@@ -1198,6 +1250,8 @@ function kiwi_output_msg(id, id_scroll, p)
 		   if (p.isAltBuf) {
 		   } else {
             p.ccol = 1;
+            p.line_sgr[p.ccol] = null;    // e.g. "more <file>" then \n to advance single line
+            p.line_html[p.ccol] = null;
             p.return_pending = false;
          }
 		}
@@ -1372,7 +1426,7 @@ function kiwi_output_msg(id, id_scroll, p)
             }
 		      
             // CSI handled: (* = non-isAltBuf)
-            // ESC [    A B C* D d G H J* K* M m* P* r S T X 4 ? @
+            // ESC [    A B C* D d G H J* K* M m* P* r S T X 4 ? @ t
 		      if (first == '[') {
 
 		         // ANSI color escapes
@@ -1405,7 +1459,7 @@ function kiwi_output_msg(id, id_scroll, p)
                      if (second == 'K') {
                         if (dbg) console.log('EEOL BEFORE col='+ p.ccol +' '+ line_s());
                         var col_stop = p.line.length;
-                        for (i = p.ccol; i <= col_stop; i++) p.line[i] = null;
+                        for (i = p.ccol; i <= col_stop; i++) { p.line[i] = null; p.line_sgr[i] = null; p.line_html[i] = null; }
                         if (dbg) console.log('EEOL AFTER col='+ p.ccol +' '+ line_s());
                         result = 'erase in line: cur to EOL';
                      }
@@ -1590,6 +1644,7 @@ function kiwi_output_msg(id, id_scroll, p)
                   }
                } else
                
+               // insert/replace mode
                if (second == '4' && p.isAltBuf && last_hl) {      // esc[4h  esc[4l
                   p.insertMode = enable;
                   result = enable? 'INSERT mode' : 'REPLACE mode';
@@ -1701,6 +1756,11 @@ function kiwi_output_msg(id, id_scroll, p)
                   result = 'delete line(s) '+ n1;
                } else
                
+               // set lines per page (ignored currently)
+               if (c == 't') {
+                  result = 'set lines per page '+ n1 +' (ignored)';
+               } else
+
                if (c == 'A') {   // actual
                   if (p.isAltBuf) {
                      if (p.r > 1) { dirty(); p.r--; dirty(); }
@@ -1844,9 +1904,9 @@ function kiwi_output_msg(id, id_scroll, p)
                   p.c = 1; dirty(); p.r++; dirty();
                   if (p.r > p.rows) p.r = 1;    // \n
                } else {
-                  var stmp = line_join(1);
+                  var stmp = line_join(1).s;
                   p.el.innerHTML = (stmp == '')? '&nbsp;' : stmp;
-                  //if (dbg) console.log('TEXT-EMIT '+ kiwi_JSON(stmp));
+                  if (dbg) console.log('TEXT-EMIT '+ kiwi_JSON(stmp));
                   p.line = [];
                   p.line_sgr = [];
                   p.line_html = [];
@@ -1889,22 +1949,25 @@ function kiwi_output_msg(id, id_scroll, p)
    wasScrolledDown = w3_isScrolledDown(el_scroll);
    if (p.isAltBuf) {
    } else {
-      //if (dbg) console.log('TEXT-ACCUM col='+ p.ccol +'/'+ p.line.length +' '+ line_s());
+      if (dbg) console.log('TEXT-ACCUM col='+ p.ccol +'/'+ p.line.length +' '+ line_s());
       if (p.show_cursor) {
-         var first = line_join(1, p.ccol);
-         var second = line_join(p.ccol);
-         if (second.length) {
+         var first_s = line_join(1, p.ccol).s;
+         var second_a = line_join(p.ccol, p.ccol+1).a;
+         var third_s = line_join(p.ccol+1).s;
+         if (second_a.length) {
             // cursor is on top of a character in the line
-            stmp = first + console_cursor(second[0]) + second.slice(1);
+            stmp  = first_s;
+            stmp += second_a[0].sgr + second_a[0].html + console_cursor(second_a[0].ch);
+            stmp += third_s;
          } else {
             // cursor is after the end of the line
-            stmp = first + console_cursor();
+            stmp = first_s + console_cursor();
          }
       } else {
-         stmp = line_join(1);
+         stmp = line_join(1).s;
       }
       p.el.innerHTML = stmp;
-      //if (dbg) console.log('TEXT-ACCUM col='+ p.ccol +' '+ kiwi_JSON(stmp));
+      if (dbg) console.log('TEXT-ACCUM col='+ p.ccol +' '+ kiwi_JSON(stmp));
    }
 
    //if (dbg) console.log('wasScrolledDown='+ wasScrolledDown);
@@ -2466,10 +2529,11 @@ function freq_offset_page_reload() { window.location.reload(true); }
 
 var toggle_e = {
    // zero implies toggle
-	SET : 1,
-	SET_URL : 2,
-	FROM_COOKIE : 4,
-	WRITE_COOKIE : 8
+	SET: 1,
+	SET_URL: 2,
+	FROM_COOKIE: 4,
+	WRITE_COOKIE: 8,
+	NO_CLOSE_EXT: 16
 };
 
 // return value depending on flags: cookie value, set value, default value, no change
@@ -2511,17 +2575,10 @@ function kiwi_toggle(flags, val_set, val_default, cookie_id)
 	return rv;
 }
 
-function kiwi_plot_max(b)
-{
-   var t = bi[b];
-   var plot_max = 1024 / (t.samplerate/t.plot_samplerate);
-   return plot_max;
-}
-
 function kiwi_fft_mode()
 {
 	if (0) {
-		toggle_or_set_spec(toggle_e.SET, 1);
+		toggle_or_set_spec(toggle_e.SET, spec.RF);
 		setmaxdb(10);
 	} else {
 		setmaxdb(-30);
@@ -2798,7 +2855,7 @@ function kiwi_msg(param, ws)
 			break;
 		
 		case "is_admin":
-			extint_isAdmin_cb(param[1]);
+			extint.isAdmin_cb(param[1]);
 			break;
 
 		case "is_local":
@@ -2858,7 +2915,8 @@ function kiwi_msg(param, ws)
 
 		// can't simply come from 'cfg.*' because config isn't available without a web socket
 		case "reason_disabled":
-			reason_disabled = kiwi_decodeURIComponent('reason_disabled', param[1]);
+			reason_disabled = 'User connections disabled.'+
+			   ((param[1] != '')? (' Reason: '+ kiwi_decodeURIComponent('reason_disabled', param[1])) : '');
 			break;
 		
 		case "sample_rate":
@@ -2888,6 +2946,15 @@ function kiwi_msg(param, ws)
          setTimeout(confirmation_panel_close, 3000);
 			break;
 
+		case 'kiwi_kick':
+		   var s = param[1] + ((cfg.reason_kicked != '')? ('<br>Reason: '+ cfg.reason_kicked) : '');
+		   s = kiwi_decodeURIComponent('kiwi_kick', s);
+         //kiwi_show_msg(s);
+			if (confirmation.displayed) break;
+         s = w3_div('', s);
+         confirmation_show_content(s, 425, 75, null, 'red');
+			break;
+
 		default:
 			rtn = false;
 			break;
@@ -2910,6 +2977,7 @@ function kiwi_debug(msg)
 	
 function kiwi_show_msg(s)
 {
+   // FIXME: necessary to use html() due to timing reasons? Can't remember..
    html('id-kiwi-msg').innerHTML = s;
    if (s == '') {
 	   w3_hide('id-kiwi-msg-container');

@@ -82,6 +82,7 @@ var audio_started;
 var audio_last_output_offset;
 var audio_mode_iq;
 var audio_compression;
+var audio_use_first_sent_comp_value = false;
 var audio_stat_input_epoch;
 var audio_prepared_buffers;
 var audio_prepared_buffers2;
@@ -213,6 +214,7 @@ audio_prepare()   audio_recv()
 
 function audio_camp(disconnect, is_local, less_buffering, compression)
 {
+   audio_use_first_sent_comp_value = true;
    audio_camping = disconnect? 0:1;
    audio_init_disconnect = disconnect;
    audio_init(is_local, less_buffering, compression);
@@ -803,11 +805,18 @@ function audio_pre_record_buf_init()
    kiwi.pre_ping_pong = 0;
 }
 
-function audio_recv(data)
+function audio_recv(data, ws, firstChars)
 {
    //if (!audio_running) console.log('AUDIO audio_recv running='+ audio_running);
    if (!audio_running) return;
    
+   if (firstChars != 'SND') {
+      //console.log(firstChars);
+      var spec = new Uint8Array(data, 5);
+      spectrum_update(spec);
+      return;
+   }
+
 	var h8 = new Uint8Array(data, 0, 8);   // data, offset, length
    var flags = h8[3];
    var squelched = flags & audio.SND_FLAG_SQUELCH_UI;
@@ -821,6 +830,13 @@ function audio_recv(data)
    //console.log('camping='+ audio_camping +' comp='+ ((flags & audio.SND_FLAG_COMPRESSED)? 1:0) +' seq='+ seq);
    if (audio_camping == 1 && (flags & audio.SND_FLAG_COMPRESSED)) return;
    
+   // if camping don't know compression state of camped connection until first compression flag arrives
+   if (audio_camping && audio_use_first_sent_comp_value) {
+      audio_compression = (flags & audio.SND_FLAG_COMPRESSED)? true:false;
+      //console.log('audio_use_first_sent_comp_value='+ audio_compression);
+      audio_use_first_sent_comp_value = false;
+   }
+
 	var sm8 = new Uint8Array(data, 8, 2);
 	var smeter = (sm8[0] << 8) | sm8[1];
 	

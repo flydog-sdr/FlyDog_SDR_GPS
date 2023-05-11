@@ -120,7 +120,9 @@ int web_to_app(conn_t *c, nbuf_t **nbp, bool internal_connection)
 	
     *nbp = NULL;
 	if (c->stop_data) return 0;
-	nb = nbuf_dequeue(internal_connection? &c->s2c : &c->c2s);
+    ndesc_t *ndesc = internal_connection? &c->s2c : &c->c2s;
+    if (ndesc->mc == NULL) return -1;
+	nb = nbuf_dequeue(ndesc);
 	if (!nb) return 0;
 	assert(!nb->done && !nb->expecting_done && nb->buf && nb->len);
 	nb->expecting_done = TRUE;
@@ -153,10 +155,10 @@ void app_to_web(conn_t *c, char *s, int sl)
 {
 	if (c->stop_data) return;
 	if (c->internal_connection && c->type != STREAM_WATERFALL) {
-	    //printf("SKIP app_to_webinternal_connection %s sl=%d\n", rx_streams[c->type].uri, sl);
+	    //printf("SKIP app_to_webinternal_connection %s sl=%d\n", rx_conn_type(c), sl);
 	    return;
 	}
-    //printf("app_to_webinternal_connection %s sl=%d\n", rx_streams[c->type].uri, sl);
+    //printf("app_to_webinternal_connection %s sl=%d\n", rx_conn_type(c), sl);
 	nbuf_allocq(&c->s2c, s, sl);
 	//NextTask("s2c");
 }
@@ -311,7 +313,14 @@ void web_server(void *param)
 	}
 }
 
+static struct mg_server *server;
 char *web_server_hdr;
+
+struct mg_connection *web_connect(const char *url)
+{
+    struct mg_connection *mg = mg_connect(server, url);
+    return mg;
+}
 
 void web_server_init(ws_init_t type)
 {
@@ -364,7 +373,6 @@ void web_server_init(ws_init_t type)
 	}
 
 	// create webserver port(s)
-    static struct mg_server *server;
     if (type == WS_INIT_CREATE) {
         server = mg_create_server(NULL, ev_handler);
         //mg_set_option(server, "document_root", "./");		// if serving from file system

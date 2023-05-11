@@ -20,7 +20,7 @@ Boston, MA  02110-1301, USA.
 #pragma once
 
 #include "types.h"
-#include "mongoose.h"
+#include "ip_blacklist.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -31,8 +31,10 @@ Boston, MA  02110-1301, USA.
 #define KIWISDR_COM_PUBLIC_IP   "50.116.2.70"
 #define GITHUB_COM_PUBLIC_IP    "52.64.108.95"      // was "192.30.253.112"
 
-#define PORT_INTERNAL_WSPR      1138    // + 0..MAX_RX_CHANS
-#define PORT_INTERNAL_SNR       1238    // + 0..MAX_RX_CHANS
+// range of port base: + 0 .. MAX_RX_CHANS(instance) * 3(SND/WF/EXT)
+#define PORT_BASE_INTERNAL_WSPR 1138
+#define PORT_BASE_INTERNAL_FT8  1238
+#define PORT_BASE_INTERNAL_SNR  1338
 
 #define NET_DEBUG
 #ifdef NET_DEBUG
@@ -74,16 +76,6 @@ typedef struct {
 	char *ip_list[N_IPS];
 	u4_t ip[N_IPS];
 } ip_lookup_t;
-
-typedef struct {
-    u4_t dropped;
-    u4_t ip;        // ipv4
-    u1_t a,b,c,d;   // ipv4
-    u4_t nm;        // ipv4
-    u1_t cidr;
-    bool whitelist;
-    u4_t last_dropped;
-} ip_blacklist_t;
 
 typedef struct {
     // set by init_NET()
@@ -151,9 +143,7 @@ typedef struct {
     
     bool ip_blacklist_inuse;
     int ip_blacklist_len;
-    #define N_IP_BLACKLIST 512
     ip_blacklist_t ip_blacklist[N_IP_BLACKLIST];
-    #define N_IP_BLACKLIST_HASH_BYTES 4       // 4 bytes = 8 chars
     char ip_blacklist_hash[N_IP_BLACKLIST_HASH_BYTES*2 + SPACE_FOR_NULL];
 } net_t;
 
@@ -170,6 +160,7 @@ isLocal_t isLocal_if_ip(struct conn_st *conn, char *ip_addr, const char *log_pre
 bool find_local_IPs(int retry);
 u4_t inet4_d2h(char *inet4_str, bool *error, u1_t *ap=NULL, u1_t *bp=NULL, u1_t *cp=NULL, u1_t *dp=NULL);
 void inet4_h2d(u4_t inet4, u1_t *ap, u1_t *bp, u1_t *cp, u1_t *dp);
+char *inet4_h2s(u4_t inet4);
 bool is_inet4_map_6(u1_t *a);
 int inet_nm_bits(int family, void *netmask);
 bool isLocal_ip(char *ip, bool *is_loopback = NULL, u4_t *ipv4 = NULL);
@@ -180,11 +171,6 @@ bool ip_match(const char *ip, ip_lookup_t *ips);
 
 char *ip_remote(struct mg_connection *mc);
 bool check_if_forwarded(const char *id, struct mg_connection *mc, char *remote_ip);
-void ip_blacklist_init();
-void ip_blacklist_init_list(const char *list);
-int ip_blacklist_add_iptables(char *ip_s);
-bool check_ip_blacklist(char *remote_ip, bool log=false);
-void ip_blacklist_dump();
 
 
 typedef struct {
@@ -195,7 +181,7 @@ typedef struct {
 
 const u4_t ICONN_WS_SND = 1, ICONN_WS_WF = 2, ICONN_WS_EXT = 4;
 
-bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port_base,
+bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port_base, u4_t ws_flags,
     const char *mode, int locut, int hicut, float freq_kHz,
     const char *ident_user, const char *geoloc, const char *client = NULL,
     int zoom = 0, float cf_kHz = 0, int min_dB = 0, int max_dB = 0, int wf_speed = 0, int wf_comp = 0);

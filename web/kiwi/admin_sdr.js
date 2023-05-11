@@ -272,9 +272,8 @@ function config_html()
       ) +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
 			/*w3_divs('w3-restart/w3-center w3-tspace-8',
-				w3_div('', '<b>External ADC clock?</b>'),
-            w3_switch('', 'Yes', 'No', 'ext_ADC_clk', cfg.ext_ADC_clk, 'config_ext_clk_sel_cb'),
-				w3_text('w3-text-black w3-center', 'Set when external 66.666600 MHz (nominal) <br> clock connected to J5 connector/pad.')
+            w3_switch_label('w3-center', 'External ADC clock?', 'Yes', 'No', 'ext_ADC_clk', cfg.ext_ADC_clk, 'config_ext_clk_sel_cb'),
+				w3_text('w3-text-black', 'Set when external 66.666600 MHz (nominal) <br> clock connected to J5 connector/pad.')
 			),
 			w3_divs('w3-restart/w3-tspace-8',
 		      w3_input('', 'External clock frequency (enter in MHz or Hz)', 'ext_ADC_freq', cfg.ext_ADC_freq, 'config_ext_freq_cb'),
@@ -345,13 +344,11 @@ function config_html()
 		) +
 		w3_third('w3-margin-bottom w3-text-teal w3-restart', 'w3-container',
 			w3_divs('w3-center w3-tspace-8',
-				w3_div('', '<b>Increase web server priority?</b>'),
-            w3_switch('', 'Yes', 'No', 'test_webserver_prio', cfg.test_webserver_prio, 'admin_radio_YN_cb'),
+            w3_switch_label('w3-center', 'Increase web server priority?', 'Yes', 'No', 'test_webserver_prio', cfg.test_webserver_prio, 'admin_radio_YN_cb'),
 				w3_text('w3-text-black w3-center', 'Set \'no\' for standard behavior.')
 			),
 			w3_divs('w3-center w3-tspace-8',
-				w3_div('', '<b>New deadline update scheme?</b>'),
-            w3_switch('', 'Yes', 'No', 'test_deadline_update', cfg.test_deadline_update, 'admin_radio_YN_cb'),
+            w3_switch_label('w3-center', 'New deadline update scheme?', 'Yes', 'No', 'test_deadline_update', cfg.test_deadline_update, 'admin_radio_YN_cb'),
 				w3_text('w3-text-black w3-center', 'Set \'no\' for standard behavior.')
 			),
 			''
@@ -838,8 +835,7 @@ function webpage_html()
 		'<hr>' +
 		w3_half('w3-margin-bottom w3-text-teal', 'w3-container',
 			w3_divs('/w3-center w3-tspace-8',
-            w3_div('', '<b>Web server caching?</b>'),
-            w3_switch('', 'Yes', 'No', 'webserver_caching', cfg.webserver_caching, 'admin_radio_YN_cb'),
+            w3_switch_label('w3-center', 'Web server caching?', 'Yes', 'No', 'webserver_caching', cfg.webserver_caching, 'admin_radio_YN_cb'),
             w3_text('w3-text-black w3-center',
                'Set "No" when there are caching problems in your <br>' +
                'network path, e.g. user interface icons don\'t load.'
@@ -1053,10 +1049,8 @@ function kiwi_reg_html()
 		'<hr>' +
 
 		w3_divs('w3-margin-bottom w3-container w3-center',
-			w3_div('',
-					'<b>Register on <a href="http://rx.kiwisdr.com" target="_blank">rx.kiwisdr.com</a>?</b> ' +
-					w3_switch('', 'Yes', 'No', 'adm.kiwisdr_com_register', adm.kiwisdr_com_register, 'kiwisdr_com_register_cb')
-			),
+         w3_switch_label('w3-label-inline w3-label-left w3-center', 'Register on <a href="http://rx.kiwisdr.com" target="_blank">rx.kiwisdr.com</a>?',
+            'Yes', 'No', 'adm.kiwisdr_com_register', adm.kiwisdr_com_register, 'kiwisdr_com_register_cb'),
          w3_div('id-kiwisdr_com-reg-status-container',
             w3_div('w3-container',
                w3_label('w3-show-inline-block w3-margin-R-16 w3-text-teal', 'kiwisdr.com registration status:') +
@@ -1096,8 +1090,8 @@ function kiwi_reg_html()
 
 		'<hr>' +
 		w3_half('w3-margin-bottom', 'w3-container',
-         '<b>Display owner/admin email link on KiwiSDR main page?</b> ' +
-         w3_switch('', 'Yes', 'No', 'contact_admin', cfg.contact_admin, 'admin_radio_YN_cb'),
+         w3_switch_label('w3-label-inline w3-label-left', 'Display owner/admin email link on KiwiSDR main page?',
+            'Yes', 'No', 'contact_admin', cfg.contact_admin, 'admin_radio_YN_cb'),
 		   ''
 		) +
 
@@ -1129,11 +1123,11 @@ function kiwisdr_com_register_cb(path, idx)
    var bad_ip = (kiwi_inet4_d2h(cfg.server_url) != null && kiwi_inet4_d2h(cfg.server_url, true) == null);
    var no_passwordless_channels = (adm.user_password != '' && cfg.chan_no_pwd == 0);
    var no_rx_gps = (cfg.rx_gps == '' || cfg.rx_gps == '(0.000000, 0.000000)' || cfg.rx_gps == '(0.000000%2C%200.000000)');
-   var wspr_autorun_full = (cfg.WSPR.autorun >= rx_chans);
+   var autorun_full = ((cfg.WSPR.autorun + cfg.ft8.autorun) >= rx_chans);
    //console.log('kiwisdr_com_register_cb has_u_pwd='+ (adm.user_password != '') +' chan_no_pwd='+ cfg.chan_no_pwd +' no_passwordless_channels='+ no_passwordless_channels);
    //console.log('cfg.server_url='+ cfg.server_url);
    
-   if (idx == w3_SWITCH_YES_IDX && (no_url || bad_ip || no_passwordless_channels || no_rx_gps || wspr_autorun_full)) {
+   if (idx == w3_SWITCH_YES_IDX && (no_url || bad_ip || no_passwordless_channels || no_rx_gps || autorun_full)) {
       if (no_url)
          text = 'Error, you must first setup a valid Kiwi connection URL on the admin "connect" tab';
       else
@@ -1146,8 +1140,8 @@ function kiwisdr_com_register_cb(path, idx)
       if (no_rx_gps)
          text = 'Error, you must first set a valid entry in the "<i>Location (lat, lon)</i>" field';
       else
-      if (wspr_autorun_full)
-         text = 'Error, cannot have WSPR autorun enabled on ALL channels!';
+      if (autorun_full)
+         text = 'Error, cannot have WSPR/FT8 autorun enabled on ALL channels!';
       w3_switch_set_value(path, w3_SWITCH_NO_IDX);    // force back to 'no'
       idx = w3_SWITCH_NO_IDX;
       error = true;
@@ -1667,6 +1661,7 @@ function dx_render(obj)
       var freq, mo, id, no = '';
       var pb = '', ty = 0, os, ext = '';
       var dow, begin, end, has_sched = false;
+      var mode_menu_idx;
    
       // done this way so all the s_new code can be reused to construct the legend
       var h = function(psa) { return (i == dx.LEGEND)? 'w3-hide' : psa; }
@@ -1677,7 +1672,7 @@ function dx_render(obj)
          freq = d.f;
          mo = dx_decode_mode(d.fl);
          // convert from dx mode order to mode menu order
-         var mode_menu_idx = w3_array_el_seq(kiwi.mode_menu, kiwi.modes_uc[mo])
+         mode_menu_idx = w3_array_el_seq(kiwi.mode_menu, kiwi.modes_uc[mo])
          ty = (d.fl & dx.DX_TYPE) >> dx.DX_TYPE_SFT;
          id = kiwi_decodeURIComponent('dx_id', d.i);
          if (d.n) no = kiwi_decodeURIComponent('dx_no', d.n);
@@ -1725,7 +1720,7 @@ function dx_render(obj)
             ), 6,
             //i.toString(), 4,     // debug
             w3_input(h('w3-padding-small||size=8'), l('Freq kHz'), 'dx.o.fr_'+i, freq, 'dx_freq_cb'), 19,
-            w3_select(h('w3-text-red'), l('Mode'), '', 'dx.o.fm_'+i, mode_menu_idx, kiwi.mode_menu, 'dx_sel_cb'), 15,
+            w3_select(h('w3-text-red'), l('Mode'), '', 'dx.o.mm_'+i, mode_menu_idx, kiwi.mode_menu, 'dx_sel_cb'), 15,
             w3_input(h('w3-padding-small||size=4'), l('Passband Hz'), 'dx.o.pb_'+i, pb, 'dx_passband_cb'), 25,
             w3_select(h('w3-text-red'), l('Type'), '', 'dx.o.ft_'+i, ty, type_menu, 'dx_sel_cb'), 25,
             w3_input(h('w3-padding-small||size=2'), l('Offset Hz'), 'dx.o.o_'+i, os, 'dx_num_cb'), 18,
@@ -2768,14 +2763,14 @@ function ext_config_html(vars, cfg_prefix, nav_text, title_text, s)
 {
    var id = vars.ext_name;
    vars.enable = ext_get_cfg_param(cfg_prefix +'.enable', true, EXT_SAVE);
+   if (!dbgUs && extint.excl_devl.includes(id)) return;
 
 	ext_admin_config(id, nav_text,
 		w3_div('id-'+ id +' w3-text-teal w3-hide',
          w3_col_percent('w3-valign/',
             w3_div('w3-bold', title_text), 40,
             w3_inline('',
-               w3_div('w3-bold w3-margin-R-8', 'User enabled?'),
-               w3_switch('', 'Yes', 'No', cfg_prefix +'.enable', vars.enable, 'admin_radio_YN_cb'),
+               w3_switch_label('w3-margin-R-8/w3-label-inline w3-label-left/', 'User enabled?', 'Yes', 'No', cfg_prefix +'.enable', vars.enable, 'admin_radio_YN_cb'),
 				   w3_div('w3-text-black w3-margin-L-32', 'Local connections exempt.')
             )
          ) +

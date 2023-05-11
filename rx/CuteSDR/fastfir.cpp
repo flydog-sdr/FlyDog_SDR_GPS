@@ -67,11 +67,11 @@ CFastFIR::CFastFIR()
 		m_pFFTBuf_pre[i].im = 0.0;
 
 		// CIC compensating filter
-		const TYPEREAL f = fabs(fmod(TYPEREAL(i)/CONV_FFT_SIZE+0.5f, 1.0f) - 0.5f);
-		const TYPEREAL p1 = (snd_rate == SND_RATE_3CH ? -3.107f : -2.969f);
-		const TYPEREAL p2 = (snd_rate == SND_RATE_3CH ? 32.04f  : 36.26f );
-		const TYPEREAL sincf = f ? MSIN(f*K_PI)/(f*K_PI) : 1.0f;
-		m_CIC[i] = pow(sincf, -5) + p1*exp(p2*(f-0.5f));
+        const TYPEREAL f = fabs(fmod(TYPEREAL(i)/CONV_FFT_SIZE+0.5f, 1.0f) - 0.5f);
+        const TYPEREAL p1 = (snd_rate == SND_RATE_3CH ? -3.107f : -2.969f);
+        const TYPEREAL p2 = (snd_rate == SND_RATE_3CH ? 32.04f  : 36.26f );
+        const TYPEREAL sincf = f ? MSIN(f*K_PI)/(f*K_PI) : 1.0f;
+        m_CIC_coeffs[i] = pow(sincf, -5) + p1*exp(p2*(f-0.5f));
 	}
 
     SetupWindowFunction(-1);
@@ -88,6 +88,7 @@ CFastFIR::CFastFIR()
 	m_FHiCut = 1.0;
 	m_Offset = 1.0;
 	m_SampleRate = 1.0;
+	m_do_CIC_comp = true;
 }
 
 CFastFIR::~CFastFIR()
@@ -138,6 +139,17 @@ void CFastFIR::SetupWindowFunction(int window_func)
                 - 0.46 * MCOS( (K_2PI*i)/(CONV_FIR_SIZE-1) ) );
             break;
         }
+    }
+}
+
+void CFastFIR::SetupCICFilter(bool do_CIC_comp)
+{
+    m_do_CIC_comp = do_CIC_comp;
+    
+    for (int i = 0; i < CONV_FFT_SIZE; i++) {
+        m_pFilterCoef_CIC[i].re = m_pFilterCoef[i].re * (do_CIC_comp? m_CIC_coeffs[i] : 1.0);
+        m_pFilterCoef_CIC[i].im = m_pFilterCoef[i].im * (do_CIC_comp? m_CIC_coeffs[i] : 1.0);
+        m_CIC[i] = do_CIC_comp? m_CIC_coeffs[i] : 1.0;
     }
 }
 
@@ -212,10 +224,7 @@ void CFastFIR::SetupParameters(int instance, TYPEREAL FLoCut, TYPEREAL FHiCut,
 	//convert FIR coefficients to frequency domain by taking forward FFT
 	MFFTW_EXECUTE(m_FFT_CoefPlan);
 
-    for (i = 0; i < CONV_FFT_SIZE; i++) {
-        m_pFilterCoef_CIC[i].re = m_pFilterCoef[i].re * m_CIC[i];
-        m_pFilterCoef_CIC[i].im = m_pFilterCoef[i].im * m_CIC[i];
-    }
+    SetupCICFilter(m_do_CIC_comp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -234,6 +243,10 @@ int CFastFIR::ProcessData(int rx_chan, int InLength, TYPECPX* InBuf, TYPECPX* Ou
     int receive_FFT_instance = m_instance;
     bool receive_FFT_pre = (receive_FFT != NULL && (ext_u->FFT_flags & PRE_FILTERED));
     bool receive_FFT_post = (receive_FFT != NULL && (ext_u->FFT_flags & POST_FILTERED));
+
+	snd_t *snd = &snd_inst[rx_chan];
+    ext_receive_FFT_samps_t specAF_FFT = snd->specAF_FFT;
+    bool specAF_FFT_post = (specAF_FFT != NULL && snd->specAF_instance == m_instance);
 
     int i = 0;
     int j;
@@ -281,6 +294,8 @@ int CFastFIR::ProcessData(int rx_chan, int InLength, TYPECPX* InBuf, TYPECPX* Ou
 
 			if (receive_FFT_post)
 				receive_FFT(rx_chan, receive_FFT_instance, POST_FILTERED, CONV_FFT_TO_OUTBUF_RATIO, CONV_FFT_SIZE, m_pFFTBuf);
+			if (specAF_FFT_post)
+				specAF_FFT(rx_chan, receive_FFT_instance, POST_FILTERED, CONV_FFT_TO_OUTBUF_RATIO, CONV_FFT_SIZE, m_pFFTBuf);
 
 			MFFTW_EXECUTE(m_FFT_RevPlan);
 

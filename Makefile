@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 577
+VERSION_MIN = 599
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
@@ -868,8 +868,8 @@ endif
 
 $(BUILD_DIR)/kiwi.bin: $(OBJ_DIR) $(OBJ_DIR_O3) $(KEEP_DIR) $(ALL_OBJECTS) $(BIN_DEPS) $(DEVEL_DEPS) $(EXTS_DEPS)
 ifneq ($(SAN),1)
-    ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
-	    @echo "DEVSYS: TEMPORARY SKIP OF KIWI.BIN LINK STEP"
+    ifeq ($(KIWI_SKIP_LINK),true)
+	    @echo "DEVSYS: SKIP OF KIWI.BIN LINK STEP"
 	    touch $@
     else
 	    @echo $(CPP) $(LDFLAGS) "..." $(DEVEL_DEPS) $(EXTS_DEPS) $(LIBS) -o $(BUILD_OBJ)
@@ -881,8 +881,8 @@ endif
 
 $(BUILD_DIR)/kiwid.bin: foptim_gen $(OBJ_DIR) $(OBJ_DIR_O3) $(KEEP_DIR) $(ALL_OBJECTS) $(BIN_DEPS) $(EMBED_DEPS) $(EXTS_DEPS)
 ifneq ($(SAN),1)
-    ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
-	    @echo "DEVSYS: TEMPORARY SKIP OF KIWID.BIN LINK STEP"
+    ifeq ($(KIWI_SKIP_LINK),true)
+	    @echo "DEVSYS: SKIP OF KIWID.BIN LINK STEP"
 	    touch $@
     else
 	    @echo $(CPP) $(LDFLAGS) "..." $(EMBED_DEPS) $(EXTS_DEPS) $(LIBS) -o $@
@@ -1327,14 +1327,14 @@ LOGS = \
 	cat /tmp/kiwi.log
 
 log:
-	-@$(LOGS) | grep kiwid
+	-@$(LOGS) | grep -a kiwid
 	@rm -f /tmp/kiwi.log
 
 slog:
-	-@cat /var/log/user.log | grep kiwid
+	-@cat /var/log/user.log | -a grep kiwid
 
 tlog:
-	-@cat /var/log/user.log | grep kiwid | tail -500
+	-@cat /var/log/user.log | grep -a kiwid | tail -500
 
 syslog:
 	tail -n 1000 -f /var/log/syslog
@@ -1343,7 +1343,7 @@ flog:
 	tail -n 100 -f /var/log/frpc.log
 
 LOCAL_IP = grep -vi 192.168.1
-LEAVING = grep -i leaving | grep -vi kf6vo | $(LOCAL_IP)
+LEAVING = grep -ai leaving | grep -vi kf6vo | $(LOCAL_IP)
 users:
 	-@$(LOGS) | $(LEAVING)
 	@rm -f /tmp/kiwi.log
@@ -1434,10 +1434,12 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
 # selectively transfer files to the target so everything isn't compiled each time
 EXCLUDE_RSYNC = ".DS_Store" ".git" "/obj" "/obj_O3" "/obj_keep" "*.dSYM" "*.bin" "*.aout" "e_cpu/a" "*.aout.h" "kiwi.gen.h" \
 	"verilog/kiwi.gen.vh" "web/edata*" "node_modules" "morse-pro-compiled.js"
-RSYNC_ARGS = -av --delete $(addprefix --exclude , $(EXCLUDE_RSYNC)) $(addprefix --exclude , $(EXT_EXCLUDE_RSYNC)) . $(RSYNC_USER)@$(HOST):~root/$(REPO_NAME)
+RSYNC_ARGS = -av --delete $(addprefix --exclude , $(EXCLUDE_RSYNC)) $(addprefix --exclude , $(EXT_EXCLUDE_RSYNC)) . $(RSYNC_USER)@$(HOST):$(RSYNC_DIR)/$(REPO_NAME)
 
 RSYNC_USER ?= root
+RSYNC_DIR ?= /root
 PORT ?= 22
+
 ifeq ($(PORT),22)
 	RSYNC = rsync
 else

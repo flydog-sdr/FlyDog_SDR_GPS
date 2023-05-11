@@ -2,6 +2,171 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.599  Apr 21, 2023
+    Autorun: Don't use waterfall channels on waterfall-limited, split configurations (e.g. rx8_wf2).
+
+v1.598  Apr 19, 2023
+    /adc API: When a level of zero is specified (e.g. my_kiwi:8073/adc?level=0) the ADC overload
+    signal will be counted instead of the current "ADC value over level threshold" scheme.
+    This will give a precise count of ADC overload events compared to the "adc_ov=N" entry in
+    the /status API which is an averaged and quantized indicator.
+    
+    FT8/WSPR admin page: Added "set all to regular use" button as a fast way to clear autorun menus.
+
+    Don't display unwanted top bar when extensions open.
+
+v1.597  Apr 17, 2023
+    Autorun/preemption bug fix for TDoA extension.
+
+v1.596  Apr 16, 2023
+    Autorun/preemption bug fixes.
+
+v1.595  Apr 14, 2023
+    Autorun/preemption bug fixes.
+
+v1.594  Apr 12, 2023
+    ADC level measurement: AJAX/JSON interface to help determine how much "headroom" is available in
+    the ADC. That is, how often the upper bits of the 14-bit ADC are getting set by strong signals.
+    Interface similar to how /snr works, i.e. my_kiwi:8073/adc?level=0x1800
+    Done this way so it doesn't require a channel connection, which would otherwise be very intrusive
+    given how often measurements will probably have to be made to properly characterize the headroom.
+    Note that this is fundamentally different from the current overload indicator on the S-meter
+    which is an averaged measurement of the full-scale overflow signal produced by the ADC itself.
+    Complete discussion on the forum.
+    
+    The SNR measurement process will now run if a preemptible autorun channel is available (thanks Martin).
+
+    Admin page, control tab. New checkbox:
+    "Non-Kiwi connections (kiwirecorder, TDoA) can preempt autorun processes"
+    
+    When an autorun process gets kicked the log will say e.g. "(PREEMPTED after 0:12:34)" instead of
+    "(LEAVING after 0:12:34)".
+
+v1.593  Apr 11, 2023
+    Fixed problem where new user connections were incorrectly being redirected even though
+    preemptible autorun processes exist.
+
+    Fixed problem where camping a channel sometimes resulted in very low volume because the wrong
+    initial compression state was being used.
+
+v1.592  Apr 10, 2023
+    Reverted change causing NBFM distortion (thanks Glenn).
+
+    FT8/WSPR autorun preemption: A new menu on the autorun configuration section allows you to
+    specify if an autorun process is preemptible. I.e. a new incoming user connection will
+    kick the autorun process off the channel and take its place. Every 10 seconds autorun processes
+    will attempt to fill empty channels. Kiwirecorder connections should not interrupt preemptible
+    autoruns. Only Kiwi user connections. (thanks Martin)
+
+    WSPR extension:
+        Control panel height now set to 90% the height of the waterfall (thanks Eric).
+        
+        Spot upload debugging: On the admin > extensions > WSPR page, when "Log spot debug info?" is
+        "Yes" then an additional line in the log will show the actual upload response from wsprnet.org
+            e.g.    WSPR UPLOAD: wsprnet.org said: "1 out of 1 spot(s) added"
+        Upload debugging only works for WSPR autorun currently.
+    
+    S-meter extension: Defaults for all control panel values can be set on the
+        Admin > Extensions > S-meter page (thanks Eric).
+    
+    kiwiclient/kiwirecorder: Added support for URL redirection. Requires most recent version of
+    kiwirecorder and kiwi server v1.592 or later to be used (thanks loststation).
+    
+    Kick reason: The admin control tab has a new field "Reason if kicked" that will be displayed in
+    a panel when a user connection is kicked. Previously a kicked connection would just stop with
+    no explanation (thanks Rob who suggested this some time ago I believe).
+    
+    Internal connections (e.g. autorun) behavior w.r.t. disabled/kicked connections:
+    An internal connection will ignore the disabling of user connections and ignore the
+    global kick button (both on admin control tab). However individual internal connections can
+    still be kicked via the button on the admin status page.
+
+v1.591  Apr 3, 2023
+    FT8: Added autorun function. Works the same as WSPR autorun. See Admin > Extensions > FT8 page.
+    FT8/4 autorun channels display "NNN decoded", much like WSPR, where NNN is a count of pending
+    spots to be uploaded to pskreporter.info Pending, because uploads to pskreporter.info only
+    occur once every 5 minutes.
+
+v1.589,590  Apr 1, 2023
+    Workaround added for the IQ extension residual phase rotation problem. Details on the forum:
+    forum.kiwisdr.com/index.php?p=/discussion/2852/unexpected-iq-phase-shift-in-gpsdo-kiwi/p1
+    
+    Debian 8 is now deprecated. Existing Kiwis using Debian 8 and a recent Kiwi software version
+    will continue to receive auto-updates and don't really need to do anything.
+    But re-flashing from the factory v1.2 image (on the supplied sd card) or from the old v1.390
+    img.xz file no longer works as the Debian 8 repos from debian.org are now broken.
+    However, if you're running Debian 8 you can choose to upgrade to Debian 10.
+    Instructions are on the forum.
+
+    Spec AF:
+        Indented the maximum bandwidth edges and mark with red lines (thanks Paul).
+        Moved the de-emphasis filter before the FFT-based passband filter so the effect of
+        de-emphasis will now appear in the Spec AF display.
+
+    Spectrum peak hold:
+        In peak hold active mode a mousedown on P1 P2 for more than one second will clear the trace.
+        Added border to peak buttons P1 P1 with colors matching the yellow/magenta trace color.
+            Text colors similar to before: white=OFF green=ACTIVE orange=HOLD (was magenta)
+        Fixed problem where activating peak hold didn't always work in until the second try.
+    
+    Admin console: Optimized ANSI color palette for increased contrast. For example a
+        "nano /etc/ssh/sshd_config" is readable now (thanks Rob). Fixed other ANSI-related bugs.
+
+v1.587,588  Mar 13, 2023
+    FT8 extension:
+        Limit log output to 1024 lines (roughly 10 minutes of decodes). Prevents browser from
+        eventually going into meltdown.
+    Reverted SNR measurement change per request.
+
+v1.585,586  Mar 12, 2023
+    The spectrum ("Spec") button on the main control panel now toggles between the existing
+    waterfall spectrum (renamed "Spec RF") and a new audio channel spectrum ("Spec AF").
+    Spec AF is identical to the spectrum function on the FFT extension (which has been removed).
+    This change allows the AF spectrum to be observed when other extensions (that don't use the
+    top display) are running. The sig gen in particular.
+
+    FT8 extension:
+        Set default SNR correction value to -22 dB.
+        Include decoder-computed SNR in spots uploaded to pskreporter.info
+        Added background color stripes to log messages for easier reading (thanks Martin).
+
+    Fixed bug causing incorrect reseting of admin page WSPR grid field while typing.
+    SNR reporting task takes twice as many measurements spread out over one minute.
+
+v1.584  Mar 6, 2023
+    FT8 extension:
+        First URL parameter selects an entry in the freq menu, E.g. "my_kiwi:8073/?ext=ft8,10136"
+        
+        Added clickable call/grid links to older, previously reported, spots.
+        
+        Added "age" column. After a call/grid spot is uploaded to pskreporter.info the callsign is
+        cached and prevented from uploading again for 60 minutes. The age column shows this
+        cache timer. The age cache is cleared when FT8/FT4 mode is changed or the
+        frequency changed by more than 1 kHz, e.g. a band change or a change to a different
+        signal cluster (e.g. 10136 regular versus 10140 used for a particular DX operation).
+        
+        Added link to pskreporter.info map page with the reporter callsign preset and defaults
+        of: all bands, signals, rcvd by, callsign, FT8, 24 hrs.
+        
+        Added help button content.
+
+v1.583  Mar 4, 2023
+    FT8 extension: Make spot callsign and grid clickable links like WSPR extension.
+    Fixed "Antenna switch extension is not configured" problem.
+
+v1.581  Mar 3, 2023
+    FT8 extension initial release. See Kiwi forum for details.
+
+v1.579  Mar 2, 2023
+    Revert spectrum peak hold colors.
+    Extension development/testing.
+
+v1.578  Feb 12, 2023
+    Fixed bug setting dx label modes.
+    Improved high end response of NBFM de-emphasis filters.
+    Squelch value updated continuously while slider moved, not just on mouse-up.
+    New colors for spectrum peak hold traces and "slow dev" plot based on forum discussions.
+
 v1.577  Feb 6, 2023
     Audio response de-emphasis for AM/SSB and NBFM:
         On the main control panel, audio tab, the "de-emp" menu to the right of the volume control

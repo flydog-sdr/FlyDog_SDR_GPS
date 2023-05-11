@@ -22,6 +22,7 @@ Boston, MA  02110-1301, USA.
 #include "options.h"
 #include "kiwi.h"
 #include "rx.h"
+#include "rx_util.h"
 #include "mem.h"
 #include "misc.h"
 #include "web.h"
@@ -227,11 +228,13 @@ static void webserver_collect_print_stats(int print)
 		last_hour = hour;
 	}
 
+    // call every minute at the top of the minute
 	if (min != last_min) {
 		schedule_update(min);
 		last_min = min;
 	}
 	
+    rx_autorun_restart_victims();
 	spi_stats();
 }
 
@@ -282,7 +285,7 @@ static void called_every_second()
 		
 		#ifdef HONEY_POT
             cprintf(c, "API: rx%d arrival=%d served=%d type=%s ext_api%d isLocal%d internal%d\n",
-                ch, now - c->arrival, served, rx_streams[c->type].uri,
+                ch, now - c->arrival, served, rx_conn_type(c),
                 c->ext_api, c->isLocal, c->internal_connection);
         #endif
         
@@ -322,9 +325,29 @@ static void called_every_second()
             int ext_api_users = rx_count_server_conns(EXT_API_USERS);
             cprintf(c, "API: ext_api_users=%d >? ext_api_ch=%d %s\n", ext_api_users, ext_api_ch,
                 (ext_api_users > ext_api_ch)? "T(DENY)":"F(OKAY)");
+            bool kick = false;
             if (ext_api_users > ext_api_ch) {
                 clprintf(c, "API: non-Kiwi app was denied connection: %d/%d %s \"%s\"\n",
                     ext_api_users, ext_api_ch, c->remote_ip, c->ident_user);
+                kick = true;
+            } else {
+                #ifdef OPTION_DENY_APP_FINGERPRINT_CONN
+                    float f_kHz = (float) c->freqHz / kHz + freq_offset_kHz;
+                    // 58.59 175.781
+                    float floor_kHz = floorf(f_kHz);
+                    bool freq_trig = (floor_kHz == 58.0f || floor_kHz == 175.0f);
+                    bool hasDelimiter = (c->ident_user != NULL && strpbrk(c->ident_user, "-_.`,/+~") != NULL);
+                    bool trig = (c->type == STREAM_WATERFALL && freq_trig && hasDelimiter && c->zoom == 8);
+                    clprintf(c, "API: TRIG=%d %s(%d) f_kHz=%.3f freq_trig=%d hasDelimiter=%d z=%d\n",
+                        trig, rx_conn_type(c), c->type, f_kHz, freq_trig, hasDelimiter, c->zoom);
+                    if (trig) {
+                        clprintf(c, "API: non-Kiwi app fingerprint was denied connection\n");
+                        kick = true;
+                    }
+                #endif
+            }
+            
+            if (kick) {
                 send_msg(c, SM_NO_DEBUG, "MSG too_busy=%d", ext_api_ch);
                 c->kick = true;
             }
