@@ -1,10 +1,13 @@
 VERSION_MAJ = 1
-VERSION_MIN = 599
+VERSION_MIN = 601
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
 REPO_NAME := FlyDog_SDR_GPS
 REPO := https://github.com/flydog-sdr/$(REPO_NAME).git
+
+# for any config-specific options/dependencies
+-include ../kiwi.config/Makefile.kiwi.inc
 
 #
 # Makefile for KiwiSDR project

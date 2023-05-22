@@ -2,6 +2,24 @@ CHANGE_LOG
 
 For the Github commit log see here: github.com/flydog-sdr/FlyDog_SDR_GPS/commits/master
 
+v1.601  Apr 25, 2023
+    Admin page:
+        Debian version now shown on status tab.
+        Backup tab shows error message if Debian 11 (or higher) because backups not supported yet.
+            Currently this only effects BBAI-64. BBAI running Debian 9 and BBG/B Debian 10 work.
+    
+    GPS: Fixed bug with Galileo solution accuracy introduced as a side-effect of Verilog
+    code cleanup (thanks Tom and Glenn).
+
+v1.600  Apr 23, 2023
+    FT8/WSPR autorun:
+        For waterfall-limited, split configurations (e.g. rx8_wf2) allow waterfall channels to be
+        used initially (after rx3-rx7 have been filled) except for the case of preemption restart.
+        This restores the prior behavior allowing e.g. 7 of 8 channels to be initialized with
+        autorun processes.
+        
+        Stop autorun processes during an sd card backup and resume afterwards.
+
 v1.599  Apr 21, 2023
     Autorun: Don't use waterfall channels on waterfall-limited, split configurations (e.g. rx8_wf2).
 
