@@ -637,7 +637,7 @@ used by rx/{iq_mixer.v, gen.v}:
         Memory Type = Block ROM
         Optimization Goal = Area
         Phase Width = 32 bits
-        Frequency Resolution = 0.015522027388315065 Hz
+        Frequency Resolution = 0.029103830456733704 Hz
         Phase Angle Width = 13 Bits
         Spurious Free Dynamic Range = 90 dB
         Latency = 8

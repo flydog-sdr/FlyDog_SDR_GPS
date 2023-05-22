@@ -282,8 +282,8 @@ static void _update_task(void *param)
 		lprintf("UPDATE: building new version..\n");
 
         #ifndef PLATFORM_raspberrypi
-            update_in_progress = true;  // NB: must be before rx_server_user_kick(-1) to prevent new connections
-            rx_server_user_kick(-1);    // kick everyone off to speed up build
+            update_in_progress = true;  // NB: must be before rx_server_user_kick() to prevent new connections
+            rx_server_user_kick(KICK_ALL);      // kick everything (including autorun) off to speed up build
             TaskSleepReasonSec("kick delay", 5);
         #endif
 
@@ -321,7 +321,7 @@ common_return:
 	if (ip_auto_download_oneshot) {
 	    ip_auto_download_oneshot = false;
         //printf("bl_GET: update check normal\n");
-	    bl_GET(TO_VOID_PARAM(1));
+	    bl_GET(TO_VOID_PARAM(BL_CHECK_ONLY));
 	}
 
 	if (conn) conn->update_check = WAIT_UNTIL_NO_USERS;     // restore default
@@ -339,7 +339,7 @@ void check_for_update(update_check_e type, conn_t *conn)
         if (ip_auto_download_check) {
             ip_auto_download_check = false;
             //printf("bl_GET: update check false\n");
-            bl_GET(TO_VOID_PARAM(1));
+            bl_GET(TO_VOID_PARAM(BL_CHECK_ONLY));
         }
 
 		return;
