@@ -790,6 +790,8 @@ static void reg_public(void *param)
                 email, add_nat, version_maj, version_min, debian_maj, debian_min,
                 dom_sel, dom_stat, net.serno, PRINTF_U64_ARG(net.dna), kiwisdr_com_reg? 1:0,
                 net.pvt_valid? net.ip_pvt : "not_valid", net.pub_valid? net.ip_pub : "not_valid", timer_sec());
+	} else {
+            asprintf(&cmd_p, "wget --version");
 	}
     
 		bool server_enabled = (!down && admcfg_bool("server_enabled", NULL, CFG_REQUIRED) == true);
