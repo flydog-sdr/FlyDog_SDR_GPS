@@ -781,14 +781,16 @@ static void reg_public(void *param)
         int server_port = (dom_sel == DOM_SEL_REV)? 80 : net.port_ext;
         int dom_stat = (dom_sel == DOM_SEL_REV)? net.proxy_status : (DUC_enable_start? net.DUC_status : -1);
 
+	if (kiwisdr_com_reg) {
 	    // done here because updating timer_sec() is sent
-        asprintf(&cmd_p, "wget --timeout=30 --tries=2 --inet4-only -qO- "
-            "\"%s/php/update.php?url=http://%s:%d&mac=%s&email=%s&add_nat=%d&ver=%d.%d&deb=%d.%d"
-            "&dom=%d&dom_stat=%d&serno=%d&dna=%08x%08x&reg=%d&pvt=%s&pub=%s&up=%d\" 2>&1",
-            kiwisdr_com, server_url, server_port, net.mac,
-            email, add_nat, version_maj, version_min, debian_maj, debian_min,
-            dom_sel, dom_stat, net.serno, PRINTF_U64_ARG(net.dna), kiwisdr_com_reg? 1:0,
-            net.pvt_valid? net.ip_pvt : "not_valid", net.pub_valid? net.ip_pub : "not_valid", timer_sec());
+            asprintf(&cmd_p, "wget --timeout=30 --tries=2 --inet4-only -qO- "
+                "\"%s/php/update.php?url=http://%s:%d&mac=%s&email=%s&add_nat=%d&ver=%d.%d&deb=%d.%d"
+                "&dom=%d&dom_stat=%d&serno=%d&dna=%08x%08x&reg=%d&pvt=%s&pub=%s&up=%d\" 2>&1",
+                kiwisdr_com, server_url, server_port, net.mac,
+                email, add_nat, version_maj, version_min, debian_maj, debian_min,
+                dom_sel, dom_stat, net.serno, PRINTF_U64_ARG(net.dna), kiwisdr_com_reg? 1:0,
+                net.pvt_valid? net.ip_pvt : "not_valid", net.pub_valid? net.ip_pub : "not_valid", timer_sec());
+	}
     
 		bool server_enabled = (!down && admcfg_bool("server_enabled", NULL, CFG_REQUIRED) == true);
         bool send_deregister = false;
