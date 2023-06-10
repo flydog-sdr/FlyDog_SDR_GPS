@@ -118,8 +118,8 @@ void cfg_adm_transition()
 
 
 	// update JSON files
-	admcfg_save_json(cfg_adm.json);
-	cfg_save_json(cfg_cfg.json);
+	admcfg_save_json(cfg_adm.json);     // during init doesn't conflict with admin cfg
+	cfg_save_json(cfg_cfg.json);        // during init doesn't conflict with admin cfg
 }
 
 int inactivity_timeout_mins, ip_limit_mins;
@@ -326,6 +326,7 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_int("ident_len", IDENT_LEN_MIN, &update_cfg);
     cfg_default_bool("show_geo", true, &update_cfg);
     cfg_default_bool("show_1Hz", false, &update_cfg);
+    cfg_default_int("dx_default_db", 0, &update_cfg);
 
     bool want_inv = cfg_default_bool("spectral_inversion", false, &update_cfg);
     if (called_at_init || !kiwi.spectral_inversion_lockout)
@@ -365,14 +366,22 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_float("nr_specAlpha", 0.95, &update_cfg);
     cfg_default_int("nr_specSNR", 30, &update_cfg);
 
-    // the auto speed process is only run at restart time -- only handle forced speed changes here
+    // Only handle forced speed changes here as ESPEED_AUTO is always in effect after a reboot.
+    // ethtool doesn't seem to have a way to go back to auto speed once a forced speed is set?
     int espeed = cfg_default_int("ethernet_speed", 0, &update_cfg);
     static int current_espeed;
-    if (espeed != current_espeed) {
-        printf("ETH0 ethernet speed %s\n", (espeed == 0)? "auto" : ((espeed == 1)? "10M" : "100M"));
-        if (espeed) {
-            non_blocking_cmd_system_child("kiwi.ethtool",
-                stprintf("ethtool -s eth0 speed %d duplex full", (espeed == 1)? 10:100), NO_WAIT);
+    if (espeed != current_espeed || (platform == PLATFORM_BB_AI64 && current_espeed == ESPEED_10M)) {
+        if (platform == PLATFORM_BB_AI64 && (espeed == ESPEED_10M || current_espeed == ESPEED_10M)) {
+            lprintf("ETH0 CAUTION: BBAI-64 doesn't support 10 mbps. Reverting to auto speed.\n");
+            espeed = ESPEED_AUTO;
+            if (called_at_init)
+                cfg_set_int("ethernet_speed", espeed);
+        } else {
+            lprintf("ETH0 ethernet speed %s\n", (espeed == ESPEED_AUTO)? "auto" : ((espeed == ESPEED_10M)? "10M" : "100M"));
+            if (espeed) {
+                non_blocking_cmd_system_child("kiwi.ethtool",
+                    stprintf("ethtool -s eth0 speed %d duplex full", (espeed == ESPEED_10M)? 10:100), NO_WAIT);
+            }
         }
         current_espeed = espeed;
     }
@@ -506,7 +515,7 @@ void update_vars_from_config(bool called_at_init)
 	}
 
 	if (update_cfg)
-		cfg_save_json(cfg_cfg.json);
+		cfg_save_json(cfg_cfg.json);    // during init doesn't conflict with admin cfg
 
 
 	// same, but for admin config
@@ -537,6 +546,7 @@ void update_vars_from_config(bool called_at_init)
     admcfg_default_bool("console_local", true, &update_admcfg);
     admin_keepalive = admcfg_default_bool("admin_keepalive", true, &update_admcfg);
     log_local_ip = admcfg_default_bool("log_local_ip", true, &update_admcfg);
+    admcfg_default_bool("dx_comm_auto_download", true, &update_admcfg);
 
     // decouple rx.kiwisdr.com and sdr.hu registration
     bool sdr_hu_register = admcfg_bool("sdr_hu_register", NULL, CFG_REQUIRED);
@@ -675,7 +685,7 @@ void update_vars_from_config(bool called_at_init)
     //admcfg_default_bool("ip_address.use_static", false, &update_admcfg);
 
 	if (update_admcfg)
-		admcfg_save_json(cfg_adm.json);
+		admcfg_save_json(cfg_adm.json);     // during init doesn't conflict with admin cfg
 
 
     // one-time-per-run initializations
