@@ -1325,7 +1325,7 @@ ifneq ($(ETC_HOSTS_HAS_KIWI),true)
 	@echo '127.0.0.1       kiwisdr' >>/etc/hosts
 endif
 
-	@echo
+	#@echo
 	#systemctl enable kiwid.service
 
 # remove public keys leftover from development
