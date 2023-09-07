@@ -35,7 +35,7 @@ C_LINKAGE(void kstr_free(kstr_t *s_kstr_cstr)); // only frees a kstr object, wil
 C_LINKAGE(char *kstr_free_return_malloced(kstr_t *s_kstr_cstr));  // frees kstr object, but returns underlying memory malloced for string
 C_LINKAGE(int kstr_len(kstr_t *s_kstr_cstr));  // return C-string length from kstr object
 C_LINKAGE(kstr_t *kstr_wrap(char *s_malloc));  // wrap a malloc()'d C-string in a kstr object so it is auto-freed later on
-C_LINKAGE(kstr_t *kstr_cat(kstr_t *s1_kstr_cstr, const kstr_t *s2_kstr_cstr));  // will kstr_free() s2_kstr_cstr argument
+C_LINKAGE(kstr_t *kstr_cat(kstr_t *s1_kstr_cstr, const kstr_t *s2_kstr_cstr, int *slen DEF_NULL));  // will kstr_free() s2_kstr_cstr argument
 C_LINKAGE(kstr_t *kstr_asprintf(kstr_t *ks, const char *fmt, ...));  // essentially a "kstr_cat(ks, kstr_wrap(asprintf(fmt, ...)))"
 C_LINKAGE(kstr_t *kstr_list_int(const char *head, const char *fmt, const char *tail, int *list, int nlist, int *qual DEF_NULL, int bias DEF_0));
 
@@ -64,10 +64,11 @@ int kiwi_strnlen(const char *s, int limit);
 char *kiwi_strncpy(char *dst, const char *src, size_t n);
 char *kiwi_strncat(char *dst, const char *src, size_t n);
 
-int kiwi_snprintf_int(const char *buf, size_t buflen, const char *fmt, ...);
+int _kiwi_snprintf_int(const char *buf, size_t buflen, const char *fmt, ...);
 // NB: check that caller buf is const (i.e. not a pointer) so sizeof(buf) is valid
-#define kiwi_snprintf_buf(buf, fmt, ...) kiwi_snprintf_int(buf, sizeof(buf), fmt, ## __VA_ARGS__)
-#define kiwi_snprintf_ptr(ptr, buflen, fmt, ...) kiwi_snprintf_int(ptr, buflen, fmt, ## __VA_ARGS__)
+#define kiwi_snprintf_buf(buf, fmt, ...) _kiwi_snprintf_int(buf, sizeof(buf), fmt, ## __VA_ARGS__)
+#define kiwi_snprintf_buf_plus_space_for_null(buf, fmt, ...) _kiwi_snprintf_int(buf, sizeof(buf) + SPACE_FOR_NULL, fmt, ## __VA_ARGS__)
+#define kiwi_snprintf_ptr(ptr, buflen, fmt, ...) _kiwi_snprintf_int(ptr, buflen, fmt, ## __VA_ARGS__)
 
 bool kiwi_sha256_strcmp(char *str, const char *key);
 

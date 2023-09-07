@@ -476,7 +476,7 @@ function wspr_help(show)
                'It\'s more of a demonstration than a serious WSPR decoding utility. ' +
                'An older version of the WSJT-X <i>wsprd</i> decoder is used. Together with the limited ' +
                'processing power of the Beagle this means fewer decodes occur compared to the current WSJT-X. ' +
-               'For serious decoding try <a href="http://wsprdaemon.org/index.html" target="_blank">WsprDaemon</a> ' +
+               'For serious decoding try <a href="http://wsprdaemon.org/index.html" target="_blank">wsprdaemon</a> ' +
                'which runs on a separate computer and makes connections to the Kiwi. ' +
                '<br><br>' +
          
@@ -497,9 +497,10 @@ function wspr_help(show)
                'WSPR decoding still occurs even though spots are not being uploaded. ' +
                '<br><br>' +
 
-               'Test button: Click when the time clock just becomes fully blue (i.e. at the beginning of an even minute). ' +
-               'A two minutes test recording will be played back containing 8 spots. These spots will <b>not</b> be uploaded to wsprnet.org ' +
-               '&nbsp;The recording was made with a BFO of 750 Hz, but will still decode even if the Kiwi is configured for another BFO value. ' +
+               'Test button: First, select a band from the band menu. It doesn\'t matter which one. ' +
+               'Then click the <i>test</i> button when the time clock just becomes fully blue (i.e. at the beginning of an even minute). ' +
+               'A two minute test recording will be played back containing 8 spots. These spots will <b>not</b> be uploaded to wsprnet.org ' +
+               '&nbsp;The recording was made with a BFO of 750 Hz, but will still decode even if the extension is configured for another BFO value. ' +
                '<br><br>' +
                
                'The decoder column values are the same as with other WSPR programs:' +
@@ -675,7 +676,8 @@ function wspr_autorun_public_check()
 	   if (cfg.WSPR['autorun'+ i] != 0 && cfg.WSPR['preempt'+ i] == wspr.PREEMPT_NO)
 	      num_autorun++;
 	}
-	ext_set_cfg_param('WSPR.autorun', num_autorun, EXT_SAVE);
+	if (cfg.WSPR.autorun != num_autorun)
+	   ext_set_cfg_param('WSPR.autorun', num_autorun, EXT_SAVE);
 	
 	var full = (adm.kiwisdr_com_register && num_autorun >= rx_chans);
    w3_remove_then_add_cond('id-wspr-warn-full', full, 'w3-red', 'w3-yellow');
@@ -706,8 +708,9 @@ function wspr_autorun_all_regular_cb(path, idx, first)
    for (var i = 0; i < rx_chans; i++) {
       var path = 'WSPR.autorun'+ i;
       w3_select_value(path, 0);
-      admin_select_cb(path, 0);
+      admin_select_cb(path, 0, /* first: true => no save */ true);
    }
+   ext_set_cfg_param('WSPR.autorun', 0, EXT_SAVE);
    w3_show('id-wspr-restart');
 	var el = w3_el('id-kiwi-container');
 	w3_scrollDown(el);   // keep menus visible

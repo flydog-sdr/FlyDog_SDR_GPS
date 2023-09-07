@@ -21,6 +21,7 @@ Boston, MA  02110-1301, USA.
 #include "options.h"
 #include "config.h"
 #include "kiwi.h"
+#include "printf.h"
 #include "rx.h"
 #include "rx_util.h"
 #include "clk.h"
@@ -55,6 +56,8 @@ Boston, MA  02110-1301, USA.
 #include "rx_sound.h"
 #include "rx_waterfall.h"
 #include "wdsp.h"
+#include "fpga.h"
+#include "rf_attn.h"
 
 #ifdef DRM
  #include "DRM.h"
@@ -126,6 +129,7 @@ static str_hashes_t snd_cmd_hashes[] = {
     { "SET sam_", CMD_SAM_PLL },
     { "SET wind", CMD_SND_WINDOW_FUNC },
     { "SET spc_", CMD_SPEC },
+    { "SET rf_a", CMD_RF_ATTN },
     { 0 }
 };
 
@@ -170,6 +174,8 @@ void c2s_sound_setup(void *param)
 	send_msg(conn, SM_SND_DEBUG, "MSG freq_offset=%.3f", freq_offset_kHz);
 	send_msg(conn, SM_SND_DEBUG, "MSG center_freq=%d bandwidth=%d adc_clk_nom=%.0f", (int) ui_srate/2, (int) ui_srate, ADC_CLOCK_NOM);
 	send_msg(conn, SM_SND_DEBUG, "MSG audio_init=%d audio_rate=%d sample_rate=%.6f", conn->isLocal, snd_rate, frate);
+
+    dx_last_community_download();
 }
 
 static bool specAF_FFT(int rx_chan, int instance, int flags, int ratio, int ns_out, TYPECPX *samps)
@@ -235,10 +241,11 @@ void c2s_sound(void *param)
 	//static u4_t ncnt[MAX_RX_CHANS];
 	const char *s;
 	
-	double freq=-1, _freq, gen=-1, _gen, locut=0, _locut, hicut=0, _hicut, mix;
+	double freq=-1, _freq, gen=-1, locut=0, _locut, hicut=0, _hicut;
 	int mode=-1, _mode, genattn=0, _genattn, mute=0, test=0, deemp=0, deemp_nfm=0;
 	u4_t mparam=0;
 	double z1 = 0;
+	float rf_attn_dB;
 
 	double frate = ext_update_get_sample_rateHz(rx_chan);      // FIXME: do this in loop to get incremental changes
 	//printf("### frate %f snd_rate %d\n", frate, snd_rate);
@@ -286,7 +293,8 @@ void c2s_sound(void *param)
 	
 	int tr_cmds = 0;
 	u4_t cmd_recv = 0;
-	bool change_LPF = false, change_freq_mode = false, restart = false, masked = false;
+	bool change_LPF = false, change_freq_mode = false, restart = false;
+	bool masked = false, masked_area = false;
 	bool allow_gps_tstamp = admcfg_bool("GPS_tstamp", NULL, CFG_REQUIRED);
 	
 	memset(&snd->adpcm_snd, 0, sizeof(ima_adpcm_state_t));
@@ -404,7 +412,7 @@ void c2s_sound(void *param)
 			if (rx_common_cmd(STREAM_SOUND, conn, cmd)) {
                 #ifdef TR_SND_CMDS
                     if (tr_cmds++ < 32)
-                        clprintf(conn, "SND #%02d <%s> cmd_recv 0x%x/0x%x\n", tr_cmds, cmd, cmd_recv, CMD_ALL);
+                        clprintf(conn, "SND #%02d [rx_common_cmd] <%s> cmd_recv 0x%x/0x%x\n", tr_cmds, cmd, cmd_recv, CMD_ALL);
                 #endif
 				continue;
 			}
@@ -495,8 +503,8 @@ void c2s_sound(void *param)
                             snd->isSAM = (_mode >= MODE_SAM && _mode <= MODE_QAM);
                             if (snd->isSAM && n == 5) {
                                 SAM_mparam = mparam & MODE_FLAGS_SAM;
-                                cprintf(conn, "SAM DC_block=%d fade_leveler=%d chan_null=%d\n",
-                                    (SAM_mparam & DC_BLOCK)? 1:0, (SAM_mparam & FADE_LEVELER)? 1:0, SAM_mparam & CHAN_NULL_WHICH);
+                                //cprintf(conn, "SAM DC_block=%d fade_leveler=%d chan_null=%d\n",
+                                //    (SAM_mparam & DC_BLOCK)? 1:0, (SAM_mparam & FADE_LEVELER)? 1:0, SAM_mparam & CHAN_NULL_WHICH);
                             }
 
                             // reset SAM demod on non-SAM to SAM transition
@@ -574,8 +582,8 @@ void c2s_sound(void *param)
                     if (!no_mode_change) conn->mode = snd->mode = mode;
                 
                     // apply masked frequencies
-                    masked = false;
-                    if (dx.masked_len != 0 && !conn->tlimit_exempt_by_pwd) {
+                    masked = masked_area = false;
+                    if (dx.masked_len != 0) {
                         int f = round(freq*kHz);
                         int pb_lo = f + locut;
                         int pb_hi = f + hicut;
@@ -583,7 +591,8 @@ void c2s_sound(void *param)
                         for (j=0; j < dx.masked_len; j++) {
                             dx_mask_t *dmp = &dx.masked_list[j];
                             if (!((pb_hi < dmp->masked_lo || pb_lo > dmp->masked_hi))) {
-                                masked = true;
+                                masked_area = true;     // needed by c2s_sound_camp()
+                                masked = conn->tlimit_exempt_by_pwd? false : true;
                                 //printf("MASKED");
                                 break;
                             }
@@ -595,12 +604,22 @@ void c2s_sound(void *param)
 			    break;
 			}
 			
+			case CMD_RF_ATTN:
+			    if (kiwi.model != KiwiSDR_1) {
+			        if (sscanf(cmd, "SET rf_attn=%f", &rf_attn_dB) == 1) {
+			            //cprintf(conn, "rf_attn=%.1f\n", rf_attn_dB);
+			            rf_attn_set(rf_attn_dB);
+                        did_cmd = true;                
+			        }
+			    }
+			    break;
+			
             case CMD_SND_WINDOW_FUNC:
                 if (sscanf(cmd, "SET window_func=%d", &n) == 1) {
                     if (n < 0 || n >= N_SND_WINF) n = 0;
                     snd->window_func = n;
                     m_PassbandFIR[rx_chan].SetupWindowFunction(snd->window_func);
-                    cprintf(conn, "SND window_func=%d\n", snd->window_func);
+                    //cprintf(conn, "SND window_func=%d\n", snd->window_func);
                     did_cmd = true;                
                 }
                 break;
@@ -633,7 +652,7 @@ void c2s_sound(void *param)
             case CMD_REINIT:
                 if (strcmp(cmd, "SET reinit") == 0) {
                     did_cmd = true;
-                    cprintf(conn, "SND restart\n");
+                    //cprintf(conn, "SND restart\n");
                     if (cmd_recv & CMD_AGC)
                         m_Agc[rx_chan].SetParameters(agc, hang, thresh, manGain, slope, decay, frate);
                     memset(&snd->adpcm_snd, 0, sizeof(ima_adpcm_state_t));
@@ -650,23 +669,19 @@ void c2s_sound(void *param)
                 break;
 
             case CMD_GEN_FREQ:
-                n = sscanf(cmd, "SET gen=%lf mix=%lf", &_gen, &mix);
-                if (n == 2) {
+                n = sscanf(cmd, "SET gen=%lf", &gen);
+                if (n == 1) {
                     did_cmd = true;
-                    //printf("MIX %f %d\n", mix, (int) mix);
-                    if (gen != _gen) {
-                        gen = _gen;
-                        f_phase = gen * kHz / conn->adc_clock_corrected;
-                        i_phase = (u64_t) round(f_phase * pow(2,48));
-                        //printf("sound %d: %s %.3f kHz phase %.3f 0x%012llx\n", rx_chan, gen? "GEN_ON":"GEN_OFF", gen, f_phase, i_phase);
-                        if (do_sdr) {
-                            spi_set3(CmdSetGenFreq, rx_chan, (u4_t) ((i_phase >> 16) & 0xffffffff), (u2_t) (i_phase & 0xffff));
-                            ctrl_clr_set(CTRL_USE_GEN, gen? CTRL_USE_GEN:0);
-                        }
-                        if (rx_chan == 0) g_genfreq = gen * kHz / ui_srate;
+                    u4_t self_test = (gen < 0)? CTRL_STEN : 0;
+                    gen = fabs(gen);
+                    f_phase = gen * kHz / conn->adc_clock_corrected;
+                    i_phase = (u64_t) round(f_phase * pow(2,48));
+                    //cprintf(conn, "%s %.3f kHz phase %.3f 0x%012llx self_test=%d\n", gen? "GEN_ON":"GEN_OFF", gen, f_phase, i_phase, self_test? 1:0);
+                    if (do_sdr) {
+                        spi_set3(CmdSetGenFreq, rx_chan, (u4_t) ((i_phase >> 16) & 0xffffffff), (u2_t) (i_phase & 0xffff));
+                        ctrl_clr_set(CTRL_USE_GEN | CTRL_STEN, gen? (CTRL_USE_GEN | self_test):0);
                     }
-                    if (rx_chan == 0) g_mixfreq = mix;
-                    //conn->ext_api = true;
+                    if (rx_chan == 0) g_genfreq = gen * kHz / ui_srate;
                 }
                 break;
 
@@ -677,10 +692,9 @@ void c2s_sound(void *param)
                     if (1 || genattn != _genattn) {
                         genattn = _genattn;
                         if (do_sdr) spi_set(CmdSetGenAttn, 0, (u4_t) genattn);
-                        //printf("===> CmdSetGenAttn %d 0x%x\n", genattn, genattn);
+                        //cprintf(conn, "GEN_ATTN %d 0x%x\n", genattn, genattn);
                         if (rx_chan == 0) g_genampl = genattn / (float)((1<<17)-1);
                     }
-                    //conn->ext_api = true;
                 }
                 break;
 
@@ -695,7 +709,7 @@ void c2s_sound(void *param)
                     slope = _slope;
                     decay = _decay;
                     manGain = _manGain;
-                    //printf("AGC %d hang=%d thresh=%d slope=%d decay=%d manGain=%d srate=%.1f\n",
+                    //cprintf(conn, "AGC %d hang=%d thresh=%d slope=%d decay=%d manGain=%d srate=%.1f\n",
                     //	agc, hang, thresh, slope, decay, manGain, frate);
                     m_Agc[rx_chan].SetParameters(agc, hang, thresh, manGain, slope, decay, frate);
                     cmd_recv |= CMD_AGC;
@@ -711,7 +725,7 @@ void c2s_sound(void *param)
                     if (n == 2) {
                         squelch = _squelch;
                         squelched = false;
-                        //cprintf(conn, "SND SET squelch=%d param=%.2f %s", squelch, _squelch_param, mode_lc[mode]);
+                        //cprintf(conn, "SND SET squelch=%d param=%.2f %s\n", squelch, _squelch_param, mode_lc[mode]);
                         if (mode == MODE_NBFM || mode == MODE_NNFM) {
                             m_Squelch[rx_chan].SetSquelch(squelch, _squelch_param);
                         } else {
@@ -880,7 +894,7 @@ void c2s_sound(void *param)
                 n = sscanf(cmd, "SET test=%d", &test);
                 if (n == 1) {
                     did_cmd = true;
-                    printf("test %d\n", test);
+                    cprintf(conn, "test %d\n", test);
                     test_flag = test;
                 }
                 break;
@@ -1426,7 +1440,6 @@ void c2s_sound(void *param)
                 //      www.embedded.com/design/configurable-systems/4212086/DSP-Tricks--Frequency-demodulation-algorithms-
                 //      www.pa3fwm.nl/technotes/tn24-fm-noise.html
                 #define MAX_NBFM_VAL 32767
-                #define CLIPPER_NBFM_VAL 8192
                 //#define PN_F_DEBUG
                 #ifdef PN_F_DEBUG
                     float max_val = p_f[1]? fabsf(p_f[1]) : MAX_NBFM_VAL;
@@ -1839,7 +1852,7 @@ void c2s_sound(void *param)
 
         //printf("hdr %d S%d\n", sizeof(out_pkt.h), bc); fflush(stdout);
         int aud_bytes;
-        int c2s_sound_camp(rx_chan_t *rxc, conn_t *conn, u1_t flags, char *bp, int bytes, int aud_bytes);
+        int c2s_sound_camp(rx_chan_t *rxc, conn_t *conn, u1_t flags, char *bp, int bytes, int aud_bytes, bool masked_area);
 
         if (IQ_or_DRM_or_stereo) {
             // allow GPS timestamps to be seen by internal extensions
@@ -1853,13 +1866,13 @@ void c2s_sound(void *param)
             app_to_web(conn, (char*) &snd->out_pkt_iq, bytes);
             aud_bytes = sizeof(snd->out_pkt_iq.h.smeter) + bc;
             if (rxc->n_camp)
-                aud_bytes += c2s_sound_camp(rxc, conn, *flags, (char*) &snd->out_pkt_iq, bytes, aud_bytes);
+                aud_bytes += c2s_sound_camp(rxc, conn, *flags, (char*) &snd->out_pkt_iq, bytes, aud_bytes, masked_area);
         } else {
             const int bytes = sizeof(snd->out_pkt_real.h) + bc;
             app_to_web(conn, (char*) &snd->out_pkt_real, bytes);
             aud_bytes = sizeof(snd->out_pkt_real.h.smeter) + bc;
             if (rxc->n_camp)
-                aud_bytes += c2s_sound_camp(rxc, conn, *flags, (char*) &snd->out_pkt_real, bytes, aud_bytes);
+                aud_bytes += c2s_sound_camp(rxc, conn, *flags, (char*) &snd->out_pkt_real, bytes, aud_bytes, masked_area);
         }
 
         audio_bytes[rx_chan] += aud_bytes;
@@ -1869,7 +1882,7 @@ void c2s_sound(void *param)
 	}
 }
 
-int c2s_sound_camp(rx_chan_t *rxc, conn_t *conn, u1_t flags, char *bp, int bytes, int aud_bytes)
+int c2s_sound_camp(rx_chan_t *rxc, conn_t *conn, u1_t flags, char *bp, int bytes, int aud_bytes, bool masked_area)
 {
     int i, n;
     int rx_chan = conn->rx_channel;
@@ -1877,35 +1890,48 @@ int c2s_sound_camp(rx_chan_t *rxc, conn_t *conn, u1_t flags, char *bp, int bytes
     int additional_bytes = 0;
     
     for (i = 0, n = 0; i < n_camp; i++) {
-        conn_t *c = rxc->camp_conn[i];
-        if (c == NULL) continue;
+        conn_t *conn_mon = rxc->camp_conn[i];
+        if (conn_mon == NULL) continue;
         
         // detect camping connection has gone away
-        if (!c->valid || c->type != STREAM_MONITOR || c->remote_port != rxc->camp_id[i]) {
+        if (!conn_mon->valid || conn_mon->type != STREAM_MONITOR || conn_mon->remote_port != rxc->camp_id[i]) {
             //cprintf(conn, ">>> CAMPER gone rx%d type=%d id=%d/%d slot=%d/%d\n",
-            //    rx_chan, c->type, c->remote_port, rxc->camp_id[i], i+1, n_camp);
+            //    rx_chan, conn_mon->type, conn_mon->remote_port, rxc->camp_id[i], i+1, n_camp);
             rxc->camp_conn[i] = NULL;
             rxc->n_camp--;
             continue;
         }
 
-        if (!c->camp_init) {
-            //cprintf(conn, ">>> CAMP init rx%d slot=%d/%d\n", rx_chan, i+1, n_camp);
+        if (!conn_mon->camp_init) {
+            //cprintf(conn_mon, ">>> CAMP init rx%d slot=%d/%d\n", rx_chan, i+1, n_camp);
             double frate = ext_update_get_sample_rateHz(-1);
-            send_msg(c, SM_SND_DEBUG, "MSG center_freq=%d bandwidth=%d adc_clk_nom=%.0f", (int) ui_srate/2, (int) ui_srate, ADC_CLOCK_NOM);
-            send_msg(c, SM_SND_DEBUG, "MSG audio_camp=0,%d audio_rate=%d sample_rate=%.6f", conn->isLocal, snd_rate, frate);
-            send_msg(c, SM_SND_DEBUG, "MSG audio_adpcm_state=%d,%d", snd->adpcm_snd.index, snd->adpcm_snd.previousValue);
+            send_msg(conn_mon, SM_SND_DEBUG, "MSG center_freq=%d bandwidth=%d adc_clk_nom=%.0f", (int) ui_srate/2, (int) ui_srate, ADC_CLOCK_NOM);
+            send_msg(conn_mon, SM_SND_DEBUG, "MSG audio_camp=0,%d audio_rate=%d sample_rate=%.6f", conn->isLocal, snd_rate, frate);
+            send_msg(conn_mon, SM_SND_DEBUG, "MSG audio_adpcm_state=%d,%d", snd->adpcm_snd.index, snd->adpcm_snd.previousValue);
             //cprintf(c, "MSG audio_adpcm_state=%d,%d seq=%d\n", snd->adpcm_snd.index, snd->adpcm_snd.previousValue, snd->seq);
-            c->camp_init = c->camp_passband = true;
+            conn_mon->isMasked = false;
+            conn_mon->camp_init = conn_mon->camp_passband = true;
         } else {
-            if (c->camp_passband || (flags & SND_FLAG_LPF)) {
-                send_msg(c, SM_SND_DEBUG, "MSG audio_passband=%.0f,%.0f", snd->locut, snd->hicut);
-                //cprintf(c, "MSG audio_passband=%.0f,%.0f\n", snd->locut, snd->hicut);
-                c->camp_passband = false;
+            if (conn_mon->camp_passband || (flags & SND_FLAG_LPF)) {
+                send_msg(conn_mon, SM_SND_DEBUG, "MSG audio_passband=%.0f,%.0f", snd->locut, snd->hicut);
+                //cprintf(conn_mon, "MSG audio_passband=%.0f,%.0f\n", snd->locut, snd->hicut);
+                conn_mon->camp_passband = false;
             }
             
             // adpcm state has to be sent *before* generation/transmission of new compressed data
-            app_to_web(c, bp, bytes);
+            //cprintf(conn_mon, "rx%d masked_area=%d isMasked=%d\n", rx_chan, masked_area, conn_mon->isMasked);
+            if (masked_area && !conn_mon->isMasked && !conn_mon->tlimit_exempt_by_pwd) {
+                send_msg(conn_mon, false, "MSG isMasked=1");
+                conn_mon->isMasked = true;
+            } else
+            if (!masked_area && conn_mon->isMasked) {
+                send_msg(conn_mon, false, "MSG isMasked=0");
+                conn_mon->isMasked = false;
+            }
+            
+            if (!conn_mon->isMasked) {
+                app_to_web(conn_mon, bp, bytes);
+            }
             additional_bytes += aud_bytes;
         }
         

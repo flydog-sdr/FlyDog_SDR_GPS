@@ -118,8 +118,8 @@ void cfg_adm_transition()
 
 
 	// update JSON files
-	admcfg_save_json(cfg_adm.json);
-	cfg_save_json(cfg_cfg.json);
+	admcfg_save_json(cfg_adm.json);     // during init doesn't conflict with admin cfg
+	cfg_save_json(cfg_cfg.json);        // during init doesn't conflict with admin cfg
 }
 
 int inactivity_timeout_mins, ip_limit_mins;
@@ -267,7 +267,15 @@ void update_vars_from_config(bool called_at_init)
     // TDoA extension related
     cfg_default_object("tdoa", "{}", &update_cfg);
     // FIXME: switch to using new SSL version of TDoA service at some point: https://tdoa2.kiwisdr.com
-    cfg_default_string("tdoa.server_url", "http://tdoa.kiwisdr.com", &update_cfg);
+    // workaround to prevent collision with 1st-level "server_url" until we can fix cfg code
+	if ((s = cfg_string("tdoa.server_url", NULL, CFG_OPTIONAL)) != NULL) {
+		cfg_set_string("tdoa.server", s);
+	    cfg_string_free(s);
+	    cfg_rem_string("tdoa.server_url");
+	    update_cfg = true;
+	} else {
+        cfg_default_string("tdoa.server", "http://tdoa.kiwisdr.com", &update_admcfg);
+    }
 
 
     // fix any broken UTF-8 sequences via cfg_default_string()
@@ -315,6 +323,7 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_int("init.cw_offset", 500, &update_cfg);
     cfg_default_int("init.colormap", 0, &update_cfg);
     cfg_default_int("init.aperture", 1, &update_cfg);
+    cfg_default_float("init.rf_attn", 0, &update_cfg);
     cfg_default_int("S_meter_OV_counts", 10, &update_cfg);
     cfg_default_bool("webserver_caching", true, &update_cfg);
     max_thr = (float) cfg_default_int("overload_mute", -15, &update_cfg);
@@ -326,6 +335,7 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_int("ident_len", IDENT_LEN_MIN, &update_cfg);
     cfg_default_bool("show_geo", true, &update_cfg);
     cfg_default_bool("show_1Hz", false, &update_cfg);
+    cfg_default_int("dx_default_db", 0, &update_cfg);
 
     bool want_inv = cfg_default_bool("spectral_inversion", false, &update_cfg);
     if (called_at_init || !kiwi.spectral_inversion_lockout)
@@ -365,14 +375,22 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_float("nr_specAlpha", 0.95, &update_cfg);
     cfg_default_int("nr_specSNR", 30, &update_cfg);
 
-    // the auto speed process is only run at restart time -- only handle forced speed changes here
+    // Only handle forced speed changes here as ESPEED_AUTO is always in effect after a reboot.
+    // ethtool doesn't seem to have a way to go back to auto speed once a forced speed is set?
     int espeed = cfg_default_int("ethernet_speed", 0, &update_cfg);
     static int current_espeed;
-    if (espeed != current_espeed) {
-        printf("ETH0 ethernet speed %s\n", (espeed == 0)? "auto" : ((espeed == 1)? "10M" : "100M"));
-        if (espeed) {
-            non_blocking_cmd_system_child("kiwi.ethtool",
-                stprintf("ethtool -s eth0 speed %d duplex full", (espeed == 1)? 10:100), NO_WAIT);
+    if (espeed != current_espeed || (kiwi.platform == PLATFORM_BB_AI64 && current_espeed == ESPEED_10M)) {
+        if (kiwi.platform == PLATFORM_BB_AI64 && (espeed == ESPEED_10M || current_espeed == ESPEED_10M)) {
+            lprintf("ETH0 CAUTION: BBAI-64 doesn't support 10 mbps. Reverting to auto speed.\n");
+            espeed = ESPEED_AUTO;
+            if (called_at_init)
+                cfg_set_int("ethernet_speed", espeed);
+        } else {
+            lprintf("ETH0 ethernet speed %s\n", (espeed == ESPEED_AUTO)? "auto" : ((espeed == ESPEED_10M)? "10M" : "100M"));
+            if (espeed) {
+                non_blocking_cmd_system_child("kiwi.ethtool",
+                    stprintf("ethtool -s eth0 speed %d duplex full", (espeed == ESPEED_10M)? 10:100), NO_WAIT);
+            }
         }
         current_espeed = espeed;
     }
@@ -481,11 +499,11 @@ void update_vars_from_config(bool called_at_init)
     }
     cfg_string_free(rx_name); rx_name = NULL;
 
-    char *rx_title = (char *) cfg_string("RX_TITLE", NULL, CFG_REQUIRED);
+    char *rx_title = (char *) cfg_string("index_html_params.RX_TITLE", NULL, CFG_REQUIRED);
     // shrinking, so same memory space
 	nsm = kiwi_str_replace(rx_title, " at <a href='http://kiwisdr.com' target='_blank' onclick='dont_toggle_rx_photo()'>ZL/KF6VO</a>", "");
 	if (nsm) {
-        cfg_set_string("RX_TITLE", nsm);
+        cfg_set_string("index_html_params.RX_TITLE", nsm);
         update_cfg = true;
     }
     cfg_string_free(rx_title); rx_title = NULL;
@@ -506,7 +524,7 @@ void update_vars_from_config(bool called_at_init)
 	}
 
 	if (update_cfg)
-		cfg_save_json(cfg_cfg.json);
+		cfg_save_json(cfg_cfg.json);    // during init doesn't conflict with admin cfg
 
 
 	// same, but for admin config
@@ -519,7 +537,6 @@ void update_vars_from_config(bool called_at_init)
     admcfg_default_string("duc_pass", "", &update_admcfg);
     admcfg_default_string("duc_host", "", &update_admcfg);
     admcfg_default_int("duc_update", 3, &update_admcfg);
-    admcfg_default_bool("daily_restart", false, &update_admcfg);
     admcfg_default_int("restart_update", 0, &update_admcfg);
     admcfg_default_int("update_restart", 0, &update_admcfg);
     admcfg_default_string("ip_address.dns1", "1.1.1.1", &update_admcfg);
@@ -537,6 +554,18 @@ void update_vars_from_config(bool called_at_init)
     admcfg_default_bool("console_local", true, &update_admcfg);
     admin_keepalive = admcfg_default_bool("admin_keepalive", true, &update_admcfg);
     log_local_ip = admcfg_default_bool("log_local_ip", true, &update_admcfg);
+    admcfg_default_bool("dx_comm_auto_download", true, &update_admcfg);
+    
+    // convert daily_restart switch bool => menu int
+    bool daily_restart_bool = admcfg_bool("daily_restart", &err, CFG_OPTIONAL);
+    daily_restart_e daily_restart;
+    if (!err) {
+        daily_restart = daily_restart_bool? DAILY_RESTART : DAILY_RESTART_NO;
+        admcfg_rem_bool("daily_restart");
+    } else {
+        daily_restart = DAILY_RESTART_NO;   // default if it doesn't already exist
+    }
+    kiwi.daily_restart = (daily_restart_e) admcfg_default_int("daily_restart", daily_restart, &update_admcfg);
 
     // decouple rx.kiwisdr.com and sdr.hu registration
     bool sdr_hu_register = admcfg_bool("sdr_hu_register", NULL, CFG_REQUIRED);
@@ -675,7 +704,7 @@ void update_vars_from_config(bool called_at_init)
     //admcfg_default_bool("ip_address.use_static", false, &update_admcfg);
 
 	if (update_admcfg)
-		admcfg_save_json(cfg_adm.json);
+		admcfg_save_json(cfg_adm.json);     // during init doesn't conflict with admin cfg
 
 
     // one-time-per-run initializations

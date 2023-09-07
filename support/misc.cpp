@@ -123,57 +123,6 @@ void release_misc_mosi()
     misc_mosi_busy--;
 }
 
-u2_t ctrl_get()
-{
-	SPI_MISO *ctrl = get_misc_miso();
-	
-	spi_get_noduplex(CmdCtrlGet, ctrl, sizeof(ctrl->word[0]));
-	u2_t rv = ctrl->word[0];
-	release_misc_miso();
-	return rv;
-}
-
-void ctrl_clr_set(u2_t clr, u2_t set)
-{
-	spi_set_noduplex(CmdCtrlClrSet, clr, set);
-	//printf("ctrl_clr_set(0x%04x, 0x%04x) ctrl_get=0x%04x\n", clr, set, ctrl_get());
-}
-
-void ctrl_positive_pulse(u2_t bits)
-{
-	spi_set_noduplex(CmdCtrlClrSet, bits, bits);
-	spi_set_noduplex(CmdCtrlClrSet, bits, 0);
-}
-
-stat_reg_t stat_get()
-{
-    SPI_MISO *status = get_misc_miso();
-    stat_reg_t stat;
-    
-    spi_get_noduplex(CmdGetStatus, status, sizeof(stat));
-	release_misc_miso();
-    stat.word = status->word[0];
-
-    return stat;
-}
-
-u2_t getmem(u2_t addr)
-{
-	SPI_MISO *mem = get_misc_miso();
-	
-	memset(mem->word, 0x55, sizeof(mem->word));
-	spi_get_noduplex(CmdGetMem, mem, 4, addr);
-	release_misc_miso();
-	assert(addr == mem->word[1]);
-	
-	return mem->word[0];
-}
-
-void printmem(const char *str, u2_t addr)
-{
-	printf("%s %04x: %04x\n", str, addr, (int) getmem(addr));
-}
-
 void cmd_debug_print(conn_t *c, char *s, int slen, bool tx)
 {
     int sl = slen - 4;
@@ -317,20 +266,32 @@ void send_msg_mc_encoded(struct mg_connection *mc, const char *dst, const char *
 
 // send to the SND web socket
 // note the conn_t difference below
-int snd_send_msg(int rx_chan, bool debug, const char *msg, ...)
+// rx_chan == SM_RX_CHAN_ALL means send to all connected channels
+int snd_send_msg_encoded(int rx_chan, bool debug, const char *dst, const char *cmd, const char *msg, ...)
 {
+    int rv = -1;
 	va_list ap;
 	char *s;
 
-	conn_t *conn = rx_channels[rx_chan].conn;
-	if (!conn) return -1;
 	va_start(ap, msg);
 	vasprintf(&s, msg, ap);
 	va_end(ap);
-	if (debug) printf("ext_send_msg: RX%d(%p) <%s>\n", rx_chan, conn, s);
-	send_msg_buf(conn, s, strlen(s));
-	kiwi_ifree(s);
-	return 0;
+
+	char *buf = kiwi_str_encode(s);
+
+    for (int ch = 0; ch < rx_chans; ch++) {
+        if (rx_chan == SM_RX_CHAN_ALL || rx_chan == ch) {
+            conn_t *conn = rx_channels[ch].conn;
+            if (!conn) continue;
+	        if (debug) printf("snd_send_msg_encoded: RX%d(%p) <%s>\n", ch, conn, s);
+	        send_msg(conn, debug, "%s %s=%s", dst, cmd, buf);
+	        rv = 0;
+	    }
+	}
+	
+	kiwi_ifree(s, "snd_send_msg_encoded");
+	kiwi_ifree(buf, "snd_send_msg_encoded");
+	return rv;
 }
 
 // send to the SND web socket

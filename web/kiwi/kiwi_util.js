@@ -1,6 +1,6 @@
 // KiwiSDR utilities
 //
-// Copyright (c) 2014-2022 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2023 John Seamons, ZL/KF6VO
 
 
 // isUndeclared(v) => use inline "typeof(v) === 'undefined'" (i.e. can't pass undeclared v as func arg)
@@ -16,6 +16,7 @@ function isNonEmptyArray(v) { return (isArray(v) && v.length > 0); }
 function isFunction(v) { return (typeof(v) === 'function'); }
 function isObject(v) { return (typeof(v) === 'object'); }
 function isArg(v) { return (isUndefined(v) || isNull(v))? false:true; }
+function isNoArg(v) { return (isUndefined(v) || isNull(v))? true:false; }
 function kiwi_typeof(v) { return isNull(v)? 'null' : (isArray(v)? 'array' : typeof(v)); }
 
 function ifString(s, alt) { return (isString(s)? s : alt); }
@@ -67,8 +68,11 @@ document.onreadystatechange = function() {
 	//console.log("onreadystatechange="+document.readyState);
 	//if (document.readyState == "interactive") {
 	if (document.readyState == "complete") {
+	   var website = false;
+	   var el = w3_el('id-kiwi-container');
+	   if (el && el.getAttribute('data-type') == 'website') website = true;
 		var s = navigator.userAgent;
-		console.log(s);
+		if (!website) console.log(s);
 		//alert(s);
 		kiwi_iOS = (s.includes('iPhone') || s.includes('iPad'));
 		kiwi_iPhone = s.includes('iPhone');
@@ -94,7 +98,7 @@ document.onreadystatechange = function() {
 		}
 		
 		
-		console.log(
+		if (!website) console.log(
 		   'MacOS='+ kiwi_MacOS +
 		   ' Linux='+ kiwi_linux +
 		   ' Windows='+ kiwi_Windows +
@@ -114,16 +118,32 @@ document.onreadystatechange = function() {
 		   if (kiwi_browserVersion) kiwi_safari[1] = kiwi_browserVersion[1];
 		}
 
-		console.log('Safari='+ kiwi_isSafari() + ' Firefox='+ kiwi_isFirefox() + ' Chrome='+ kiwi_isChrome() + ' Opera='+ kiwi_isOpera());
+		if (!website) console.log('Safari='+ kiwi_isSafari() + ' Firefox='+ kiwi_isFirefox() + ' Chrome='+ kiwi_isChrome() + ' Opera='+ kiwi_isOpera());
 
-		if (typeof(kiwi_check_js_version) !== 'undefined') {
-			// done as an AJAX because needed long before any websocket available
-			kiwi_ajax("/VER", 'kiwi_version_cb');
-		} else {
-		   if (typeof(kiwi_bodyonload) != 'undefined')
-			   kiwi_bodyonload('');
-		}
+      // packages to load early on
+      if (!website) {
+         kiwi_load_js('pkgs/js/sprintf/sprintf.js',
+            function() {
+               //console.log(sprintf('%s', 'sprintf loaded'));
+               kiwi_load2();
+            }
+         );
+      } else {
+         kiwi_load2();
+      }
 	}
+}
+
+function kiwi_load2()
+{
+   if (typeof(kiwi_check_js_version) !== 'undefined') {
+      // done as an AJAX because needed long before any websocket available
+      kiwi_ajax("/VER", 'kiwi_version_cb');
+   } else {
+		kiwi.conn_tstamp = (new Date()).getTime();   // fallback
+      if (typeof(kiwi_bodyonload) !== 'undefined')
+         kiwi_bodyonload('');
+   }
 }
 
 function kiwi_is_iOS() { return kiwi_iOS; }
@@ -175,6 +195,11 @@ function kiwi_version_cb(response_obj)
 	
 	if (kiwi_version_fail)
 	   s += '<br>'+ w3_button('w3-css-yellow', 'Continue anyway', 'kiwi_version_continue_cb');
+	
+	kiwi.conn_tstamp = isDefined(response_obj.ts)? response_obj.ts : (new Date()).getTime();
+	//console.log(response_obj);
+	//console.log('conn_tstamp='+ kiwi.conn_tstamp);
+	
 	kiwi_bodyonload(s);
 }
 
@@ -423,6 +448,16 @@ String.prototype.filterInt = function() {
 	return NaN;
 }
 
+String.prototype.parseIntEnd = function() {
+	var s = String(this);
+	var a = s.match(/[^-\d]+([-\d]+$)/);
+	//console.log('parseIntEnd <'+ s +'>');
+	//console.log(a);
+	if (a.length == 2 && isNumber(+a[1]))
+		return Number(a[1]);
+	return NaN;
+}
+
 String.prototype.withSign = function()
 {
 	var s = this;
@@ -455,6 +490,7 @@ Number.prototype.toHex = function(digits)
 	return s;
 }
 
+// minimum number of digits: remove trailing zeros and/or decimal point
 Number.prototype.toFixedNZ = function(d)
 {
 	var n = Number(this);
@@ -578,30 +614,43 @@ function console_log()
    console.log('CONSOLE_LOG '+ s);
 }
 
-// usage: console_log_fqn('id', 'fully.qualified.name0', 'fully.qualified.name1', ...)
-// prints: "<id>: <name0>=<fqn0_value> <name1>=<fqn1_value> ..."
-function console_log_fqn()
+// usage: console_nv('id', {arg0}, {arg1}, 'a.b.c' (i.e. FQN) ...)
+// prints: "<id>: 'actual_arg0_name'=<arg0_value> 'actual_arg1_name'=<arg1_value> ..."
+//
+// So this works for:
+// local/global simple (incl obj): YES
+// local obj deref: NO
+// global deref (FQN only): YES (use string arg)
+function console_nv()
 {
-   //console.log('console_log_fqn: '+ typeof(arguments));
-   //console.log(arguments);
    var s;
    for (var i = 0; i < arguments.length; i++) {
       var arg = arguments[i];
       if (i == 0) {
          s = arg +': ';
       } else {
-         var val;
-         try {
-            val = getVarFromString(arg);
-         } catch(ex) {
-            val = '[not defined]';
+         var name, val;
+         if (isObject(arg)) {
+            name = Object.keys(arg)[0];
+            val = arg[name];
+            s += name +'='+ JSON.stringify(val) +' ';
+         } else
+         if (isString(arg)) {
+            try {
+               val = getVarFromString(arg);
+            } catch(ex) {
+               val = '[not defined]';
+            }
+            //var lio = arg.lastIndexOf('.');
+            //name = (lio == -1)? arg : arg.substr(lio+1);
+            name = arg;
+            s += name +'='+ val +' ';
+         } else {
+            s += '[arg'+ (i-1) +' unknown] ';
          }
-         var lio = arg.lastIndexOf('.');
-         var name = (lio == -1)? arg : arg.substr(lio+1);
-         s += name +'='+ val +' ';
       }
    }
-   console.log('FQN '+ s);
+   console.log('CONSOLE_NV '+ s);
 }
 
 function console_log_dbgUs()
@@ -817,7 +866,7 @@ function event_dump(evt, id, oneline)
       console.log('event_dump '+ id +' |'+ evt.type +'| k='+ key +' T='+ evt.target.id +' Tcur='+ ct_id + trel);
    } else {
       console.log('================================');
-      if (!isArg(evt)) {
+      if (isNoArg(evt)) {
          console.log('EVENT_DUMP: '+ id +' bad evt');
          kiwi_trace();
          return;
@@ -845,8 +894,9 @@ function event_dump(evt, id, oneline)
       console.log(evt.target);
       console.log(evt.currentTarget);
       console.log(evt.relatedTarget);
-      if (isNumber(evt.pageX) && isNumber(evt.pageY))
-         console.log(document.elementFromPoint(evt.pageX, evt.pageY));
+      var el_s = w3_elementAtPointer(evt);
+      if (el_s)
+         console.log(el_s);
       else
          console.log('(no x,y)');
       console.log('----');
@@ -919,7 +969,7 @@ function kiwi_decodeURIComponent(id, uri)
       } catch(ex) {
          console.log('$kiwi_decodeURIComponent('+ id +'): decode fail');
          console.log(uri);
-         //console.log(ex);
+         console.log(ex);
       
          if (double_fail) {
             console.log('kiwi_decodeURIComponent('+ id +'): DOUBLE DECODE FAIL');
@@ -928,7 +978,7 @@ function kiwi_decodeURIComponent(id, uri)
             return null;
          }
 
-	      // v1.464
+         // v1.464
          // Recover from broken UTF-8 sequences stored in cfg.
          // Remove all "%xx" sequences, for xx >= 0x80, whenever decodeURIComponent() fails.
          // User will have to manually repair UTF-8 sequences since information has been lost.
@@ -937,14 +987,17 @@ function kiwi_decodeURIComponent(id, uri)
          // and this code will not be triggered. That way corrections made to broken fields will persist in the cfg.
          // This is why bulk removal of >= %80 sequences cannot be done in _cfg_load_json() on the server side.
          // Doing that would always eliminate *any* UTF-8 sequence. Even valid ones.
-         for (var i = 0; i < uri.length - 2; i++) {
+         var i, j, k;
+         for (i = 0; i < uri.length - 2; i++) {
             var c1 = uri.charAt(i+1);
             var c2 = uri.charAt(i+2);
             if (uri.charAt(i) == '%' && isHexDigit(c1) && isHexDigit(c2)) {
                //console.log(c1 +' '+ ((c1 >= '8')? 'T':'F'));
                if (c1 >= '8') {
-                  var x0 = uri.charAt(i-1);
-                  x0 = x0.charCodeAt(0);
+                  //var x0 = uri.charAt(i-1);
+                  //x0 = x0.charCodeAt(0);
+                  j = Math.max(i-5, 0); k = Math.min(i+6, uri.length);
+                  console.log('BAD @'+ i +' '+ uri.slice(j,k));
                   uri = uri.substr(0,i) + uri.substr(i+3);
                   i = 0;
                   //console.log('FIX <'+ uri +'>');
@@ -952,6 +1005,8 @@ function kiwi_decodeURIComponent(id, uri)
                }
             }
          }
+         //console.log(s);
+         console.log('FINAL FIX <'+ uri +'>');
 
          obj = null;
       }
@@ -1035,7 +1090,7 @@ function kiwi_JSON(json, pretty)
    return JSON.stringify(json, null, pretty? 3:undefined);
 }
 
-function kiwi_JSON_parse(tag, json)
+function kiwi_JSON_parse(tag, json, func)
 {
    var obj;
    try {
@@ -1044,6 +1099,7 @@ function kiwi_JSON_parse(tag, json)
       console.log('kiwi_JSON_parse('+ tag +'): JSON parse fail');
       console.log(json);
       console.log(ex);
+      w3_call(func, ex);
       obj = null;
    }
    return obj;
@@ -1077,6 +1133,18 @@ function kiwi_remove_escape_sequences(s)
    }
    
    return a2.join('');
+}
+
+function kiwi_timestamp()
+{
+   return new Date().toISOString().replace(/:/g, '_').replace(/\.[0-9]+Z$/, 'Z');
+}
+
+function kiwi_timestamp_filename(pre, post)
+{
+   var el = w3_el('id-freq-input');
+   var freq_mode = el? ('_'+ el.value +'_'+ ext_get_mode()) : '';
+   return pre + kiwi_host() +'_'+ kiwi_timestamp() + freq_mode + post;
 }
 
 
@@ -1205,7 +1273,7 @@ function html(id_or_name)
 
 function px(s)
 {
-   if (!isArg(s) || s == '') return '0';
+   if (isNoArg(s) || s == '') return '0';
    var num = parseFloat(s);
    if (isNaN(num)) {
       console.log('px num='+ s);
@@ -1360,7 +1428,7 @@ function deleteCookie(cookie)
 function kiwi_storeGet(s, init)
 {
    var rv;
-   if (!isArg(s)) return null;
+   if (isNoArg(s)) return null;
 	try {
 	   if (localStorage == null) return null;
 	   rv = localStorage.getItem(s);
@@ -1391,7 +1459,7 @@ function kiwi_storeGet(s, init)
 
 function kiwi_storeSet(s, v)
 {
-   if (!isArg(v)) return null;
+   if (isNoArg(v)) return null;
 	try {
 	   if (localStorage == null) return null;
 	   localStorage.setItem(s, v);
@@ -1412,7 +1480,7 @@ function getVarFromString(path)
 		var scope_name = scopeSplit[i];
 		scope = scope[scope_name];
 		if (isUndefined(scope)) {
-			console.log('getVarFromString: NO SCOPE '+ path +' scope_name='+ scope_name);
+			//console.log('getVarFromString: NO SCOPE '+ path +' scope_name='+ scope_name);
 			throw 'no scope';
 		}
 	}
@@ -1590,7 +1658,7 @@ function kiwi_ajax_prim(method, data, url, callback, cb_param, timeout, progress
 		}
 	//}
 
-	ajax.kiwi_id = ajax_id;
+	ajax.kiwi_id = ajax_id;       // ajax{} => ajax_requests[] link
 	ajax_requests[ajax_id] = {};
 
 	ajax_requests[ajax_id].didTimeout = false;
@@ -1873,7 +1941,7 @@ function open_websocket(stream, open_cb, open_cb_param, msg_cb, recv_cb, error_c
 {
 	if (!("WebSocket" in window) || !("CLOSING" in WebSocket)) {
 		console.log('WEBSOCKET TEST');
-		kiwi_serious_error("Your browser does not support WebSocket, which is required for OpenWebRX to run. <br> Please use an HTML5 compatible browser.");
+		kiwi_serious_error("Your browser does not support web sockets, which is required. <br> Please use an HTML5 compatible browser.");
 		return null;
 	}
 
@@ -1888,7 +1956,7 @@ function open_websocket(stream, open_cb, open_cb_param, msg_cb, recv_cb, error_c
 	}
 	
 	var no_wf = (window.location.href.includes('?no_wf') || window.location.href.includes('&no_wf'));
-	ws_url = ws_protocol + ws_url +'/'+ (no_wf? 'no_wf/':'kiwi/') + timestamp +'/'+ stream;
+	ws_url = ws_protocol + ws_url +'/'+ (no_wf? 'no_wf/':'kiwi/') + kiwi.conn_tstamp +'/'+ stream;
 	if (isNonEmptyString(window.location.search))
 	   ws_url += window.location.search;      // pass query string to support "&foff="
 	if (no_wf) wf.no_wf = true;

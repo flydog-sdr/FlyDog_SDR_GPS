@@ -102,6 +102,7 @@ typedef struct conn_st {
 	// set only in STREAM_MONITOR
 	bool queued;
 	bool camp_init, camp_passband;
+    bool isMasked;
 
 	// set only in STREAM_ADMIN
 	int log_last_sent, log_last_not_shown;
@@ -120,6 +121,7 @@ typedef struct conn_st {
 	bool try_geoloc;
 	
 	// debug
+	int debug;
 	int wf_frames;
 	u4_t wf_loop, wf_lock, wf_get;
 	u4_t audio_underrun, sequence_errors;

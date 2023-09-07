@@ -58,6 +58,7 @@ var ale = {
    isActive: false,
    ignore_resume: false,
    testing: false,
+   periodic_self_test: false,
    
    REC: 0x1,
    LOG: 0x2,
@@ -151,11 +152,12 @@ function ale_2g_recv(data)
             if (ale.testing) {
                w3_hide('id-ale_2g-bar-container');
                w3_show('id-ale_2g-record');
+               ale.testing = ale.periodic_self_test = false;
             }
 			   break;
 
 			case "chars":
-				ale_2g_decoder_output_chars(param[1]);
+			   if (!ale.periodic_self_test) ale_2g_decoder_output_chars(param[1]);
 				break;
 
 			case "tune_ack":
@@ -335,17 +337,20 @@ function ale_2g_controls_setup()
 	if (ext_nom_sample_rate() != 12000)
 	   w3_add('id-ale_2g-test', 'w3-disabled');
 	
-	w3_do_when_rendered('id-ale_2g-menus', function() {
-      ext_send('SET reset');
-	   ale.double_fault = false;
-	   if (0 && dbgUs) {
-         kiwi_ajax(ale.url +'.xxx', 'ale_2g_get_nets_done_cb', 0, -500);
-	   } else {
-         kiwi_ajax(ale.url, 'ale_2g_get_nets_done_cb', 0, 10000);
-      }
+	w3_do_when_rendered('id-ale_2g-menus',
+	   function() {
+         ext_send('SET reset');
+         ale.double_fault = false;
+         if (0 && dbgUs) {
+            kiwi_ajax(ale.url +'.xxx', 'ale_2g_get_nets_done_cb', 0, -500);
+         } else {
+            kiwi_ajax(ale.url, 'ale_2g_get_nets_done_cb', 0, 10000);
+         }
       
-      //ale.watchdog = setInterval(function() { ale_2g_watchdog(); }, 1000);
-   });
+         //ale.watchdog = setInterval(function() { ale_2g_watchdog(); }, 1000);
+      }
+   );
+   // REMINDER: w3_do_when_rendered() returns immediately
 }
 
 function ale_2g_watchdog()
@@ -711,7 +716,7 @@ function ale_2g_clear_menus(except)
 {
    // reset frequency menus
    for (var i = 0; i < ale.menu_n; i++) {
-      if (!isArg(except) || i != except)
+      if (isNoArg(except) || i != except)
          w3_select_value('ale.menu'+ i, -1);
    }
 }
@@ -1094,11 +1099,17 @@ function ale_2g_resamp_cb(path, idx, first)
 
 function ale_2g_test_cb(path, val, first)
 {
+   //if (+val == 0) kiwi_trace();
    if (first) return;
+   if (ext_nom_sample_rate() != 12000) {     // our sample file is 12k only
+      ale.testing = ale.periodic_self_test = false;
+      return;
+   }
    val = +val;
    if (dbgUs) console.log('ale_2g_test_cb: val='+ val);
-   ale.testing = val;
 	w3_el('id-ale_2g-bar').style.width = '0%';
+   ale.testing = val;
+   if (!val) ale.periodic_self_test = false;
    w3_show_hide('id-ale_2g-bar-container', ale.testing);
    w3_show_hide('id-ale_2g-record', !ale.testing);
    
@@ -1151,12 +1162,11 @@ function ale_2g_log_mins_cb(path, val)
 
 function ale_2g_log_cb()
 {
-   var ts = kiwi_host() +'_'+ new Date().toISOString().replace(/:/g, '_').replace(/\.[0-9]+Z$/, 'Z') +'_'+ w3_el('id-freq-input').value +'_'+ cur_mode;
    var txt = new Blob([ale.log_txt], { type: 'text/plain' });
    var a = document.createElement('a');
    a.style = 'display: none';
    a.href = window.URL.createObjectURL(txt);
-   a.download = 'ALE_2G.'+ ts +'.log.txt';
+   a.download = kiwi_timestamp_filename('ALE_2G.', '.log.txt');
    document.body.appendChild(a);
    console.log('ale_2g_log: '+ a.download);
    a.click();
@@ -1186,6 +1196,19 @@ function ALE_2G_environment_changed(changed)
    }
 }
 
+function ALE_2G_focus()
+{
+   ale.perodic_test = setInterval(
+      function() {
+         console.log('ale_2g: periodic test');
+         ale_2g_decoder_output_chars('[periodic self test]\n');
+         ale.periodic_self_test = true;
+         w3_el('id-ale_2g-test').click();
+      }, 4*60*60*1000   // every 4 hours
+      //}, 45*1000,
+   );
+}
+
 function ALE_2G_blur()
 {
    // anything that needs to be done when extension blurred (closed)
@@ -1195,6 +1218,7 @@ function ALE_2G_blur()
 	console.log('ALE_2G_blur saved_mode='+ ale.saved_mode);
 	ext_set_mode(ale.saved_mode);
    kiwi_clearInterval(ale.log_interval);
+   kiwi_clearInterval(ale.perodic_test);
 }
 
 function ALE_2G_help(show)
@@ -1229,8 +1253,8 @@ function ALE_2G_help(show)
                'their own menus (except via URL parameters, see below) but suggestions for the downloaded menus on extension startup can be made on the Kiwi forum.' +
          
                '<br><br>URL parameters: <br>' +
-               '<i>(menu match or frequency list)</i> &nbsp; lsb &nbsp; format:[0123] &nbsp; display:[0123] &nbsp; scan[:<i>secs</i>] &nbsp; <br>' +
-               'limit_le:<i>freq</i> &nbsp; limit_ge:<i>freq</i> &nbsp; rec:[0123] &nbsp; rec_time:<i>secs</i> &nbsp; log_time:<i>mins</i> &nbsp; test' +
+               w3_text('|color:orange', '(menu match or frequency list) &nbsp; lsb &nbsp; format:[<i>0123</i>] &nbsp; display:[<i>0123</i>] &nbsp; scan[:<i>secs</i>] &nbsp; <br>' +
+               'limit_le:<i>freq</i> &nbsp; limit_ge:<i>freq</i> &nbsp; rec:[<i>0123</i>] &nbsp; rec_time:<i>secs</i> &nbsp; log_time:<i>mins</i> &nbsp; test') +
                '<br><br>' +
                'The first URL parameter can be a frequency entry from one of the menus (e.g. "3596") ' +
                'or the name of a menu scan list (e.g. "MARS" in the Amateur menu). ' +

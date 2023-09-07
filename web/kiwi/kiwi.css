@@ -10,6 +10,28 @@ hr
     border-top: 1px solid #ddd;
 }
 
+x0
+{
+    padding: 0 2px;
+    color: black;
+	background: #d9d9d9;
+}
+			
+x1
+{
+    padding: 0 4px;
+    color: black;
+	background: #d9d9d9;
+}
+			
+x2
+{
+    margin-left: 16px;
+    padding: 0 5px;
+    color: black;
+	background: #d9d9d9;
+}
+			
 .id-kiwi-msg-container
 {
 	display: none;
@@ -188,7 +210,7 @@ hr
 
 .cl-optbar a
 {
-    padding: 4px 6px;
+    padding: 4px 2px;
 }
 
 .cl-admin-check
@@ -214,7 +236,63 @@ hr
 .cl-dx-filtered
 {
 	color: black;
-	background-color: pink !important;
+	background-color: rgba(255, 182, 193, 0.4) !important;  /* pink */
+}
+
+.cl-dx-label
+{
+	position: absolute;
+	/*font-family: Courier;*/
+	font-size: 11px;
+	/*font-weight: bold;*/
+	padding: 3px;
+	border: 1px solid black;
+	border-radius: 3px !important;
+	cursor: pointer;
+	-moz-border-radius: 3px;
+	/*background-color: cyan;*/
+	z-index: 120;
+}
+
+.cl-dx-label.cl-dx-label-filtered
+{
+    border: 1px dashed black;
+}
+
+.cl-dx-label.cl-dx-label-ext
+{
+    /* border: 3px double black; */
+	border-width: 1px 4px 1px 1px;
+	border-color: black black black black;
+}
+
+/* an experiment not currently used */
+.cl-dx-label.cl-dx-label-active
+{
+	border-width: 1px 1px 1px 4px;
+	border-color: black black black red;
+}
+
+/*
+.cl-dx-label:hover
+{
+	background-color: yellow;
+}
+*/
+
+.cl-dx-line
+{
+	width: 1px;
+	position: absolute;
+	background-color: black;
+	z-index: 110;
+}
+
+.cl-dx-sig
+{
+	position: relative;
+	top: 70px;
+	height: 10px;
 }
 
 .cl-ext-help

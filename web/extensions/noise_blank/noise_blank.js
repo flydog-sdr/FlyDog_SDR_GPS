@@ -152,7 +152,7 @@ function noise_blank_environment_changed(changed)
    }
 }
 
-// called from openwebrx.js
+// called from main ui, not ext
 function noise_blank_init()
 {
 	// NB_STD
@@ -198,7 +198,7 @@ function noise_blank_save_defaults()
    cfg.nb_samps = noise_blank.impulse_samples;
 
    cfg.nb_wf = noise_blank.wf;
-   ext_set_cfg_param('cfg.nb_algo', noise_blank.algo, true);
+   ext_set_cfg_param('cfg.nb_algo', noise_blank.algo, EXT_SAVE);
 }
 
 // Don't have multiple simultaneous types, like the noise filter, to handle.
@@ -230,7 +230,7 @@ function noise_blank_send()
 function nb_algo_cb(path, idx, first, from)
 {
    //console.log('nb_algo_cb idx='+ idx +' first='+ first +' from='+ from);
-   if (first) return;      // because call via openwebrx has zero, not restored value
+   if (first) return;      // because call via main ui has zero, not restored value
    idx = +idx;
    w3_select_value(path, idx);
    noise_blank.algo = idx;
