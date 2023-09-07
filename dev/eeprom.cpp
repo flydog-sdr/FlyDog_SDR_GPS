@@ -26,6 +26,8 @@ Boston, MA  02110-1301, USA.
 #include "spi.h"
 #include "coroutines.h"
 #include "eeprom.h"
+#include "fpga.h"
+#include "printf.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -130,7 +132,7 @@ static bool debian7 = true;
  #define EEPROM_DEV     "/sys/bus/i2c/devices/2-0054/eeprom"
 #endif
 
-int eeprom_check()
+int eeprom_check(model_e *model)
 {
 	eeprom_t *e = &eeprom;
 	const char *fn;
@@ -180,14 +182,26 @@ int eeprom_check()
 	n = sscanf(serial_no, "%d", &serno);
 	mprintf("EEPROM check: read serial_no \"%s\" %d\n", serial_no, serno);
 	if (n != 1 || serno <= 0 || serno > 9999) {
-		mlprintf("EEPROM check: scan failed\n");
+		mlprintf("EEPROM check: scan failed (serno)\n");
 		return -1;
 	}
+	
+	char part_no[sizeof(e->part_no) + SPACE_FOR_NULL];
+	GET_CHARS(e->part_no, part_no);
+
+	int _model = -1;
+	n = sscanf(part_no, "KiwiSDR %d", &_model);
+	if (n != 1 || _model <= 0) {
+	    mlprintf("EEPROM check: read model \"%s\" %d\n", part_no, _model);
+		mlprintf("EEPROM check: scan failed (model)\n");
+		return -1;
+	}
+	if (model != NULL) *model = (model_e) _model;
 	
 	return serno;
 }
 
-void eeprom_write(next_serno_e type, int serno)
+void eeprom_write(next_serno_e type, int serno, int model)
 {
 	int n;
 	const char *fn;
@@ -213,8 +227,9 @@ void eeprom_write(next_serno_e type, int serno)
 
 	SET_CHARS(e->version, "v1.1", ' ');
 
-	SET_CHARS(e->mfg, "Seeed.cc", ' ');
-	SET_CHARS(e->part_no, "KIWISDR10", ' ');
+	SET_CHARS(e->mfg, "kiwisdr.com", ' ');
+	
+	SET_CHARS(e->part_no, stprintf("KiwiSDR %d", model), ' ');
 
 	// we use the WWYY fields as "date of last EEPROM write" rather than "date of production"
 	time_t t = utc_time();
@@ -226,16 +241,16 @@ void eeprom_write(next_serno_e type, int serno)
 	int ww = (ord_date - weekday + 10) / 7;
 	if (ww < 1) ww = 1;
 	if (ww > 52) ww = 52;
-	kiwi_snprintf_buf(e->week, "%2d", ww);	// caution: leaves '\0' at start of next field (year)
+	kiwi_snprintf_buf_plus_space_for_null(e->week, "%2d", ww);	// caution: leaves '\0' at start of next field (year)
 
 	int yy = tm.tm_year - 100;
-	kiwi_snprintf_buf(e->year, "%2d", yy);	// caution: leaves '\0' at start of next field (assembly)
+	kiwi_snprintf_buf_plus_space_for_null(e->year, "%2d", yy);	// caution: leaves '\0' at start of next field (assembly)
 
 	SET_CHARS(e->assembly, "0001", ' ');
 
 	if (type == SERNO_ALLOC)
 		serno = eeprom_next_serno(SERNO_ALLOC, 0);
-	kiwi_snprintf_buf(e->serial_no, "%4d", serno);	// caution: leaves '\0' at start of next field (n_pins)
+	kiwi_snprintf_buf_plus_space_for_null(e->serial_no, "%4d", serno);	// caution: leaves '\0' at start of next field (n_pins)
 	
 	e->n_pins = FLIP16(2*26);
 	int pin;
@@ -260,6 +275,7 @@ void eeprom_write(next_serno_e type, int serno)
     // NB: have to change WP before fopen() and after fclose() because writes don't
     // fully complete (flush) until after fclose() returns!
 	ctrl_clr_set(CTRL_EEPROM_WP, 0);    // takes effect about 600 us before last write
+	kiwi_msleep(1);
 
 	fn = debian7? EEPROM_DEV_DEBIAN7 : EEPROM_DEV;
 
@@ -274,6 +290,7 @@ void eeprom_write(next_serno_e type, int serno)
 
 	mprintf("EEPROM write: wrote %d bytes\n", n);
 	fclose(fp);
+	kiwi_msleep(1);
 	ctrl_clr_set(0, CTRL_EEPROM_WP);    // takes effect about 200 us after last write
 }
 

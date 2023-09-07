@@ -37,6 +37,7 @@ Boston, MA  02110-1301, USA.
 #include "printf.h"
 #include "cfg.h"
 #include "clk.h"
+#include "dx.h"
 #include "wspr.h"
 #include "FT8.h"
 
@@ -71,16 +72,25 @@ Boston, MA  02110-1301, USA.
     #include <pty.h>
 #endif
 
+typedef struct {
+    bool have_pushback;
+    char produce[32], consume[32];
+} pushback_t;
+
+static pushback_t pushback;
+        
 void c2s_admin_setup(void *param)
 {
 	conn_t *conn = (conn_t *) param;
 
 	// send initial values
+	memset(&pushback, 0, sizeof(pushback));
 	send_msg(conn, SM_NO_DEBUG, "ADM admin_sdr_mode=%d", VAL_USE_SDR);
 	#ifdef MULTI_CORE
 	    send_msg(conn, SM_NO_DEBUG, "ADM is_multi_core");
 	#endif
 	send_msg(conn, SM_NO_DEBUG, "ADM init=%d", rx_chans);
+	send_msg_encoded(conn, "ADM", "repo_git", "%s", REPO_GIT);
 }
 
 void c2s_admin_shutdown(void *param)
@@ -211,15 +221,49 @@ static void console_task(void *param)
             
             // FIXME: why, when we write > 50 chars to the shell input, does the echoed
             // output get mangled with multiple STX (0x02) characters?
-        #if 0
-            real_printf("read %d %d >>>", n, strlen(buf));
-            for (i=0; i<strlen(buf); i++) {
-                real_printf("%s", ASCII[buf[i]]);
-            }
-            real_printf("<<<\n");
-        #endif
+            //real_printf("read %d %d >>>%s<<<\n", n, strlen(buf), kiwi_str_ASCII_static(buf));
         
-            send_msg_encoded(c, "ADM", "console_c2w", "%s", buf);
+             // UTF-8 end-of-buffer fragmentation possibilities:
+             //
+             // NN = 0xxx_xxxx 0x00-0x7f non-encoded
+             // CC = 10xx_xxxx 0x80-0xb3 continuation byte
+             // LL = 11xx_xxxx 0xc0-0xff leading byte
+             //    L1 = 110x_xxxx %c0-%df [CC]
+             //    L2 = 1110_xxxx %e0-%ef [CC] [CC]
+             //    L3 = 1111_0xxx %f0-%f7 [CC] [CC] [CC]
+             //
+             // 987 654 321    [len-N]
+             //  c8  c5  c2
+             //         %LL    i.e. %L1 or %L2 or %L3
+             //     %L2 %CC
+             //     %L3 %CC
+             // %L3 %CC %CC
+
+            bool do_pushback = false;
+            char *cp = &buf[n-1];
+            while ((u1_t) *cp >= 0x80) {
+                do_pushback = true;
+                if ((u1_t) *cp >= 0xc0 || cp == buf) break;
+                cp--;
+            }
+            if (cp == buf) do_pushback = false;
+
+            if (do_pushback) {
+                strcpy(pushback.produce, cp);
+                //real_printf("pushback PRODUCE %d <%s>\n", strlen(pushback.produce), kiwi_str_ASCII_static(pushback.produce));
+                *cp = '\0';
+                pushback.have_pushback = true;
+            }
+        
+            //real_printf("console_c2w %d <%s> %d <%s>\n", strlen(pushback.consume), kiwi_str_ASCII_static(pushback.consume, 0), strlen(buf), kiwi_str_ASCII_static(buf, 1));
+            send_msg_encoded(c, "ADM", "console_c2w", "%s%s", pushback.consume, buf);
+
+            if (pushback.have_pushback) {
+                strcpy(pushback.consume, pushback.produce);
+                pushback.have_pushback = false;
+            } else {
+                pushback.consume[0] = '\0';
+            }
         }
 
         // process out-of-band chars
@@ -328,13 +372,6 @@ void c2s_admin(void *param)
 			}
 #endif
 
-            int chan;
-			i = sscanf(cmd, "SET user_kick=%d", &chan);
-			if (i == 1) {
-				rx_server_user_kick(KICK_CHAN, chan);
-				continue;
-			}
-
 
 ////////////////////////////////
 // control
@@ -349,8 +386,34 @@ void c2s_admin(void *param)
 					down = false;
 				} else {
 					down = true;
-					rx_server_user_kick(KICK_USERS);    // kick all users off
+					rx_server_kick(KICK_USERS);    // kick all users off
 				}
+				continue;
+			}
+
+            int chan;
+			i = sscanf(cmd, "SET user_kick=%d", &chan);
+			if (i == 1) {
+				rx_server_kick(KICK_CHAN, chan);
+				continue;
+			}
+
+			if (strcmp(cmd, "SET snr_meas") == 0) {
+                if (SNR_meas_tid) {
+                    TaskWakeupF(SNR_meas_tid, TWF_CANCEL_DEADLINE);
+                }
+				continue;
+			}
+
+            int dload;
+			i = sscanf(cmd, "SET dx_comm_download=%d", &dload);
+			if (i == 1) {
+			    if (dload == 1) {
+                    system("touch " DX_DOWNLOAD_ONESHOT_FN);
+			    } else {
+                    system("rm -f " DX_DOWNLOAD_ONESHOT_FN);
+			    }
+                clprintf(conn, "ADMIN: dx_comm_download %s\n", dload? "NOW" : "CANCEL");
 				continue;
 			}
 
@@ -500,19 +563,33 @@ void c2s_admin(void *param)
                             kiwi_ifree(cmd_p);
                             status_c += status;
                             if (status_c == 0) {
-                                asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "config.js");
+                                asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "dx_config.json");
                                 kstr_free(non_blocking_cmd(cmd_p, &status));
                                 kiwi_ifree(cmd_p);
-                                status_c += status;
+                                // won't exist if source kiwi < v1.602
+                                if (status != 0) status_c = 2;
                             }
                         }
                     }
 			    } else {
-		            asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "dx.json");
-                    //printf("config clone: %s\n", cmd_p);
-                    kstr_free(non_blocking_cmd(cmd_p, &status_c));
-                    //cprintf(conn, "config clone: status=%d\n", status_c);
-                    kiwi_ifree(cmd_p);
+			        //#define TEST_CLONE_UI
+			        #ifdef TEST_CLONE_UI
+			            status_c = 2;
+			        #else
+                        asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "dx.json");
+                        //printf("config clone: %s\n", cmd_p);
+                        kstr_free(non_blocking_cmd(cmd_p, &status_c));
+                        //cprintf(conn, "config clone: status=%d\n", status_c);
+                        kiwi_ifree(cmd_p);
+                        if (status_c == 0) {
+                            asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "dx_config.json");
+                            kstr_free(non_blocking_cmd(cmd_p, &status));
+                            kiwi_ifree(cmd_p);
+                            // won't exist if remote kiwi < v1.602
+                            if (status != 0) status_c = 2;
+                        }
+                        if (status_c == 0) status_c = 1;
+                    #endif
 		        }
 				kiwi_ifree(host_m);
 				kiwi_ifree(pwd_m);
@@ -544,6 +621,7 @@ void c2s_admin(void *param)
 
 			i = strcmp(cmd, "SET reload_index_params");
 			if (i == 0) {
+			    printf("reload_index_params\n");
 				reload_index_params();
 				continue;
 			}
@@ -558,10 +636,7 @@ void c2s_admin(void *param)
 			if (i == 0) {
                 if (admcfg_bool("kiwisdr_com_register", NULL, CFG_REQUIRED) == false) {
 		            // force switch to short sleep cycle so we get status returned sooner
-		            if (reg_kiwisdr_com_status && reg_kiwisdr_com_tid) {
-                        TaskWakeupF(reg_kiwisdr_com_tid, TWF_CANCEL_DEADLINE);
-                    }
-		            reg_kiwisdr_com_status = 0;
+		            wakeup_reg_kiwisdr_com(WAKEUP_REG_STATUS);
                 }
 
 				sb = kstr_asprintf(NULL, "{\"kiwisdr_com\":%d", reg_kiwisdr_com_status);
@@ -586,9 +661,7 @@ void c2s_admin(void *param)
 
 			i = strcmp(cmd, "SET public_wakeup");
 			if (i == 0) {
-                if (reg_kiwisdr_com_tid) {
-                    TaskWakeupF(reg_kiwisdr_com_tid, TWF_CANCEL_DEADLINE);
-                }
+                wakeup_reg_kiwisdr_com(WAKEUP_REG);
 				continue;
 			}
 #endif
@@ -619,8 +692,8 @@ void c2s_admin(void *param)
 			i = strcmp(cmd, "SET microSD_write");
 			if (i == 0) {
 				mprintf_ff("ADMIN: received microSD_write\n");
-				backup_in_progress = true;  // NB: must be before rx_server_user_kick() to prevent new connections
-				rx_server_user_kick(KICK_ALL);      // kick everything (including autorun) off to speed up copy
+				backup_in_progress = true;  // NB: must be before rx_server_kick() to prevent new connections
+				rx_server_kick(KICK_ALL);      // kick everything (including autorun) off to speed up copy
 				// if this delay isn't here the subsequent non_blocking_cmd_popen() hangs for
 				// MINUTES, if there is a user connection open, for reasons we do not understand
 				TaskSleepReasonSec("kick delay", 5);
@@ -832,6 +905,13 @@ void c2s_admin(void *param)
                 cprintf(conn, "\"iptables -A KIWI -j RETURN; iptables -A INPUT -j KIWI\"\n");
 				system("iptables -A KIWI -j RETURN; iptables -A INPUT -j KIWI");
 				send_msg(conn, SM_NO_DEBUG, "ADM network_ip_blacklist_enabled");
+				continue;
+			}
+
+			int my_kiwi;
+			i = sscanf(cmd, "SET my_kiwi=%d", &my_kiwi);
+			if (i == 1) {
+                my_kiwi_register(my_kiwi? true:false);
 				continue;
 			}
 
@@ -1129,9 +1209,15 @@ void c2s_admin(void *param)
 				continue;
 			}
 			
-			i = strcmp(cmd, "SET log_dump");
+			i = strcmp(cmd, "SET log_state");
 			if (i == 0) {
 		        dump();
+				continue;
+			}
+
+			i = strcmp(cmd, "SET log_blacklist");
+			if (i == 0) {
+		        ip_blacklist_dump(true);
 				continue;
 			}
 
@@ -1211,7 +1297,7 @@ void c2s_admin(void *param)
 			        if (no_console) {
                         send_msg_encoded(conn, "ADM", "console_c2w", "CONSOLE: disabled because kiwi.config/opt.no_console file exists\n");
 			        } else {
-                        send_msg_encoded(conn, "ADM", "console_c2w", "CONSOLE: only available to local admin connections\n");
+                        send_msg_encoded(conn, "ADM", "console_c2w", "CONSOLE: only available to local admin connection\n");
 			        }
 			    }
 				continue;
@@ -1251,6 +1337,14 @@ void c2s_admin(void *param)
 				}
 				continue;
 			}
+
+			i = strcmp(cmd, "ADM get_ant_switch_nch");
+			if (i == 0) {
+			    //printf("ADM get_ant_switch_nch\n");
+                send_msg(conn, SM_NO_DEBUG, "ADM ant_switch_nch=%d", kiwi.ant_switch_nch);
+				continue;
+			}
+
 #endif
 
 
@@ -1299,7 +1393,13 @@ void c2s_admin(void *param)
             if (strcmp(cmd, "PING") == 0)
                 continue;
 
-			printf("ADMIN: unknown command: <%s>\n", cmd);
+            if (conn->auth != true || conn->auth_admin != true) {
+                clprintf(conn, "ADMIN: cmd after auth revoked? auth=%d auth_admin=%d %d %s <%.64s>\n",
+                    conn->auth, conn->auth_admin, conn->remote_ip, cmd);
+                continue;
+            } else {
+			    cprintf(conn, "ADMIN: unknown command: %s <%s>\n", conn->remote_ip, cmd);
+			}
 			continue;
 		}
 		

@@ -22,29 +22,56 @@
 
 `default_nettype none
 
+// for compatibility with antenna switch extension
+// i.e. let Beagle drive these, not FPGA
+`define P8_ARE_INPUTS
+
 module KiwiSDR (
 
     input  wire	signed [ADC_BITS-1:0] ADC_DATA,
     input  wire	ADC_OVFL,
     input  wire	ADC_CLKIN,
     output wire	ADC_CLKEN,
+    output wire	ADC_STENL,
+    output wire	ADC_STSIG,
 
-    input  wire IF_SGN,
-    input  wire IF_MAG,
+    output wire	DA_DALE,
+    output wire	DA_DACLK,
+    output wire	DA_DADAT,
+
     input  wire GPS_TCXO,
+    input  wire GPS_ISGN,
+    input  wire GPS_IMAG,
+    input  wire GPS_QSGN,
+    input  wire GPS_QMAG,
+    output wire GPS_GSCS,
+    output wire GPS_GSCLK,
+    output wire GPS_GSDAT,
 
-    input  wire	BBB_SCLK,
-    input  wire [1:0] BBB_CS_N,
-    input  wire BBB_MOSI,
-    output wire BBB_MISO,
+    input  wire	BBB_SCLK,       // P922
+    input  wire [1:0] BBB_CS_N, // 1=P916 0=P917
+    input  wire BBB_MOSI,       // P918
+    output wire BBB_MISO,       // P921
 
-    output wire P911,
-    output wire P913,
-    input  wire P915,
-    output wire CMD_READY,  // ctrl[CTRL_CMD_READY]
-    output wire SND_INTR,   // ctrl[CTRL_SND_INTR]
-    output wire P926,		// inside pin row
-    
+    input  wire P911,       // P911, GPIO 0_30, unused debug in
+    input  wire P913,       // P913, GPIO 0_31, unused debug in
+    input  wire P915,       // P915, GPIO 1_0-2_0, unused debug in
+    output wire CMD_READY,  // P923, GPIO 1_17, ctrl[CTRL_CMD_READY]
+    output wire SND_INTR,   // P924, GPIO 0_15, ctrl[CTRL_SND_INTR]
+    output wire P926,		// P926, GPIO 0_14, unused debug out
+
+`ifdef P8_ARE_INPUTS
+    input  wire P826,		// outside pin row
+    input  wire P819,
+    input  wire P817,
+    input  wire P818,		// outside pin row
+    input  wire P815,
+    input  wire P816,		// outside pin row
+    input  wire P813,
+    input  wire P814,		// outside pin row
+    input  wire P811,
+    input  wire P812,		// outside pin row
+`else
     output wire P826,		// outside pin row
     output wire P819,
     output wire P817,
@@ -55,6 +82,7 @@ module KiwiSDR (
     output wire P814,		// outside pin row
     output wire P811,
     output wire P812,		// outside pin row
+`endif
 
     output wire EWP
     );
@@ -74,9 +102,7 @@ module KiwiSDR (
     
     wire [2:0] P9;
     
-    assign P926 = P9[2];    // P9-26
-    assign P913 = P9[1];    // P9-13
-    assign P911 = P9[0];    // P9-11
+    //jksx assign P926 = P9[2];    // P926
 
     // P8: 25 23 21 19 17 15 13 11 09 07 05 03 01
     //              b8 b7 b6 b5 b4
@@ -84,6 +110,8 @@ module KiwiSDR (
     // P8: 26 24 22 20 18 16 14 12 10 08 06 04 02
     //     b9          b3 b2 b1 b0
     
+`ifdef P8_ARE_INPUTS
+`else
     wire [9:0] P8;
     
     assign P826 = P8[9];
@@ -96,6 +124,7 @@ module KiwiSDR (
     assign P816 = P8[2];
     assign P814 = P8[1];
     assign P812 = P8[0];
+`endif
 
     
     //////////////////////////////////////////////////////////////////////////
@@ -145,6 +174,24 @@ module KiwiSDR (
         if (wrReg & op[SET_CTRL]) ctrl <= tos[15:0];
     end
 
+	assign ADC_STENL = !ctrl[CTRL_STEN];
+
+    wire [1:0] ser_sel = ctrl & CTRL_SER_MASK;
+    wire ser_attn = (ser_sel == CTRL_SER_ATTN);
+	assign DA_DALE = ser_attn && ctrl[CTRL_SER_LE_CSN];
+	assign DA_DACLK = ser_attn && ctrl[CTRL_SER_CLK];
+	assign DA_DADAT = ser_attn && ctrl[CTRL_SER_DATA];
+
+    wire ser_gps = (ser_sel == CTRL_SER_GPS);
+	assign GPS_GSCS = !(ser_gps && ctrl[CTRL_SER_LE_CSN]);
+	assign GPS_GSCLK = ser_gps && ctrl[CTRL_SER_CLK];
+	assign GPS_GSDAT = ser_gps && ctrl[CTRL_SER_DATA];
+
+    wire ser_dna = (ser_sel == CTRL_SER_DNA);
+	wire dna_read = ser_dna && ctrl[CTRL_SER_LE_CSN];
+	wire dna_clk = ser_dna && ctrl[CTRL_SER_CLK];
+	wire dna_shift = ser_dna && ctrl[CTRL_SER_DATA];
+
 	assign EWP = ctrl[CTRL_EEPROM_WP];
 	assign CMD_READY = ctrl[CTRL_CMD_READY];
 
@@ -160,6 +207,8 @@ module KiwiSDR (
 	assign P9[1] = ctrl[CTRL_UNUSED_OUT];
 	assign P9[2] = ctrl[CTRL_UNUSED_OUT];
 
+`ifdef P8_ARE_INPUTS
+`else
 	assign P8[0] = ctrl[CTRL_UNUSED_OUT];
 	assign P8[1] = ctrl[CTRL_UNUSED_OUT];
 	assign P8[2] = ctrl[CTRL_UNUSED_OUT];
@@ -170,20 +219,19 @@ module KiwiSDR (
 	assign P8[7] = ctrl[CTRL_UNUSED_OUT];
 	assign P8[8] = ctrl[CTRL_UNUSED_OUT];
 	assign P8[9] = ctrl[CTRL_UNUSED_OUT];
+`endif
     
-	wire unused_inputs = IF_MAG | P915
+	wire unused_inputs = P911 | P913 | P915
 `ifdef USE_OTHER
         | unused_inputs_other
 `else
-`ifdef USE_SDR
-	    | ctrl[CTRL_0001] | ctrl[CTRL_0002] | ctrl[CTRL_0004] | ctrl[CTRL_0008]
-	    //| ctrl[CTRL_0010] | ctrl[CTRL_0020] | ctrl[CTRL_0040] | ctrl[CTRL_0080]
-	    | ctrl[CTRL_0010] | ctrl[CTRL_0020] | ctrl[CTRL_0040]
-`else
+`ifdef P8_ARE_INPUTS
+        | P812 | P813 | P814 | P815 | P816 | P817 | P818 | P819 | P826
 `endif
 `ifdef USE_GPS
+        | unused_inputs_gps
 `else
-        | IF_SGN
+        | GPS_ISGN | GPS_IMAG | GPS_QSGN | GPS_QMAG
 `endif
 `endif
         ;
@@ -207,7 +255,7 @@ module KiwiSDR (
     
     // FIXME: Vivado ML is unhappy that we clock DNA_PORT.CLK statically
     wire dna_data;
-    DNA_PORT dna(.CLK(ctrl[CTRL_DNA_CLK]), .READ(ctrl[CTRL_DNA_READ]), .SHIFT(ctrl[CTRL_DNA_SHIFT]), .DIN(1'b1), .DOUT(dna_data));
+    DNA_PORT dna(.CLK(dna_clk), .READ(dna_read), .SHIFT(dna_shift), .DIN(1'b1), .DOUT(dna_data));
 
 
     //////////////////////////////////////////////////////////////////////////
@@ -221,6 +269,10 @@ module KiwiSDR (
 `ifdef USE_SDR
 	wire use_gen_C = ctrl[CTRL_USE_GEN];
 	wire gen_fir_C = ctrl[CTRL_GEN_FIR];
+	
+	wire self_test;
+	assign ADC_STSIG = self_test;
+	assign P926 = self_test;        //jksx self test devl
 
     RECEIVER receiver (
     	.adc_clk	    (adc_clk),
@@ -248,7 +300,10 @@ module KiwiSDR (
         .wrEvt2         (wrEvt2),
         
         .use_gen_C      (use_gen_C),
-        .gen_fir_C      (gen_fir_C)
+        .gen_fir_C      (gen_fir_C),
+        
+        .self_test_en_C (ctrl[CTRL_STEN]),
+        .self_test      (self_test)
     	);
 
 	wire rx_ovfl_C, rx_orst;
@@ -386,24 +441,32 @@ module KiwiSDR (
 
 
 `ifdef USE_GPS
-    GPS gps (
-        .clk        (gps_clk),
-        .adc_clk	(adc_clk),
-        .host_srq   (host_srq),
+    wire unused_inputs_gps;
 
-        .I_data		(IF_SGN),
-        .gps_rd 	(gps_rd),
-        .gps_dout	(gps_dout),
+    GPS gps (
+        .clk            (gps_clk),
+        .adc_clk	    (adc_clk),
+        .host_srq       (host_srq),
+
+        .I_sign		    (GPS_ISGN),
+        .I_mag		    (GPS_IMAG),
+        .Q_sign		    (GPS_QSGN),
+        .Q_mag		    (GPS_QMAG),
+        .gps_rd 	    (gps_rd),
+        .gps_dout	    (gps_dout),
         
-        .ticks_A	(ticks_A),
+        .ticks_A	    (ticks_A),
         
-        .ser		(ser[0]),        
-        .tos		(tos),      // no clk domain crossing because gps_clk = cpu_clk
-        .op_8       (op[7:0]),        
-        .rdBit      (rdBit0),
-        .rdReg      (rdReg),
-        .wrReg      (wrReg),
-        .wrEvt      (wrEvt)
+        .ser		    (ser[0]),        
+        .tos		    (tos),      // no clk domain crossing because gps_clk = cpu_clk
+        .op_8           (op[7:0]),        
+        .rdBit          (rdBit0),
+        .rdReg          (rdReg),
+        .wrReg          (wrReg),
+        .wrEvt          (wrEvt),
+        
+        // o
+        .unused_inputs  (unused_inputs_gps)
         );
 `else
 
@@ -434,8 +497,10 @@ module KiwiSDR (
         .ADC_DATA       (ADC_DATA),
         .ADC_OVFL       (ADC_OVFL),
         
-        .IF_SGN         (IF_SGN),
-        .IF_MAG         (IF_MAG),
+        .I_sign         (GPS_ISGN),
+        .I_mag          (GPS_IMAG),
+        .Q_sign         (GPS_QSGN),
+        .Q_mag          (GPS_QMAG),
 
         .tos		    (tos[31:0]),
         .op             (op),        

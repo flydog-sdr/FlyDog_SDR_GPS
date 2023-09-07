@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 John Seamons, ZL/KF6VO
+// Copyright (c) 2016-2023 John Seamons, ZL/KF6VO
 
 /*
 
@@ -30,6 +30,7 @@ var loran_c = {
 var gri_s = [
    '5960 North Russia (Chayka)',
    '5990 Caucasus',
+   '5991 USA west coast (eLoran)',
    '6000 China BPL Pucheng',
    '6731 Anthorn UK',
    '6780 China South Sea',
@@ -38,14 +39,15 @@ var gri_s = [
    '8000 Western Russia (Chayka)',
    '8390 China East Sea',
    '8830 Saudi Arabia North',
-   '8970 Wildwood USA (eLoran)',
+   '8970 USA east coast (eLoran)',
    '9930 Korea',
-   '9960 Wildwood USA (eLoran)'
+   '9960 USA east coast (eLoran)'
 ];
 
 var gri_2s = [
    'North Russia', '(Chayka)',
    'Caucasus', '',
+   'USA west coast', '(eLoran)',
    'China BPL', 'Pucheng',
    'Anthorn UK', '',
    'China Sea', 'South',
@@ -54,15 +56,15 @@ var gri_2s = [
    'Western Russia', '(Chayka)',
    'China Sea', 'East',
    'Saudi Arabia', 'North',
-   'Wildwood USA', '(eLoran)',
+   'USA east coast', '(eLoran)',
    'Korea', '',
-   'Wildwood USA', '(eLoran)'
+   'USA east coast', '(eLoran)'
 ];
 
 var loran_c_default_chain1 = 7;
 var loran_c_default_chain2 = 3;
 
-// Emission delay data from Markus Vester, DF6NM
+// Emission (tx) delay data from Markus Vester, DF6NM
 // LoranView: df6nm.bplaced.net/LoranView/LoranGrabber.htm
 
 var emission_delay = {
@@ -76,6 +78,13 @@ var emission_delay = {
 			  { s:'X Caucasian West', d:16587 },
 			  { s:'Y Caucasian East', d:31304 },
 			  { s:'Z Caucasian North', d:46440 }
+			],
+
+         // US west coast eLoran test
+	5991: [ { s:'M George | Variable: Fallon, Havre', d:0 }
+			  //{ s:'X ', d:13343.60 },     // emission (tx) delays from DF6NM 2015 data
+			  //{ s:'Y ', d:28927.36 },
+			  //{ s:'Z ', d:42266.63 }
 			],
 			
 	6000: [ { s:'M Pucheng', d:0 } ],	// LoranView (DE) shows chain reception
@@ -284,7 +293,7 @@ function loran_c_update_gri(ch, path_to_menu, gri)
 
 	loran_c_draw_legend(ch, gri, path_to_menu);
 	
-	ext_send('SET gri'+ ch +'='+ gri);
+	ext_send('SET gri'+ ch +'='+ ((gri == 5991)? 5990 : gri));     // hack for 5990 eLoran test
 }
 
 function loran_c_param_val(algo, slider_val)

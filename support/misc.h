@@ -36,20 +36,6 @@ void release_misc_miso(int which = 0);
 SPI_MOSI *get_misc_mosi();
 void release_misc_mosi();
 
-u2_t ctrl_get();
-void ctrl_clr_set(u2_t clr, u2_t set);
-void ctrl_positive_pulse(u2_t bits);
-
-typedef union {
-    u2_t word;
-    struct {
-        u2_t fpga_id:4, stat_user:4, fpga_ver:4, fw_id:3, ovfl:1;
-    };
-} stat_reg_t;
-stat_reg_t stat_get();
-
-u2_t getmem(u2_t addr);
-void printmem(const char *str, u2_t addr);
 float ecpu_use();
 
 int qsort_floatcomp(const void *elem1, const void *elem2);
@@ -58,8 +44,10 @@ int qsort_intcomp(const void *elem1, const void *elem2);
 float median_f(float *f, int len, float *pct_1 = NULL, float *pct_2 = NULL);
 int median_i(int *i, int len, int *pct_1 = NULL, int *pct_2 = NULL);
 
-#define SM_DEBUG	true
-#define SM_NO_DEBUG	false
+#define SM_DEBUG	    true
+#define SM_NO_DEBUG	    false
+#define SM_RX_CHAN_ALL  -1
+
 void send_msg_buf(conn_t *c, char *s, int slen);
 void send_msg(conn_t *c, bool debug, const char *msg, ...);
 void send_msg_data(conn_t *c, bool debug, u1_t dst, u1_t *bytes, int nbytes);
@@ -67,7 +55,7 @@ void send_msg_data2(conn_t *c, bool debug, u1_t dst, u1_t data2, u1_t *bytes, in
 void send_msg_mc(struct mg_connection *mc, bool debug, const char *msg, ...);
 void send_msg_encoded(conn_t *conn, const char *dst, const char *cmd, const char *fmt, ...);
 void send_msg_mc_encoded(struct mg_connection *mc, const char *dst, const char *cmd, const char *fmt, ...);
-int snd_send_msg(int rx_chan, bool debug, const char *msg, ...);
+int snd_send_msg_encoded(int rx_chan, bool debug, const char *dst, const char *cmd, const char *msg, ...);
 void snd_send_msg_data(int rc_chan, bool debug, u1_t cmd, u1_t *bytes, int nbytes);
 void input_msg_internal(conn_t *conn, const char *fmt, ...);
 

@@ -36,6 +36,8 @@ CFLAGS += -g -pipe -MMD -DCOMPILE_HOST=STRINGIFY\($(COMPILE_HOST)\)
 #CFLAGS_UNSAFE_OPT := -fcx-limited-range -funsafe-math-optimizations
 CFLAGS_UNSAFE_OPT := -funsafe-math-optimizations
 
+APT_GET_FORCE =
+
 # devsys
 ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
     ifeq ($(XC),-DXC)
@@ -149,12 +151,13 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
             CMD_DEPS_DEBIAN := /usr/bin/clang-7
         endif
     else ifeq ($(RPI),true)
-        CMD_DEPS_DEBIAN := /usr/bin/clang-7
-        CC = clang-7
-        CPP = clang++-7
+        CMD_DEPS_DEBIAN := /usr/bin/clang-11
+        CC = clang-11
+        CPP = clang++-11
         VIS_OPT = -Ofast
         # needed for iq_display.cpp et al
         CPP_FLAGS += -std=gnu++11
+        APT_GET_FORCE = --no-install-recommends --force-yes
     else ifeq ($(BBG_BBB),true)
         ifeq ($(DEBIAN_VERSION),10)
             CC = clang-8
@@ -174,6 +177,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
             VIS_OPT = -Ofast
             # needed for iq_display.cpp et al
             CPP_FLAGS += -std=gnu++11
+            APT_GET_FORCE = --force-yes
         else ifeq ($(DEBIAN_VERSION),7)
             # clang 3.0 available on Debian 7.9 doesn't work
             CC = gcc
@@ -183,6 +187,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
             VIS_OPT = -O3
             # needed for iq_display.cpp et al (-std=gnu++11 isn't available on Debian 7.9)
             CPP_FLAGS += -std=gnu++0x
+            APT_GET_FORCE = --force-yes
         else
             BAD_DEV_DETECT := true
         endif

@@ -96,9 +96,7 @@ function hfdl_recv(data)
 		switch (param[0]) {
 
 			case "ready":
-				var m = 'pkgs_maps/';
-				kiwi_load_js(['pkgs/js/sprintf/sprintf.js',
-				   m+'pkgs_maps.js', m+'pkgs_maps.css'], 'hfdl_controls_setup');
+				kiwi_load_js_dir('pkgs_maps/', ['pkgs_maps.js', 'pkgs_maps.css'], 'hfdl_controls_setup');
 				break;
 
 			case "lowres_latlon":
@@ -325,14 +323,14 @@ function hfdl_controls_setup()
          w3_text('w3-text-aqua w3-bold', 'HFDL options'),
          w3_select('w3-margin-T-4 w3-width-auto '+ hfdl.sfmt, '', 'show', 'hfdl.show', hfdl.show, hfdl.show_s, 'hfdl_show_cb'),
          
-         w3_button('id-hfdl-show-kiwi w3-margin-T-10 w3-btn w3-small w3-cyan w3-momentary', 'Show Kiwi', 'hfdl_show_kiwi_cb', 1),
+         w3_button('id-hfdl-show-kiwi w3-margin-T-10 w3-btn w3-small w3-cyan w3-text-css-white w3-momentary', 'Show Kiwi', 'hfdl_show_kiwi_cb', 1),
 
          w3_checkbox('w3-margin-T-10//'+ cbox, 'Show day/night', 'hfdl.day_night_visible', true, 'hfdl_day_night_visible_cb'),
          w3_checkbox(cbox, 'Show graticule', 'hfdl.graticule_visible', true, 'hfdl_graticule_visible_cb'),
 
          w3_inline('w3-margin-T-10 w3-valign/', 
             w3_checkbox('//'+ cbox, 'Show flights', 'hfdl.flights_visible', true, 'hfdl_flights_visible_cb'),
-            w3_button('id-hfdl-clear-old w3-margin-left w3-btn w3-small w3-grey w3-momentary', 'Clear old', 'hfdl_clear_old_cb', 1)
+            w3_button('id-hfdl-clear-old w3-margin-left w3-btn w3-small w3-grey w3-text-css-white w3-momentary', 'Clear old', 'hfdl_clear_old_cb', 1)
          ),
          w3_checkbox(cbox, 'Show ground stations', 'hfdl.gs_visible', true, 'hfdl_gs_visible_cb')
       );
@@ -413,18 +411,21 @@ function hfdl_controls_setup()
       });
    }, hfdl.test_flight? 10000 : 60000);
    
-	w3_do_when_rendered('id-hfdl-menus', function() {
-      ext_send('SET reset');
-	   hfdl.ext_url = kiwi_SSL() +'files.kiwisdr.com/hfdl/systable.cjson';
-	   hfdl.int_url = kiwi_url_origin() +'/extensions/HFDL/systable.backup.cjson';
-	   hfdl.using_default = false;
-	   hfdl.double_fault = false;
-	   if (0 && dbgUs) {
-         kiwi_ajax(hfdl.ext_url +'.xxx', 'hfdl_get_systable_done_cb', 0, -500);
-	   } else {
-         kiwi_ajax(hfdl.ext_url, 'hfdl_get_systable_done_cb', 0, 10000);
+	w3_do_when_rendered('id-hfdl-menus',
+	   function() {
+         ext_send('SET reset');
+         hfdl.ext_url = kiwi_SSL() +'files.kiwisdr.com/hfdl/systable.cjson';
+         hfdl.int_url = kiwi_url_origin() +'/extensions/HFDL/systable.backup.cjson';
+         hfdl.using_default = false;
+         hfdl.double_fault = false;
+         if (0 && dbgUs) {
+            kiwi_ajax(hfdl.ext_url +'.xxx', 'hfdl_get_systable_done_cb', 0, -500);
+         } else {
+            kiwi_ajax(hfdl.ext_url, 'hfdl_get_systable_done_cb', 0, 10000);
+         }
       }
-   });
+   );
+   // REMINDER: w3_do_when_rendered() returns immediately
 }
 
 
@@ -924,7 +925,7 @@ function hfdl_clear_menus(except)
 {
    // reset frequency menus
    for (var i = 0; i < hfdl.menu_n; i++) {
-      if (!isArg(except) || i != except)
+      if (isNoArg(except) || i != except)
          w3_select_value('hfdl.menu'+ i, -1);
    }
 }
@@ -1009,6 +1010,7 @@ function hfdl_pre_select_cb(path, val, first)
             ext_tune(cf, 'iq', ext_zoom.ABS, znew);
             
             // switch to EiBi database displaying only HFDL labels
+            console.log('$hfdl_pre_select_cb db='+ dx.db +' single_type='+ !dx_is_single_type(dx.DX_HFDL));
             if (dx.db != dx.DB_EiBi || !dx_is_single_type(dx.DX_HFDL)) {
                dx_set_type(dx.DX_HFDL);
                dx_database_cb('', dx.DB_EiBi);
@@ -1109,12 +1111,11 @@ function hfdl_log_mins_cb(path, val)
 
 function hfdl_log_cb()
 {
-   var ts = kiwi_host() +'_'+ new Date().toISOString().replace(/:/g, '_').replace(/\.[0-9]+Z$/, 'Z') +'_'+ w3_el('id-freq-input').value +'_'+ cur_mode;
    var txt = new Blob([hfdl.log_txt], { type: 'text/plain' });
    var a = document.createElement('a');
    a.style = 'display: none';
    a.href = window.URL.createObjectURL(txt);
-   a.download = 'HFDL.'+ ts +'.log.txt';
+   a.download = kiwi_timestamp_filename('HFDL.', '.log.txt');
    document.body.appendChild(a);
    console.log('hfdl_log: '+ a.download);
    a.click();
@@ -1167,7 +1168,7 @@ function HFDL_focus()
 {
    hfdl.dx_db_save = dx.db;
    hfdl.dx_type_save = dx.eibi_types_mask;
-   //console.log('HFDL save dx_db_save='+ hfdl.dx_db_save +' dx_type_save='+ hfdl.dx_type_save.toHex());
+   console.log('HFDL save dx_db_save='+ hfdl.dx_db_save +' dx_type_save='+ hfdl.dx_type_save.toHex());
 }
 
 function HFDL_blur()
@@ -1179,7 +1180,7 @@ function HFDL_blur()
    kiwi_clearInterval(hfdl.locations_age_interval);
    kiwi_map_blur(hfdl.kmap);
    
-   //console.log('HFDL restore dx_db_save='+ hfdl.dx_db_save +' dx_type_save='+ hfdl.dx_type_save.toHex());
+   console.log('HFDL restore dx_db_save='+ hfdl.dx_db_save +' dx_type_save='+ hfdl.dx_type_save.toHex());
    dx.eibi_types_mask = hfdl.dx_type_save;
    dx_database_cb('', hfdl.dx_db_save);
 }
@@ -1196,8 +1197,8 @@ function HFDL_help(show)
                'and saved automatically without causing a browser popup window for each download.' +
 
                '<br><br>URL parameters: <br>' +
-               '<i>(menu match)</i> &nbsp; map|split &nbsp; display:[012] &nbsp; ' +
-               'log_time:<i>mins</i> &nbsp; gs:0 &nbsp; test' +
+               w3_text('|color:orange', '(menu match) &nbsp; map|split &nbsp; display:[<i>012</i>] &nbsp; ' +
+               'log_time:<i>mins</i> &nbsp; gs:0 &nbsp; test') +
                '<br><br>' +
                'The first URL parameter can be a frequency entry from the "Bands" menu (e.g. "8977") or the ' +
                'numeric part of the blue "full band" entry (e.g. "5" part of "5 MHz" entry). <br>' +

@@ -85,7 +85,7 @@
     display: inline-block;
     outline: 0;
     padding: 6px 16px;
-    vertical-align: inherit;    /* so w3-middle etc. works from parent(s) */
+    vertical-align: bottom;     /* so baseline level with surrounding plain text */
     overflow: hidden;
     text-decoration: none !important;
     color: #fff;
@@ -93,6 +93,10 @@
     text-align: left;
     white-space: nowrap;
 	cursor: default;
+}
+
+.w3-text-bottom {
+    vertical-align: bottom
 }
 
 .w3-ext-btn
@@ -592,6 +596,11 @@ input[type=range]::-moz-range-thumb {
     margin: 10px 0 0 10px
 }
 
+.w3-margin-TRL-10
+{
+    margin: 10px 10px 0 10px
+}
+
 .w3-margin-B-4
 {
     margin-bottom: 4px !important
@@ -610,6 +619,11 @@ input[type=range]::-moz-range-thumb {
 .w3-margin-B-10
 {
     margin-bottom: 10px !important
+}
+
+.w3-margin-B-12
+{
+    margin-bottom: 12px !important
 }
 
 .w3-margin-B-16
@@ -741,6 +755,11 @@ input[type=range]::-moz-range-thumb {
     padding: 10px 0
 }
 
+.w3-padding-TB-15
+{
+    padding: 15px 0
+}
+
 .w3-padding-TB-24
 {
     padding: 24px 0
@@ -749,6 +768,10 @@ input[type=range]::-moz-range-thumb {
 .w3-padding-B-8
 {
     padding: 0 0 8px 0
+}
+
+.w3-round-3px {
+    border-radius: 3px !important
 }
 
 .w3-text-in-circle
@@ -784,6 +807,8 @@ input[type=range]::-moz-range-thumb {
 
 .w3-flex { display: flex }
 
+.w3-flex-noshrink { flex: 0 0 auto }
+
 .w3-flex-col, w3-flex-ttb { display: flex; flex-direction: column }
 .w3-flex-col-rev, w3-flex-btt { display: flex; flex-direction: column-reverse }
 .w3-flex-row, w3-flex-ltr { display: flex; flex-direction: row }
@@ -815,7 +840,9 @@ input[type=range]::-moz-range-thumb {
 
 .w3-gap-8 { gap: 8px }
 .w3-gap-10 { gap: 10px }
+.w3-gap-15 { gap: 15px }
 .w3-gap-16 { gap: 16px }
+.w3-gap-20 { gap: 20px }
 
 .w3-perfect-center, .w3-perfect-centering, .w3-perfectly-centered
 {
@@ -1148,6 +1175,12 @@ input[type=range]::-moz-range-thumb {
     background-color: lightGray;
 }
 
+/* e.g. to override black text of a w3-* color */
+.w3-text-css-white
+{
+    color: white !important;
+}
+
 .w3-text-css-lightGray
 {
     color: lightGray;
@@ -1213,6 +1246,11 @@ input[type=range]::-moz-range-thumb {
 .w3-text-css-red
 {
     color: red;
+}
+
+.w3-text-css-grey
+{
+    color: #808080;
 }
 
 .w3-css-pink
@@ -1301,6 +1339,10 @@ input[type=range]::-moz-range-thumb {
 
 .w3-font-16px {
     font-size: 16px;
+}
+
+.w3-font-18px {
+    font-size: 18px;
 }
 
 .w3-font-20px {

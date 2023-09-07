@@ -198,7 +198,7 @@ function noise_filter_environment_changed(changed)
    }
 }
 
-// called from openwebrx.js
+// called from main ui, not ext
 function noise_filter_init()
 {
    // NR_WDSP
@@ -289,7 +289,7 @@ function noise_filter_save_defaults()
 
 	cfg.nr_de = noise_filter.denoise;
 	cfg.nr_an = noise_filter.autonotch;
-   ext_set_cfg_param('cfg.nr_algo', noise_filter.algo, true);
+   ext_set_cfg_param('cfg.nr_algo', noise_filter.algo, EXT_SAVE);
 }
 
 function noise_filter_send(type)
@@ -348,7 +348,7 @@ function noise_filter_send(type)
 function nr_algo_cb(path, idx, first, from)
 {
    //console.log('nr_algo_cb idx='+ idx +' first='+ first +' from='+ from);
-   if (first) return;      // because call via openwebrx has zero, not restored value
+   if (first) return;      // because call via main ui has zero, not restored value
    idx = +idx;
    w3_select_value(path, idx);
    noise_filter.algo = idx;

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 John Seamons, ZL/KF6VO
+// Copyright (c) 2017-2023 John Seamons, ZL/KF6VO
 
 var tdoa = {
    ext_name:   'TDoA',  // NB: must match tdoa.cpp:tdoa_ext.name
@@ -95,6 +95,10 @@ var tdoa = {
       { n:'Aus/NZ', lat:-30, lon:150, z:3 },
    ],
    
+   sample_time_i: 1,
+   sample_time_s: [ '15s', '30s', '45s', '60s' ],
+   sample_time: 30,
+   
    sample_status: [
       { s:'sampling complete', retry:0 },
       { s:'connection failed', retry:0 },
@@ -134,7 +138,7 @@ var tdoa = {
 
 function TDoA_main()
 {
-   tdoa.url_base =   kiwi_add_end(cfg.tdoa.server_url, '/');
+   tdoa.url_base =   kiwi_add_end(cfg.tdoa.server, '/');
    tdoa.url =        tdoa.url_base +'tdoa/';
    tdoa.url_files =  tdoa.url +'files/';
    tdoa.rep_files =  kiwi_remove_protocol(tdoa.url) +'files';  // NB: not full URL, and no trailing /
@@ -223,9 +227,9 @@ function tdoa_controls_setup()
          w3_checkbox(cbox, 'Show day/night', 'tdoa.day_night_visible', true, 'tdoa_day_night_visible_cb'),
          w3_checkbox(cbox, 'Show graticule', 'tdoa.graticule_visible', true, 'tdoa_graticule_visible_cb'),
          w3_checkbox(cbox, 'Show all results', 'tdoa.all_results', false, 'tdoa_all_results_cb'),
-         w3_button('w3-btn w3-margin-L-20 w3-small w3-grey w3-momentary', 'Clear old results', 'tdoa_clear_results_cb', 1),
+         w3_button('w3-btn w3-margin-L-20 w3-margin-T-8 w3-small w3-grey w3-text-css-white w3-momentary', 'Clear old results', 'tdoa_clear_results_cb', 1),
 
-         w3_checkbox('w3-margin-T-10//'+ cbox, 'Kiwi hosts', 'tdoa.hosts_visible', true, 'tdoa_hosts_visible_cb'),
+         w3_checkbox('w3-margin-T-8//'+ cbox, 'Kiwi hosts', 'tdoa.hosts_visible', true, 'tdoa_hosts_visible_cb'),
          w3_checkbox(cbox, 'Reference locations', 'tdoa.refs_visible', true, 'tdoa_refs_visible_cb'),
          w3_checkbox(cbox2, 'VLF/LF', 'tdoa.refs_v', true, 'tdoa_refs_cb'),
          w3_checkbox(cbox2, 'Milcom', 'tdoa.refs_m', true, 'tdoa_refs_cb'),
@@ -270,10 +274,13 @@ function tdoa_controls_setup()
 		      w3_div('id-tdoa-download-KML w3-margin-left w3-hide||title="download KML file"'),
 		      w3_div('id-tdoa-download-MAT w3-margin-left w3-hide||title="download MAT file"')
          ),
-		   w3_inline_percent('',
-            w3_select('w3-text-red', '', 'quick zoom', 'tdoa.quick_zoom', -1, tdoa.quick_zoom, 'tdoa_quick_zoom_cb'), 20,
-            w3_input('id-tdoa-known-location w3-padding-tiny', '', 'tdoa.known_location', '', 'tdoa_edit_known_location_cb',
-               'Map ref location: type lat, lon and name or click green map markers'
+		   w3_inline('w3-gap-8/',
+            w3_select('w3-text-red', '', 'zoom to', 'tdoa.quick_zoom', -1, tdoa.quick_zoom, 'tdoa_quick_zoom_cb'),
+            w3_select('w3-text-red', '', 'sample', 'tdoa.sample_time_i', tdoa.sample_time_i, tdoa.sample_time_s, 'tdoa_sample_time_cb'),
+            w3_div('w3-width-full',
+               w3_input('id-tdoa-known-location w3-padding-tiny', '', 'tdoa.known_location', '', 'tdoa_edit_known_location_cb',
+                  'Map ref location: type lat, lon and name or click green map markers'
+               )
             )
          )
       );
@@ -543,6 +550,7 @@ function tdoa_update_link()
    if (!m) return;
    var c = m.getCenter();
    url += ',lat:'+ tdoa_lat(c).toFixed(2) +',lon:'+ tdoa_lon(c).toFixed(2) +',z:'+ m.getZoom();
+   if (tdoa.sample_time != 30) url += ',sample:'+ tdoa.sample_time;
    if (!tdoa.leaflet && m.getMapTypeId() != 'satellite') url += ',map:1';
 
    tdoa.field.forEach(function(f, i) {
@@ -605,7 +613,10 @@ function tdoa_place_host_marker(h, map)
       }
       title += '\nTDoA channels: '+ h.tc;
    }
-   title += '\nAntenna: '+ h.a +'\n'+ h.fm +' GPS fixes/min';
+   title += '\nAntenna: '+ h.a;
+   if (h.snr > 0)
+      title += '\nS/N score: '+ h.snr +' dB';
+   title += '\n'+ h.fm +' GPS fixes/min';
 
    if (tdoa.leaflet) {
       var icon =
@@ -622,7 +633,9 @@ function tdoa_place_host_marker(h, map)
       // when not using MarkerCluster add marker to map here
       if (map != tdoa.kiwi_map) {
          marker.kiwi_mkr_2_ref_or_host = h;     // needed before call to tdoa_style_marker()
-         tdoa_style_marker(h.mkr, h.idx, h.id, 'host', map);
+         var id = h.id;
+         if (h.snr > 0) id += ' '+ h.snr;
+         tdoa_style_marker(h.mkr, h.idx, id, 'host', map);
       }
    } else {
       var latlon = new google.maps.LatLng(h.lat, h.lon);
@@ -1011,6 +1024,7 @@ function tdoa_get_hosts_cb(hosts)
       for (var i=0, len = p.length; i < len; i++) {
          var a = p[i];
          console.log('TDoA: param <'+ a +'>');
+         var r;
          if (a.includes(':')) {
             if (a.startsWith('lat:')) {
                lat = parseFloat(a.substring(4));
@@ -1018,11 +1032,8 @@ function tdoa_get_hosts_cb(hosts)
             if (a.startsWith('lon:') || a.startsWith('lng:')) {
                lon = parseFloat(a.substring(4));
             } else
-            if (a.startsWith('z:')) {
-               zoom = parseInt(a.substring(2));
-            } else
-            if (a.startsWith('zoom:')) {
-               zoom = parseInt(a.substring(5));
+            if ((r = w3_ext_param('z', a)).match) {
+               zoom = r.num;
             } else
             if (a.startsWith('map:')) {
                maptype = parseInt(a.substring(4));
@@ -1059,8 +1070,14 @@ function tdoa_get_hosts_cb(hosts)
             } else
             if (a.startsWith('devl:')) {
                tdoa.devl = true;
+            } else
+            if ((r = w3_ext_param('sample', a)).match) {
+               w3_ext_param_array_match_num(tdoa.sample_time_s, r.num,
+                  function(i, n) {
+                     tdoa_sample_time_cb('tdoa.sample_time_i', i);
+                  }
+               );
             }
-
          } else {
             a = a.toLowerCase();
 
@@ -1480,6 +1497,7 @@ function tdoa_submit_button_cb2()
    
    var s = h_v + p_v + id_v;
    s += '&f='+ (ext_get_passband_center_freq()/1e3).toFixed(2);
+   s += '&s='+ tdoa.sample_time;
    var pb = ext_get_passband();
    s += '&w='+ pb.high.toFixed(0);
 
@@ -2395,12 +2413,14 @@ function tdoa_rebuild_hosts(opts)
    for (var i = 0; i < tdoa.hosts.length; i++) {
       var h = tdoa.hosts[i];
       if (h.mkr) {
+         var id = h.id;
+         if (h.snr > 0) id += ' '+ h.snr;
          if (h.selected) {
             //console.log('outside cluster: '+ h.call);
-            if (tdoa.leaflet) tdoa_style_marker(h.mkr, h.idx, h.id, 'host', tdoa.kiwi_map); else h.mkr.setMap(tdoa.kiwi_map);
+            if (tdoa.leaflet) tdoa_style_marker(h.mkr, h.idx, id, 'host', tdoa.kiwi_map); else h.mkr.setMap(tdoa.kiwi_map);
          } else {
             if (show_hosts) {
-               if (tdoa.leaflet) tdoa_style_marker(h.mkr, h.idx, h.id, 'host');
+               if (tdoa.leaflet) tdoa_style_marker(h.mkr, h.idx, id, 'host');
                tdoa.cur_host_markers.push(h.mkr);
             }
          }
@@ -2607,6 +2627,17 @@ function tdoa_quick_zoom_cb(path, idx, first)
    tdoa_pan_zoom(tdoa.kiwi_map, [q.lat, q.lon], -1);
 }
 
+function tdoa_sample_time_cb(path, idx, first)
+{
+   if (first) return;
+   idx = +idx;
+   console.log('tdoa_sample_time_cb idx='+ idx);
+   w3_select_value(path, idx);
+   tdoa.sample_time = parseInt(tdoa.sample_time_s[idx]);
+   tdoa.pie_max = tdoa.sample_time;
+   tdoa_update_link();
+}
+
 function TDoA_help(show)
 {
    if (show) {
@@ -2648,7 +2679,7 @@ function TDoA_help(show)
                'The <i>show all results</i> checkbox, if checked, will cause the most likely position markers to accumulate for ' +
                'successive runs. The <i>clear old results</i> button will erase all but the most recent likely position marker.<br><br>' +
                
-               'To begin zoom into the general area of interest on the Kiwi map (note the "quick zoom" menu). ' +
+               'To begin zoom into the general area of interest on the Kiwi map (note the "zoom to" menu). ' +
                'Click on the desired blue Kiwi sampling stations. If they are not responding or have ' +
                'had no recent GPS solutions an error message will appear. ' +
                '<br><b>Important:</b> the position and zooming of the Kiwi map determines the same for the resulting TDoA maps. ' +
@@ -2665,10 +2696,12 @@ function TDoA_help(show)
                '<br><br>' +
 
                'URL parameters: <br>' +
-               'lat:<i>num</i> lon:<i>num</i> z|zoom:<i>num</i> (map control) <br>' +
-               'List of sampling stations and/or reference station IDs. Case-insensitive and can be abbreviated ' +
+               w3_text('|color:orange', 'lat:<i>num</i> lon:<i>num</i> z|zoom:<i>num</i> sample:<i>secs</i> (samp/ref station list) all: hosts:0 submit:') +
+               '<br> List of sampling stations and/or reference station IDs. Case-insensitive and can be abbreviated ' +
                '(e.g. "dcf" matches "DCF77", "cyp2" matches "OTHR/CYP2") <br>' +
-               'submit: (start TDoA process) &nbsp; &nbsp; all: (check "show all results" checkbox)<br>' +
+               'sample:<i>secs</i> (one of the time values from the "sample" menu) <br>' +
+               'all: (check "show all results" checkbox) &nbsp; hosts:0 (uncheck "Kiwi hosts" checkbox)<br>' +
+               'submit: (start TDoA process)<br>' +
                'Example: <i>ext=tdoa,lat:35,lon:35,z:6,cyp2,iu8cri,ur5vib,kuwait,all:,submit:</i> <br>' +
                ''
             )
@@ -2688,7 +2721,7 @@ function TDoA_focus()
    
    tdoa.pie_size = 10;
    tdoa.pie_cnt = 0;
-   tdoa.pie_max = 30;
+   tdoa.pie_max = tdoa.sample_time;
    tdoa.pie_interval = setInterval(
       function() {
          if (!w3_el('id-tdoa-pie')) {
@@ -2766,7 +2799,7 @@ function TDoA_config_html()
 
       w3_inline_percent('w3-container',
          w3_div('',
-            w3_input_get('w3-restart', 'TDoA server URL', 'tdoa.server_url', 'w3_url_set_cfg_cb', 'http://tdoa.kiwisdr.com'),
+            w3_input_get('w3-restart', 'TDoA server URL', 'tdoa.server', 'w3_url_set_cfg_cb', 'http://tdoa.kiwisdr.com'),
             w3_div('w3-margin-T-8 w3-text-black',
                'Change <b>only</b> if you have implemented an alternate TDoA server. <br>' +
                'Set to "http://tdoa.kiwisdr.com" for the default TDoA server.'

@@ -1,4 +1,4 @@
-// Copyright (c) 2016 John Seamons, ZL/KF6VO
+// Copyright (c) 2016-2023 John Seamons, ZL/KF6VO
 
 var extint = {
    ws: null,
@@ -16,12 +16,19 @@ var extint = {
    default_w: 525,
    default_h: 300,
    prev_mode: null,
+   mode_prior_to_dx_click: null,
    seq: 0,
    scanning: 0,
+   in_rf_tab: false,
+   
+   web_socket_fragmentation: 8192,
+   send_hiwat: 0,
+   send_hiwat_msg: null,
    
    // extensions not subject to DRM lockout
    // FIXME: allow C-side API to specify
    no_lockout: [ 'noise_blank', 'noise_filter', 'ant_switch', 'iframe', 'colormap', 'devl', 'prefs' ],
+   use_rf_tab: [ /* 'ant_switch' */ ],
    excl_devl: [ 'devl', 's4285', 'prefs' ],
    
    OPT_NOLOCAL: 1,
@@ -41,8 +48,13 @@ function ext_switch_to_client(ext_name, first_time, recv_func)
 
 function ext_send(msg, ws)
 {
-	if (ws == undefined)
-		ws = extint.ws;
+	if (isNoArg(ws)) ws = extint.ws;
+	
+	var len = msg.length;
+	if (len > extint.send_hiwat) {
+	   extint.send_hiwat_msg = msg;
+	   extint.send_hiwat = len;
+	}
 
 	try {
 	   //console.log('ext_send: ws='+ ws.stream +' '+ msg);
@@ -52,6 +64,70 @@ function ext_send(msg, ws)
 		console.log("CATCH ext_send('"+s+"') ex="+ex);
 		kiwi_trace();
 	}
+}
+
+// Handle web socket fragmentation by sending in parts which can be reassembled on server side.
+// Due to data getting large after double encoding or web socket buffering limitations on browser.
+function ext_send_cfg(cfg, s)
+{
+	var ws = extint.ws;
+	var len = s.length;
+	var tr = '='+ len;
+	var _send = function(seq, suffix, s) {
+	   return ('SET '+ cfg.cmd + suffix + seq +' '+ s);
+	};
+
+   var transaction_seq = cfg.seq;
+   cfg.seq++;
+   
+   w3_do_when_cond(
+      function(seq) {
+         var ba = ws.bufferedAmount? ('['+ ws.bufferedAmount +']') : '0';
+         tr = w3_sb(tr, ba);
+         if (ws.bufferedAmount != 0) return false;    // wait for buffer to drain
+
+         if (len > extint.web_socket_fragmentation) {
+            cfg.lock = 1;     // lock if fragmented transfers are occurring
+            ws.send(_send(seq, '_frag=', s.slice(0, extint.web_socket_fragmentation)));
+            s = s.slice(extint.web_socket_fragmentation);
+            len = s.length;
+            tr = w3_sb(tr, 'W'+ extint.web_socket_fragmentation);
+            return false;
+         } else {
+            ws.send(_send(seq, '=', s.slice(0, extint.web_socket_fragmentation)));
+            cfg.lock = 0;
+            if (kiwi.log_cfg_save_seq)
+               kiwi_debug(w3_sb('save_config:', seq +'-'+ cfg.name + tr, 'w'+ len, 'DONE'), /* syslog */ true);
+            len = 0;
+            return true;
+         }
+      },
+      null,
+      transaction_seq, kiwi.test_cfg_save_seq? 1000 : 50
+   );
+   // REMINDER: w3_do_when_cond() returns immediately and not when the ws.send()s are done
+}
+
+// It's hard to do this any other way than a longish fixed delay because of recent
+// save cfg web socket write buffering changes (i.e. when we're called right after a cfg save
+// returns server may not have yet received and processed all the fragmented data).
+function ext_send_after_cfg_save(msg, cfg_s)
+{
+   //setTimeout(function() { ext_send(msg); }, 1000);
+   //ext_send(msg);
+   
+   cfg_s = cfg_s || 'cfg';
+   var kiwi_cfg = kiwi[cfg_s];
+   w3_do_when_cond(
+      function() {
+         if (kiwi.log_cfg_save_seq)
+         kiwi_debug('ext_send_after_cfg_save lock='+ kiwi_cfg.lock +' msg=<'+ msg +'>');
+         return (kiwi_cfg.lock == 0);
+      },
+      function(msg) {
+         ext_send(msg);
+      }, msg, 100
+   );
 }
 
 function ext_panel_show(controls_html, data_html, show_func, hide_func)
@@ -97,7 +173,7 @@ function ext_get_cfg_param(path, init_val, save, update_path_var)
 	
    //console.log('ext_get_cfg_param: path='+ path +' admin='+ isAdmin() +' cur_val='+ cur_val +' init_val='+ init_val);
    
-	if (!isArg(cur_val) && init_val != undefined) {    // scope or parameter doesn't exist, create it
+	if (isNoArg(cur_val) && init_val != undefined) {    // scope or parameter doesn't exist, create it
 		cur_val = init_val;
 		// parameter hasn't existed before or hasn't been set (empty field)
 		//console.log('ext_get_cfg_param: creating cfg_path='+ cfg_path +' cur_val='+ cur_val);
@@ -124,7 +200,7 @@ function ext_get_cfg_param(path, init_val, save, update_path_var)
 function ext_get_cfg_param_string(path, init_val, save)
 {
    var s = ext_get_cfg_param(path, init_val, save);
-   if (!isArg(s)) s = '';
+   if (isNoArg(s)) s = '';
 	return kiwi_decodeURIComponent(ext_get_cfg_param_string +':'+ path, s);
 }
 
@@ -132,11 +208,14 @@ function ext_set_cfg_param(path, val, save)
 {
 	path = w3_add_toplevel(path);	
 	setVarFromString(path, val);
+	save = (isArg(save) && save == EXT_SAVE)? true : false;
+	//if (path.includes('model'))
+	//console.log('ext_set_cfg_param: path='+ path +' val='+ val +' save='+ save);
 	
-	// save unless EXT_NO_SAVE specified
-	if (save != undefined && save == EXT_SAVE) {
+	// save only if EXT_SAVE specified
+	if (save) {
 		//console.log('ext_set_cfg_param: SAVE path='+ path +' val='+ val);
-		cfg_save_json('ext_set_cfg_param', path);
+		cfg_save_json('ext_set_cfg_param', path, val);
 	}
 }
 
@@ -205,6 +284,21 @@ function ext_get_carrier_freq()
 function ext_get_passband_center_freq()
 {
    return freq_passband_center();
+}
+
+function ext_save_setup()
+{
+   var mode = isArg(extint.mode_prior_to_dx_click)? extint.mode_prior_to_dx_click : cur_mode;
+   console.log('ext_save_setup mode='+ mode +' mode_prior_to_dx_click='+ extint.mode_prior_to_dx_click +' cur_mode='+ cur_mode);
+   extint.mode_prior_to_dx_click = null;
+	return { mode: mode, zoom: zoom_level };
+}
+
+function ext_restore_setup(s)
+{
+   console.log('ext_restore_setup mode='+ s.mode +' zoom='+ s.zoom);
+   ext_set_mode(s.mode);
+   ext_set_zoom(ext_zoom.ABS, s.zoom);
 }
 
 function ext_get_mode()
@@ -749,6 +843,7 @@ function ext_hide_spectrum()
 function extint_panel_show(controls_html, data_html, show_func, hide_func, show_help_button)
 {
    //console.log('extint_panel_show: extint.displayed='+ extint.displayed);
+   var el;
    
 	extint.using_data_container = (data_html? true:false);
 	//console.log('extint_panel_show using_data_container='+ extint.using_data_container);
@@ -769,9 +864,22 @@ function extint_panel_show(controls_html, data_html, show_func, hide_func, show_
       confirmation_panel_close();
       extint.help_displayed = false;
    }
+   
+   var ext_name = extint.current_ext_name;
+   el = w3_el('id-optbar-rf-container');
+   if (extint.use_rf_tab.includes(ext_name)) {
+      console.log('extint_panel_show: rf optbar '+ ext_name);
+      el.innerHTML = controls_html;
+      extint.in_rf_tab = true;
+      keyboard_shortcut_nav('rf');
+      return;
+   } else {
+      el.innerHTML = '';
+      extint.in_rf_tab = false;
+   }
 
 	// hook the close icon to call extint_panel_hide()
-	var el = w3_el('id-ext-controls-close');
+	el = w3_el('id-ext-controls-close');
 	el.onclick = function() { toggle_panel("ext-controls"); extint_panel_hide(); };
 	//console.log('extint_panel_show onclick='+ el.onclick);
 	
@@ -780,7 +888,7 @@ function extint_panel_show(controls_html, data_html, show_func, hide_func, show_
 	w3_el('id-ext-controls').style.zIndex = 150;
    w3_create_attribute('id-ext-controls-close-img', 'src', 'icons/close.24.png');
 	
-	var el = w3_el('id-ext-controls-container');
+	el = w3_el('id-ext-controls-container');
 	el.innerHTML = controls_html;
 	//console.log(controls_html);
 	
@@ -874,7 +982,7 @@ function extint_environment_changed(changed)
    
    setTimeout(
       function() {
-         //console_log_fqn('extint_environment_changed', 'extint.current_ext_name');
+         //console_nv('extint_environment_changed', 'extint.current_ext_name');
          if (extint.current_ext_name) {
             w3_call(extint.current_ext_name +'_environment_changed', changed);
          }
@@ -964,10 +1072,10 @@ function extint_blur_prev(restore)
 function extint_focus(is_locked)
 {
    // dynamically load extension (if necessary) before calling <ext>_main()
-   var ext = extint.current_ext_name;
-	console.log('extint_focus: loading '+ ext +'.js');
+   var ext_name = extint.current_ext_name;
+	console.log('extint_focus: loading '+ ext_name +'.js');
 	
-	if (is_locked && !extint.no_lockout.includes(ext)) {
+	if (is_locked && !extint.no_lockout.includes(ext_name)) {
 	   var s =
          w3_text('w3-medium w3-text-css-yellow',
             'Cannot use extensions while <br> another channel is in DRM mode.'
@@ -977,14 +1085,15 @@ function extint_focus(is_locked)
       return;
 	}
 
-   kiwi_load_js_dir('extensions/'+ ext +'/'+ ext, ['.js', '.css'],
+   kiwi_load_js_dir('extensions/'+ ext_name +'/'+ ext_name, ['.js', '.css'],
 
       // post-load
       function() {
-         console.log('extint_focus: calling '+ ext +'_main()');
-         //setTimeout('ext_set_controls_width_height(); w3_call('+ ext +'_main);', 3000);
-         ext_set_controls_width_height();
-         w3_call(ext +'_main');
+         console.log('extint_focus: calling '+ ext_name +'_main()');
+         //setTimeout('ext_set_controls_width_height(); w3_call('+ ext_name +'_main);', 3000);
+         if (!extint.use_rf_tab.includes(ext_name))
+            ext_set_controls_width_height();
+         w3_call(ext_name +'_main');
          
          if (isNonEmptyArray(shortcut.keys))
 	         setTimeout(keyboard_shortcut_url_keys, 3000);
@@ -992,10 +1101,9 @@ function extint_focus(is_locked)
 
       // pre-load
       function(loaded) {
-         console.log('extint_focus: '+ ext +' loaded='+ loaded);
-         if (loaded) {
-            var s = 'loading extension...';
-            extint_panel_show(s, null, null, null, 'off');
+         console.log('extint_focus: '+ ext_name +' loaded='+ loaded);
+         if (loaded && !extint.use_rf_tab.includes(ext_name)) {
+            extint_panel_show('loading extension...', null, null, null, 'off');
             ext_set_controls_width_height(325, 45);
             if (kiwi.is_locked)
                console.log('==== IS_LOCKED =================================================');
@@ -1084,7 +1192,12 @@ function extint_select_build_menu()
          //console.log('extint_select_menu id_en='+ id_en +' en='+ enable);
          if (enable == null || kiwi.is_local[rx_chan]) enable = true;   // enable if no cfg param or local connection
          if (id == 'DRM') kiwi.DRM_enable = enable;
-         if (id == 'NAVTEX') id = 'NAVTEX/DSC';
+         
+         // menu entry name exceptions
+         if (id == 'NAVTEX') id = 'NAVTEX/DSC'; else
+         if (id == 'FT8') id = 'FT8/FT4'; else
+            ;
+         
 		   s += '<option value='+ dq(value) +' kiwi_idx='+ dq(i) +' '+ (enable? '':'disabled') +'>'+ id +'</option>';
 		});
 	}
@@ -1096,6 +1209,12 @@ function extint_open(name, delay)
 {
    //console.log('extint_open rx_chan='+ rx_chan +' is_local='+ kiwi.is_local[rx_chan]);
    name = name.toLowerCase();
+   
+   // aliases, for the benefit of dx.json file
+   if (name == 'dsc') name = 'navtex'; else
+   if (name == 'ft4') name = 'ft8'; else
+      ;
+   
    var found = 0;
    extint_names_enum(function(i, value, id, id_en) {
       var enable = ext_get_cfg_param(id_en +'.enable');
