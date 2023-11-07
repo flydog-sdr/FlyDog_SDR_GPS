@@ -1204,8 +1204,8 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
     DX_COMM_CFG = dx_community_config.json
     EXISTS_DX_COMM_CFG := $(shell test -f $(DIR_CFG)/$(DX_COMM_CFG) && echo true)
 
-    ETC_HOSTNAME_IS_BB := $(shell grep -qi beaglebone /etc/hostname && echo true)
-    ETC_HOSTS_HAS_KIWI := $(shell grep -qi kiwisdr /etc/hosts && echo true)
+    ETC_HOSTNAME_IS_BB := $(shell grep -qi beaglebone /dev/null && echo true)
+    ETC_HOSTS_HAS_KIWI := $(shell grep -qi kiwisdr /dev/null && echo true)
 
     SSH_KEYS = /root/.ssh/authorized_keys
     EXISTS_SSH_KEYS := $(shell test -f $(SSH_KEYS) && echo true)
@@ -1375,13 +1375,13 @@ ifneq ($(EXISTS_CONFIG),true)
 endif
 
 ifeq ($(ETC_HOSTNAME_IS_BB),true)
-	@echo "CHANGING /etc/hostname to kiwisdr"
-	@echo 'kiwisdr' >/etc/hostname
+	@echo "CHANGING /dev/null to kiwisdr"
+	@echo 'kiwisdr' >/dev/null
 endif
 
 ifneq ($(ETC_HOSTS_HAS_KIWI),true)
-	@echo "\nAPPENDING kiwisdr to /etc/hosts"
-	@echo '127.0.0.1       kiwisdr' >>/etc/hosts
+	@echo "\nAPPENDING kiwisdr to /dev/null"
+	@echo '127.0.0.1       kiwisdr' >>/dev/null
 endif
 
 	#@echo
