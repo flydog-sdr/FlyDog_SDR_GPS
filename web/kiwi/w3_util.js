@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 John Seamons, ZL/KF6VO
+// Copyright (c) 2016-2023 John Seamons, ZL4VO/KF6VO
 
 /*
 
@@ -495,7 +495,7 @@ function w3_ext_param(s, param)
          rv.string_case = pu[1];
       } else {
          rv.num = 0;
-         rv.string = '';
+         rv.string = rv.string_case = '';
       }
    }
    if (s && s == pl[0]) rv.full_match = true;
@@ -550,8 +550,9 @@ function w3_clamp3(v, min, max, clamp_min, clamp_max, clamp_NaN)
 
 function w3_add_id(path, suffix)
 {
+   if (!isString(path)) return path;
    path = path || '';
-   if (path == '') return '';
+   if (path == '' || path == 'body') return path;
    path = path.startsWith('id-')? path : ('id-'+ path);
    suffix = suffix || '';
    return path + suffix;
@@ -600,12 +601,12 @@ function w3_el(el_id)
 	   if (el_id == 'body') return document.body;
 		var el = w3int_w3_el(el_id);
 		if (el == null) {
-			el = w3int_w3_el('id-'+ el_id);
+			el = w3int_w3_el(w3_add_id(el_id));
 			if (el == null) {
 				el_id = w3_add_toplevel(el_id);
 				el = w3int_w3_el(el_id);
 				if (el == null) {
-					el = w3int_w3_el('id-'+ el_id);
+					el = w3int_w3_el(w3_add_id(el_id));
 				}
 			}
 		}
@@ -623,12 +624,12 @@ function w3_els(el_id, func)
 	   if (el_id == 'body') return document.body;
 		var els = w3int_w3_els(el_id);
 		if (els == null) {
-			els = w3int_w3_els('id-'+ el_id);
+			els = w3int_w3_els(w3_add_id(el_id));
 			if (els == null) {
 				el_id = w3_add_toplevel(el_id);
 				els = w3int_w3_els(el_id);
 				if (els == null) {
-					els = w3int_w3_els('id-'+ el_id);
+					els = w3int_w3_els(w3_add_id(el_id));
 				}
 			}
 		}
@@ -705,7 +706,7 @@ function w3_get_innerHTML(id)
 
 function w3_iterate_classname(cname, func)
 {
-	var els = document.getElementsByClassName(cname);
+	var els = document.getElementsByClassName(w3_add_id(cname));
 	if (els == null) return;
 	for (var i=0; i < els.length; i++) {      // els is a collection, can't use forEach()
 		func(els[i], i);
@@ -745,7 +746,7 @@ function w3_iterate_parent(el_id, func)
 // excludes text and comment nodes
 function w3_iterate_children(el_id, func)
 {
-	var el = w3_el(el_id);
+	var el = w3_el(w3_add_id(el_id));
 	
 	for (var i=0; i < el.children.length; i++) {    // el.children is a collection, can't use forEach()
 		var child_el = el.children[i];
@@ -774,6 +775,22 @@ function w3_iterate_childNodes(el_id, func)
 	for (var i=0; i < el.childNodes.length; i++) {    // el.childNodes is a collection, can't use forEach()
 		var child_el = el.childNodes[i];
 		func(child_el, i);
+	}
+}
+
+function w3_width_height(el_id, w, h)
+{
+	var el = w3_el(el_id);
+	if (!el) return null;
+	
+	if (isArg(w)) {
+	   if (isNumber(w)) w = px(w);
+	   el.style.width = w;
+	}
+
+	if (isArg(h)) {
+	   if (isNumber(h)) h = px(h);
+	   el.style.height = h;
 	}
 }
 
@@ -1210,9 +1227,10 @@ function w3_background_color(el_id, color)
 	return prev;
 }
 
-// colors = color1 and [, color2] if cond
-// color[12] =
-//    'css-fg-color'
+// c1 = fg-color if cond true/undefined
+// c2 = bg-color (optional) if cond true/undefined
+// c[12] =
+//    'css-[fb]g-color'
 //    ['css-fg-color', 'css-bg-color']
 //    'w3-color' or 'w3-text-color'
 // CSS color '' to revert to default color
@@ -1291,6 +1309,13 @@ function w3_fg_color_with_opacity_against_bk_color(fg, opacity, bg)
    return w3color(kiwi_rgb(red, green, blue));
 }
 
+function w3_opacity(el_id, opacity)
+{
+   var el = w3_el(el_id);
+   if (!el) return null;
+   el.style.opacity = opacity;
+}
+
 function w3_flash_fade(el_id, color, dwell_ms, fade_ms, color2)
 {
    var el = w3_el(el_id);
@@ -1351,6 +1376,7 @@ function w3_check_restart_reboot(el_id)
 
 function w3_set_value(path, val)
 {
+   path = w3_add_id(path);
    if (1) {
       // set all similarly named elements
       w3_els(path, function(el) {
@@ -1984,7 +2010,7 @@ var w3_NOT_SELECTED = false;
 
 function w3_radio_unhighlight(path)
 {
-	w3_iterate_classname('id-'+ path, function(el) { w3_unhighlight(el); });
+	w3_iterate_classname(w3_add_id(path), function(el) { w3_unhighlight(el); });
 }
 
 function w3int_radio_click(ev, path, cb, cb_param)
@@ -1993,7 +2019,7 @@ function w3int_radio_click(ev, path, cb, cb_param)
 	w3_highlight(ev.currentTarget);
 
 	var idx = -1;
-	w3_iterate_classname('id-'+ path, function(el, i) {
+	w3_iterate_classname(w3_add_id(path), function(el, i) {
 		if (w3_isHighlighted(el))
 			idx = i;
 		//console.log('w3int_radio_click CONSIDER path='+ path +' el='+ el +' idx='+ idx);
@@ -2024,7 +2050,7 @@ function w3_radio_button(psa, text, path, isSelected, cb, cb_param)
 {
 	cb_param = cb_param || 0;
 	var onclick = cb? ('onclick="w3int_radio_click(event, '+ sq(path) +', '+ sq(cb) +', '+ sq(cb_param) +')"') : '';
-	var p = w3_psa(psa, 'id-'+ path + (isSelected? (' '+ w3_highlight_color) : '') +' w3-btn w3-ext-btn', '', onclick);
+	var p = w3_psa(psa, w3_add_id(path) + (isSelected? (' '+ w3_highlight_color) : '') +' w3-btn w3-ext-btn', '', onclick);
 	var s = '<button '+ p +'>'+ text +'</button>';
 	//console.log(s);
 	return s;
@@ -2119,7 +2145,7 @@ function w3_switch_set_value(path, switch_idx)
 {
    var sw = 'w3int-switch-'+ switch_idx;
    //console.log('w3_switch_set_value: switch='+ sw +' path='+ path);
-	w3_iterate_classname('id-'+ path, function(el, i) {
+	w3_iterate_classname(path, function(el, i) {
       //console.log('w3_switch_set_value: CONSIDER i='+ i);
       //console.log(el);
 		if (w3_contains(el, sw)) {
@@ -3047,12 +3073,15 @@ function w3_select_conditional(psa, label, title, path, sel, opts, cb, cb_param)
    return w3int_select(psa, label, title, path, sel, s, cb, cb_param);
 }
 
-function w3_select_set_disabled(path, value, disabled)
+function w3_select_set_disabled(path, value, disabled, title)
 {
-   w3_iterate_children('id-'+ path, function(el, i) {
+   w3_iterate_children(path, function(el, i) {
       //console.log('w3_select_set_disabled['+i+']');
       //console.log(el);
-      if (el.value == value) el.disabled = disabled? true:false;
+      if (el.value == value) {
+         el.disabled = disabled? true:false;
+         if (isArg(title)) el.title = title;
+      }
    });
 }
 
@@ -3625,7 +3654,7 @@ function w3_url_set_cfg_cb(path, val, first)
 	//console.log('w3_url_set_cfg_cb: path='+ path +' '+ typeof(val) +' "'+ val +'" first='+ first);
 	if (val != '' && !val.startsWith('http://') && !val.startsWith('https://')) val = 'http://'+ val;
 	w3_string_set_cfg_cb(path, val, first);
-	w3_set_value('id-'+ path, val);
+	w3_set_value(path, val);
 }
 
 

@@ -43,11 +43,14 @@ void gps_main(int argc, char *argv[])
     //      gps.v: "cmd_chan"
     //      ipcore_bram_gps_4k_12b
 
-    assert(GPS_CHANS <= MAX_GPS_CHANS);
+    assert(GPS_CHANS <= GPS_MAX_CHANS);
 
 	printf("GPS starting..\n");
     SearchParams(argc, argv);
 
+    // some configs (e.g. rx14wf0) only support a reduced number of GPS channels
+    // due to FPGA space limitations
+    spi_set(CmdSetChans, gps_chans-1);      // NB: -1 because of how to_loop[2] insn works
 	SearchInit();
 
     for(int i=0; i<gps_chans; i++) {

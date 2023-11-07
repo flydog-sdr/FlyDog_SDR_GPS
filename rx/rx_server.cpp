@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2014-2016 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2016 John Seamons, ZL4VO/KF6VO
 
 #include "types.h"
 #include "config.h"
@@ -83,6 +83,7 @@ rx_stream_t rx_streams[] = {
 	{ AJAX_USERS,		"users" },
 	{ AJAX_SNR,         "snr" },
 	{ AJAX_ADC,         "adc" },
+	{ AJAX_S_METER,     "s-meter" },
 #endif
 	{ 0 }
 };
@@ -663,6 +664,7 @@ retry:
     	if (c->rx_channel != -1) flags |= CTF_RX_CHANNEL | (c->rx_channel & CTF_CHANNEL);
     	if (isWF_conn) flags |= CTF_STACK_MED;
     	flags |= CTF_SOFT_FAIL;
+    	if (ws_flags & WS_FL_NO_LOG) flags |= CTF_NO_LOG;
 		int id = CreateTaskSF(rx_stream_tramp, c->tname, c, (st->priority == TASK_MED_PRIORITY)? task_medium_priority : st->priority, flags, 0);
 		
 		if (id < 0) {

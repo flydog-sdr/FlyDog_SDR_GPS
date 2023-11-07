@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2015-2016 John Seamons, ZL/KF6VO
+// Copyright (c) 2015-2016 John Seamons, ZL4VO/KF6VO
 
 #include "types.h"
 #include "config.h"
@@ -40,6 +40,7 @@ Boston, MA  02110-1301, USA.
 #include "dx.h"
 #include "wspr.h"
 #include "FT8.h"
+#include "kiwi_ui.h"
 
 #ifdef USE_SDR
  #include "data_pump.h"
@@ -295,7 +296,27 @@ static void console_task(void *param)
     #undef NBUF
 }
 
-bool backup_in_progress, DUC_enable_start, rev_enable_start;
+static int clone_cmd(char *cmd_p)
+{
+    char *reply;
+    int status;
+    lprintf("config clone: %s\n", cmd_p);
+    reply = non_blocking_cmd(cmd_p, &status);
+    kiwi_ifree(cmd_p);
+    char *rp = kstr_sp_less_trailing_nl(reply);
+    if (status < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        lprintf("config clone: ERROR status=0x%x(%d) WIFEXITED=%d WEXITSTATUS=%d <%s>\n",
+            status, status, WIFEXITED(status), WEXITSTATUS(status), rp);
+        status = WEXITSTATUS(status);
+    } else {
+        lprintf("config clone: OK status=0 <%s>\n", rp);
+        status = 0;
+    }
+    kstr_free(reply);
+    return status;
+}
+
+bool DUC_enable_start, rev_enable_start;
 
 void c2s_admin(void *param)
 {
@@ -536,64 +557,68 @@ void c2s_admin(void *param)
 ////////////////////////////////
 // config
 ////////////////////////////////
-
+            #define CLONED_FULL_CONFIG 0
+            #define CLONED_DX_CONFIG 1
+            #define CLONED_DX_CONFIG_NO_DX_CONFIG_JSON 2
+            #define CLONED_SCP_ERROR 0xff00
             host_m = NULL;
             char *pwd_m = NULL;
-            int clone_files;
-			i = sscanf(cmd, "SET config_clone host=%64ms pwd=%64ms files=%d", &host_m, &pwd_m, &clone_files);
+            int clone_only_dx_files;
+			i = sscanf(cmd, "SET config_clone host=%64ms pwd=%64ms files=%d", &host_m, &pwd_m, &clone_only_dx_files);
 			if (i == 3) {
 				kiwi_str_decode_inplace(host_m);
 				kiwi_str_decode_inplace(pwd_m);
-				int status_c;
+				int rc = CLONED_SCP_ERROR;
 			    char *reply;
 			    const char *files;
-			    #define CLONE_FILE "sudo sshpass -p \'%s\' scp -q -o \"StrictHostKeyChecking no\" root@%s:/root/kiwi.config/%s /root/kiwi.config > /dev/null 2>&1"
-			    if (clone_files == 0) {
+			    #define CLONE_FILE "sudo sshpass -p \'%s\' scp -o \"StrictHostKeyChecking no\" root@%s:/root/kiwi.config/%s /root/kiwi.config 2>&1 >/dev/null"
+
+			    if (clone_only_dx_files == 0) {
 		            asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "admin.json");
-                    kstr_free(non_blocking_cmd(cmd_p, &status_c));
-                    kiwi_ifree(cmd_p);
-                    if (status_c == 0) {
+                    status = clone_cmd(cmd_p);
+                    if (status == 0) {
 		                asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "kiwi.json");
-                        kstr_free(non_blocking_cmd(cmd_p, &status));
-                        kiwi_ifree(cmd_p);
-                        status_c += status;
-                        if (status_c == 0) {
+                        status = clone_cmd(cmd_p);
+                        if (status == 0) {
                             asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "dx.json");
-                            kstr_free(non_blocking_cmd(cmd_p, &status));
-                            kiwi_ifree(cmd_p);
-                            status_c += status;
-                            if (status_c == 0) {
+                            status = clone_cmd(cmd_p);
+                            if (status == 0) {
                                 asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "dx_config.json");
-                                kstr_free(non_blocking_cmd(cmd_p, &status));
-                                kiwi_ifree(cmd_p);
+                                status = clone_cmd(cmd_p);
                                 // won't exist if source kiwi < v1.602
-                                if (status != 0) status_c = 2;
+                                if (status != 0)
+                                    rc = CLONED_DX_CONFIG_NO_DX_CONFIG_JSON;
+                                else
+                                    rc = CLONED_DX_CONFIG;
                             }
                         }
                     }
 			    } else {
 			        //#define TEST_CLONE_UI
 			        #ifdef TEST_CLONE_UI
-			            status_c = 2;
+			            rc = CLONED_DX_CONFIG_NO_DX_CONFIG_JSON;
 			        #else
                         asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "dx.json");
-                        //printf("config clone: %s\n", cmd_p);
-                        kstr_free(non_blocking_cmd(cmd_p, &status_c));
-                        //cprintf(conn, "config clone: status=%d\n", status_c);
-                        kiwi_ifree(cmd_p);
-                        if (status_c == 0) {
+                        status = clone_cmd(cmd_p);
+                        if (status == 0) {
                             asprintf(&cmd_p, CLONE_FILE, &pwd_m[1], host_m, "dx_config.json");
-                            kstr_free(non_blocking_cmd(cmd_p, &status));
-                            kiwi_ifree(cmd_p);
+                            status = clone_cmd(cmd_p);
                             // won't exist if remote kiwi < v1.602
-                            if (status != 0) status_c = 2;
+                            if (status != 0)
+                                rc = CLONED_DX_CONFIG_NO_DX_CONFIG_JSON;
+                            else
+                                rc = CLONED_DX_CONFIG;
                         }
-                        if (status_c == 0) status_c = 1;
                     #endif
 		        }
+		        
+		        // forward actual scp error from status
+                if (rc == CLONED_SCP_ERROR) {
+                    rc = (status << 8) & CLONED_SCP_ERROR;
+                }
 				kiwi_ifree(host_m);
 				kiwi_ifree(pwd_m);
-				send_msg(conn, SM_NO_DEBUG, "ADM config_clone_status=%d", status_c);
+				send_msg(conn, SM_NO_DEBUG, "ADM config_clone_status=%d", rc);
 				continue;
 			}
 			
@@ -632,33 +657,6 @@ void c2s_admin(void *param)
 ////////////////////////////////
 
 #ifdef USE_SDR
-			i = strcmp(cmd, "SET public_update");
-			if (i == 0) {
-                if (admcfg_bool("kiwisdr_com_register", NULL, CFG_REQUIRED) == false) {
-		            // force switch to short sleep cycle so we get status returned sooner
-		            wakeup_reg_kiwisdr_com(WAKEUP_REG_STATUS);
-                }
-
-				sb = kstr_asprintf(NULL, "{\"kiwisdr_com\":%d", reg_kiwisdr_com_status);
-				
-				if (gps.StatLat) {
-					latLon_t loc;
-					char grid6[6 + SPACE_FOR_NULL];
-					loc.lat = gps.sgnLat;
-					loc.lon = gps.sgnLon;
-					if (latLon_to_grid6(&loc, grid6))
-						grid6[0] = '\0';
-					else
-						grid6[6] = '\0';
-					sb = kstr_asprintf(sb, ",\"lat\":\"%4.2f\",\"lon\":\"%4.2f\",\"grid\":\"%s\"",
-						gps.sgnLat, gps.sgnLon, grid6);
-				}
-				sb = kstr_cat(sb, "}");
-				send_msg_encoded(conn, "ADM", "public_update", "%s", kstr_sp(sb));
-				kstr_free(sb);
-				continue;
-			}
-
 			i = strcmp(cmd, "SET public_wakeup");
 			if (i == 0) {
                 wakeup_reg_kiwisdr_com(WAKEUP_REG);
@@ -688,56 +686,10 @@ void c2s_admin(void *param)
 // backup
 ////////////////////////////////
 
-#define SD_CMD "/usr/local/bin/backup_sdr_config.sh"
 			i = strcmp(cmd, "SET microSD_write");
 			if (i == 0) {
 				mprintf_ff("ADMIN: received microSD_write\n");
-				backup_in_progress = true;  // NB: must be before rx_server_kick() to prevent new connections
-				rx_server_kick(KICK_ALL);      // kick everything (including autorun) off to speed up copy
-				// if this delay isn't here the subsequent non_blocking_cmd_popen() hangs for
-				// MINUTES, if there is a user connection open, for reasons we do not understand
-				TaskSleepReasonSec("kick delay", 5);
-				
-				// clear user list on status tab
-                sb = rx_users(/* include_ip */ true);
-                send_msg(conn, false, "MSG user_cb=%s", kstr_sp(sb));
-                kstr_free(sb);
-				
-				#define NBUF 256
-				char *buf = (char *) kiwi_malloc("c2s_admin", NBUF);
-				int n, err;
-				
-				sd_copy_in_progress = true;
-				non_blocking_cmd_t p;
-				p.cmd = SD_CMD;
-                //real_printf("microSD_write: non_blocking_cmd_popen..\n");
-				non_blocking_cmd_popen(&p);
-                //real_printf("microSD_write: ..non_blocking_cmd_popen\n");
-				do {
-					n = non_blocking_cmd_read(&p, buf, NBUF);
-					if (n > 0) {
-						//real_printf("microSD_write: mprintf %d %d <%s>\n", n, strlen(buf), buf);
-						mprintf("%s", buf);
-					}
-					TaskSleepMsec(250);
-					u4_t now = timer_sec();
-					if ((now - conn->keepalive_time) > 5) {
-					    send_msg(conn, false, "MSG keepalive");
-					    conn->keepalive_time = now;
-					}
-				} while (n >= 0);
-				err = non_blocking_cmd_pclose(&p);
-                //real_printf("microSD_write: err=%d\n", err);
-				sd_copy_in_progress = false;
-				
-				err = (err < 0)? err : WEXITSTATUS(err);
-				mprintf("ADMIN: system returned %d\n", err);
-				kiwi_free("c2s_admin", buf);
-				#undef NBUF
-                //real_printf("microSD_write: microSD_done=%d\n", err);
-				send_msg(conn, SM_NO_DEBUG, "ADM microSD_done=%d", err);
-				backup_in_progress = false;
-				rx_autorun_restart_victims(true);
+			    sd_backup(conn, true);
 				continue;
 			}
 
@@ -789,12 +741,22 @@ void c2s_admin(void *param)
 			}
 
             // FIXME: support wlan0
+            #define UNIX_ENV "/root/" REPO_NAME "/unix_env/"
 			char *static_ip_m = NULL, *static_nm_m = NULL, *static_gw_m = NULL;
-			i = sscanf(cmd, "SET static_ip=%32ms static_nm=%32ms static_gw=%32ms", &static_ip_m, &static_nm_m, &static_gw_m);
-			if (i == 3) {
-				clprintf(conn, "eth0: USE STATIC ip=%s nm=%s gw=%s\n", static_ip_m, static_nm_m, static_gw_m);
+			int static_nb;
+			i = sscanf(cmd, "SET static_ip=%32ms static_nb=%d static_nm=%32ms static_gw=%32ms", &static_ip_m, &static_nb, &static_nm_m, &static_gw_m);
+			if (i == 4) {
+				clprintf(conn, "eth0: USE STATIC ip=%s nm=%s(%d) gw=%s\n", static_ip_m, static_nm_m, static_nb, static_gw_m);
 
-                if (debian_ver > 9) {
+                if (debian_ver >= 11) {
+                    asprintf(&cmd_p, "sed -e s#IP#%s/%d# -e s/GW/%s/ %s >%s",
+                        static_ip_m, static_nb, static_gw_m,
+                        "/tmp/eth0.network", "/etc/systemd/network/eth0.network");
+                    system(cmd_p);
+                    kiwi_ifree(cmd_p);
+                    system("networkctl reload");
+                } else
+                if (debian_ver == 9 || debian_ver == 10) {
                     asprintf(&sb, "connmanctl config ethernet_%s_cable --ipv4 manual %s %s %s", net.mac_no_delim,
                         static_ip_m, static_nm_m, static_gw_m);
                     system(sb); kiwi_ifree(sb);
@@ -839,7 +801,16 @@ void c2s_admin(void *param)
                     inet4_d2h(dns2, &dns2_err);
     
                     if (!dns1_err || !dns2_err) {
-                        if (debian_ver > 9) {
+                        if (debian_ver >= 11) {
+                            // careful: "DNS=(empty)" means reset DNS list
+                            asprintf(&cmd_p, "sed -e s/DNS1/%s%s/ -e s/DNS2/%s%s/ %s >%s",
+                                dns1_err? "" : "DNS=", dns1_err? "" : dns1,
+                                dns2_err? "" : "DNS=", dns2_err? "" : dns2,
+                                UNIX_ENV "eth0.network.STATIC", "/tmp/eth0.network");
+                            system(cmd_p);
+                            kiwi_ifree(cmd_p);
+                        } else
+                        if (debian_ver == 9 || debian_ver == 10) {
                             asprintf(&sb, "connmanctl config ethernet_%s_cable --nameservers %s %s",
                                 net.mac_no_delim, dns1_err? "" : dns1, dns2_err? "" : dns2);
                             system(sb); kiwi_ifree(sb);
@@ -870,12 +841,16 @@ void c2s_admin(void *param)
 			if (i == 0) {
 				clprintf(conn, "eth0: USE DHCP\n");
 
-                if (debian_ver > 9) {
+                if (debian_ver >= 11) {
+                    system("cp " UNIX_ENV "eth0.network.DHCP /etc/systemd/network/eth0.network");
+                    system("networkctl reload");
+                } else
+                if (debian_ver == 9 || debian_ver == 10) {
                     asprintf(&sb, "connmanctl config ethernet_%s_cable --ipv4 dhcp", net.mac_no_delim);
                     system(sb); kiwi_ifree(sb);
                 } else {
                     system("cp /etc/network/interfaces /etc/network/interfaces.bak");
-                    system("cp /root/" REPO_NAME "/unix_env/interfaces.DHCP /etc/network/interfaces");
+                    system("cp " UNIX_ENV "interfaces.DHCP /etc/network/interfaces");
                 }
 				continue;
 			}
@@ -1321,8 +1296,8 @@ void c2s_admin(void *param)
 				continue;
 			}
 
-            // compute grid from GPS on-demand (similar to "SET public_update")
-			i = strcmp(cmd, "ADM wspr_gps_info");
+            // compute grid from GPS on-demand (similar to "SET admin_update")
+			i = strcmp(cmd, "ADM get_gps_info");
 			if (i == 0) {
 				if (gps.StatLat) {
 					latLon_t loc;
@@ -1331,8 +1306,10 @@ void c2s_admin(void *param)
 					loc.lon = gps.sgnLon;
 					if (latLon_to_grid6(&loc, grid6) == 0) {
 						grid6[6] = '\0';
-		                send_msg_encoded(conn, "ADM", "ext_call", "wspr_gps_info_cb={\"grid\":\"%s\"}", grid6);
+		                send_msg_encoded(conn, "ADM", "gps_info", "{\"grid\":\"%s\"}", grid6);
 	                    kiwi_strncpy(wspr_c.rgrid, grid6, LEN_GRID);
+	                    //kiwi_strncpy(ft8_conf2.rgrid, grid6, LEN_GRID);
+	                    //jksx FIXME need to do more when setting grid?
 					}
 				}
 				continue;
@@ -1356,6 +1333,35 @@ void c2s_admin(void *param)
 ////////////////////////////////
 // admin
 ////////////////////////////////
+
+#ifdef USE_SDR
+			i = strcmp(cmd, "SET admin_update");
+			if (i == 0) {
+                if (admcfg_bool("kiwisdr_com_register", NULL, CFG_REQUIRED) == false) {
+		            // force switch to short sleep cycle so we get status returned sooner
+		            wakeup_reg_kiwisdr_com(WAKEUP_REG_STATUS);
+                }
+
+				sb = kstr_asprintf(NULL, "{\"kiwisdr_com\":%d", reg_kiwisdr_com_status);
+				
+				if (gps.StatLat) {
+					latLon_t loc;
+					char grid6[6 + SPACE_FOR_NULL];
+					loc.lat = gps.sgnLat;
+					loc.lon = gps.sgnLon;
+					if (latLon_to_grid6(&loc, grid6))
+						grid6[0] = '\0';
+					else
+						grid6[6] = '\0';
+					sb = kstr_asprintf(sb, ",\"lat\":\"%4.2f\",\"lon\":\"%4.2f\",\"grid\":\"%s\"",
+						gps.sgnLat, gps.sgnLon, grid6);
+				}
+				sb = kstr_cat(sb, "}");
+				send_msg_encoded(conn, "ADM", "admin_update", "%s", kstr_sp(sb));
+				kstr_free(sb);
+				continue;
+			}
+#endif
 
 			i = strcmp(cmd, "SET extint_load_extension_configs");
 			if (i == 0) {

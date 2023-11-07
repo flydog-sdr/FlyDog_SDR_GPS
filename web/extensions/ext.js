@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 John Seamons, ZL/KF6VO
+// Copyright (c) 2016-2023 John Seamons, ZL4VO/KF6VO
 
 var extint = {
    ws: null,
@@ -485,11 +485,11 @@ function ext_get_optbar()
    return optbar;
 }
 
-function ext_set_optbar(optbar)
+function ext_set_optbar(optbar, cb_param)
 {
    if (extint.optbars[optbar]) {
       writeCookie('last_optbar', optbar);
-      w3_el('id-nav-'+ optbar).click();
+      w3_click_nav(optbar, 'optbar', cb_param);
    }
 }
 
@@ -521,6 +521,8 @@ function ext_hasCredential(conn_type, cb, cb_param, ws)
 
 function ext_valpwd(conn_type, pwd, ws)
 {
+	if (conn_type == 'mfg') conn_type = 'admin';
+
 	// send and store the password encoded to prevent problems:
 	//		with scanf() on the server end, e.g. embedded spaces
 	//		with cookie storage that deletes leading and trailing whitespace

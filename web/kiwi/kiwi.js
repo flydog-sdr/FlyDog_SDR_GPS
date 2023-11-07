@@ -1,6 +1,6 @@
 // KiwiSDR
 //
-// Copyright (c) 2014-2023 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2023 John Seamons, ZL4VO/KF6VO
 
 var kiwi = {
    d: {},      // debug
@@ -106,6 +106,7 @@ var kiwi = {
    
    ADC_CLK_CORR_DISABLED: 0,
    ADC_CLK_CORR_CONTINUOUS: 1,
+   ext_clk: false,
    
    // pre-record / pre-squelch buffer
    pre_samps: 0,
@@ -123,6 +124,7 @@ var kiwi = {
    
    rf_attn: 0,
    
+   no_reopen_retry: false,
    _ver_: 1.578,
    _last_: null
 };
@@ -686,8 +688,8 @@ function time_display(display_time)
 	w3_innerHTML('id-time-display-local', noLatLon? '?' : server_time_local);
 	w3_innerHTML('id-time-display-tzname', noLatLon? 'Lat/lon needed for local time' : server_tz);
 
-	w3_el('id-time-display-logo-inner').style.opacity = display_time? 0:1;
-	w3_el('id-time-display-inner').style.opacity = display_time? 1:0;
+	w3_opacity('id-time-display-logo-inner', display_time? 0:1);
+	w3_opacity('id-time-display-inner', display_time? 1:0);
 }
 
 function time_display_periodic()
@@ -999,7 +1001,7 @@ function kiwi_output_msg(id, id_scroll, p)
       console.log('$ '+ kiwi_JSON(p));
       //if (!p.init) kiwi_trace();
    }
-
+   
 	var parent_el = w3_el(id);
 	if (!parent_el) {
 	   console.log('kiwi_output_msg NOT_FOUND id='+ id);
@@ -1307,6 +1309,10 @@ function kiwi_output_msg(id, id_scroll, p)
       s = p.s;
    }
 	
+   if (p.intercept) {
+      p.intercept(s);
+   }
+
    if (p.init != true) {
       //if (dbg) console.log('$console INIT '+ p.init);
       //kiwi_trace();
@@ -1317,7 +1323,7 @@ function kiwi_output_msg(id, id_scroll, p)
 
       removeAllLines(parent_el);
       p.el = appendEmptyLine(parent_el);
-      p.cols = p.cols || 80;
+      p.cols = p.cols || 140;
       p.NONE = 0;
       p.ESC = 1;
       p.CSI = 2;
@@ -2883,7 +2889,7 @@ var reason_disabled = '';
 var version_maj = -1, version_min = -1, debian_ver = -1;
 var tflags = { INACTIVITY:1, WF_SM_CAL:2, WF_SM_CAL2:4 };
 var chan_no_pwd, chan_no_pwd_true;
-var kiwi_output_msg_p = { scroll_only_at_bottom: true, process_return_alone: false };
+var kiwi_output_msg_p = { scroll_only_at_bottom: true, inline_returns: true, process_return_alone: false, remove_returns: false };
 var client_public_ip;
 
 // includes msgs relevant for both user and admin modes
@@ -2891,7 +2897,7 @@ function kiwi_msg(param, ws)
 {
 	var rtn = true;
 	
-	switch (param[0]) {
+	switch (param[0]) {     // #msg-proc
 		case "version_maj":
 			version_maj = parseInt(param[1]);
 			break;
@@ -2910,6 +2916,10 @@ function kiwi_msg(param, ws)
 
 		case "platform":
 			kiwi.platform = parseInt(param[1]);
+			break;
+
+		case "ext_clk":
+			kiwi.ext_clk = parseInt(param[1]);
 			break;
 
 		case "client_public_ip":
@@ -3157,8 +3167,8 @@ function kiwi_msg(param, ws)
 			kiwi.is_local[+p[0]] = +p[1];
 			break;
 		
-		case "no_admin_reopen_retry":
-			admin.no_admin_reopen_retry = true;
+		case "no_reopen_retry":
+			kiwi.no_reopen_retry = true;
 			break;
 
       /*
@@ -3270,8 +3280,7 @@ function kiwi_debug(msg, syslog)
 	
 function kiwi_show_msg(s)
 {
-   // FIXME: necessary to use html() due to timing reasons? Can't remember..
-   html('id-kiwi-msg').innerHTML = s;
+   if (!w3_innerHTML('id-kiwi-msg', s)) return;
    if (s == '') {
 	   w3_hide('id-kiwi-msg-container');
       w3_el('id-kiwi-body').style.overflow = 'hidden';

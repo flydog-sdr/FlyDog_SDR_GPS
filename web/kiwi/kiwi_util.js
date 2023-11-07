@@ -1,6 +1,6 @@
 // KiwiSDR utilities
 //
-// Copyright (c) 2014-2023 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2023 John Seamons, ZL4VO/KF6VO
 
 
 // isUndeclared(v) => use inline "typeof(v) === 'undefined'" (i.e. can't pass undeclared v as func arg)
@@ -1249,26 +1249,9 @@ function kiwi_remove_search_param(url, p)
    return url;
 }
 
-var kiwiint_dummy_elem = {};
-
-function html(id_or_name)
+function html(el_id)
 {
-	var el = w3_el(id_or_name);
-	var debug;
-	try {
-		debug = el.value;
-	} catch(ex) {
-		console.log("html('"+id_or_name+"')="+el+" FAILED");
-		/**/
-		if (dbgUs && dbgUsFirst) {
-			//console.log("FAILED: id_or_name="+id_or_name);
-			//kiwi_trace();
-			dbgUsFirst = false;
-		}
-		/**/
-	}
-	if (el == null) el = kiwiint_dummy_elem;		// allow failures to proceed, e.g. assignments to innerHTML
-	return el;
+   return w3_el(el_id);
 }
 
 function px(s)
@@ -1880,6 +1863,63 @@ function kiwi_draw_pie(id, size, filled) {
 	var animate = 'M 0 0 v '+ (-size) +' A '+ size +' '+ size +' 1 '+ mid +' 1 '+  x  +' '+  y  +' z';
 	w3_iterate_classname(id, function(el) { el.setAttribute('d', animate); });
 };
+
+function page_draw_pie(which_s) {
+   var which = (which_s == 'admin')? admin : mfg;
+	var id_which = function(suffix) { return ('id-'+ which_s +'-'+ suffix); };
+
+	w3_el(id_which('reload-secs')).innerHTML = 'Page reload in '+ which.reload_rem + ' secs';
+	if (which.reload_rem > 0) {
+		which.reload_rem--;
+		kiwi_draw_pie(id_which('pie'), which.pie_size, (which.reload_secs - which.reload_rem) / which.reload_secs);
+	} else {
+	   try {
+		   window.location.reload(true);
+		} catch(ex) {
+		   console.log('RELOAD FAILED?');
+		   console.log(ex);
+		}
+	}
+};
+
+function wait_then_reload_page(secs, msg, which_s)
+{
+   if (isUndefined(which_s)) which_s = 'admin';
+   var isAdmin = (which_s == 'admin');
+   var which = isAdmin? admin : mfg;
+	var ael = w3_el('id-'+ which_s);
+	var id_which = function(suffix) { return ('id-'+ which_s +'-'+ suffix); };
+	var reload_msg = id_which('reload-msg');
+	var s2;
+	
+	if (secs) {
+		s2 =
+			w3_divs('w3-valign w3-margin-T-8/w3-container',
+				w3_div('w3-show-inline-block', kiwi_pie(id_which('pie'), which.pie_size, '#eeeeee', 'deepSkyBlue')),
+				w3_div('w3-show-inline-block',
+					w3_div(reload_msg),
+					w3_div(id_which('reload-secs'))
+				)
+			);
+	} else {
+		s2 =
+			w3_divs('w3-valign w3-margin-T-8/w3-container',
+				w3_div(reload_msg)
+			);
+	}
+	
+	var s = (isAdmin? '<header class="w3-container w3-teal"><h5>Admin interface</h5></header>' : '') + s2;
+	//console.log('s='+ s);
+	ael.innerHTML = s;
+	
+	if (msg) w3_el(reload_msg).innerHTML = msg;
+	
+	if (secs) {
+		which.reload_rem = which.reload_secs = secs;
+		setInterval(page_draw_pie, 1000, which_s);
+		page_draw_pie(which_s);
+	}
+}
 
 function enc(s) { return s.replace(/./gi, function(c) { return String.fromCharCode(c.charCodeAt(0) ^ 3); }); }
 

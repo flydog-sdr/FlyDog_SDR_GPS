@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2014-2023 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2023 John Seamons, ZL4VO/KF6VO
 
 #include "kiwi.h"
 #include "types.h"
@@ -303,6 +303,10 @@ static void misc_NET(void *param)
 
         status = non_blocking_cmd_system_child("kiwi.chk_pwd", "grep -q '^root::' /etc/shadow", POLL_MSEC(250));
         root_pwd_unset = (WEXITSTATUS(status) == 0)? 1:0;
+        if (!root_pwd_unset && debian_ver >= 11) {
+            status = non_blocking_cmd_system_child("kiwi.chk_pwd", "grep -q '^root:$y$j9T$lTPmWl28QqgcbJAEAXpLG.$uZrtdkucDJ.DhOP32b2/9taPXDYIgNCNzYIcxZmCV18:' /etc/shadow", POLL_MSEC(250));
+            root_pwd_unset = (WEXITSTATUS(status) == 0)? 1:0;
+        }
         
         const char *what = "set to the default";
         status = non_blocking_cmd_system_child("kiwi.chk_pwd", "grep -q '^debian:rcdjoac1gVi9g:' /etc/shadow", POLL_MSEC(250));
@@ -926,7 +930,7 @@ void services_start()
 	CreateTask(pub_NET, 0, SERVICES_PRIORITY);
 	CreateTask(get_TZ, 0, SERVICES_PRIORITY);
 	CreateTask(misc_NET, 0, SERVICES_PRIORITY);
-    SNR_meas_tid = CreateTask(SNR_meas, 0, SERVICES_PRIORITY);
+    SNR_meas_tid = CreateTaskF(SNR_meas_task, 0, SERVICES_PRIORITY, CTF_NO_LOG);
 	//CreateTask(git_commits, 0, SERVICES_PRIORITY);
 
     if (!disable_led_task)

@@ -2,12 +2,10 @@
 
 // from assembler DEF directives:
 
-	localparam GPS_CHANS = 12;    // DEFp 0xc
-`define DEF_GPS_CHANS 1
 	localparam NUM_CMDS_OTHER = 0;    // DEFp 0x0
 //`define DEF_NUM_CMDS_OTHER
 `define USE_SDR 1    // DEFh 0x1
-`define USE_GPS 1    // DEFh 0x1
+//`define USE_24K_WIDE    // DEFh 0x0
 `define ARTIX_7A35 1    // DEFh 0x1
 //`define ZYNQ_7007    // DEFh 0x0
 	localparam FPGA_VER = 4'd1;    // DEFp 0x1
@@ -18,10 +16,13 @@
 `define DEF_ADC_BITS 1
 	localparam DEFAULT_NSYNC = 2;    // DEFp 0x2
 `define DEF_DEFAULT_NSYNC 1
-//`define USE_RX_CICF    // DEFh 0x0
-`define USE_GEN 1    // DEFh 0x1
+	localparam GPS_CHANS = 12;    // DEFp 0xc
+`define DEF_GPS_CHANS 1
 `define USE_CPU_CTR 1    // DEFh 0x1
+`define USE_GEN 1    // DEFh 0x1
 `define USE_LOGGER 1    // DEFh 0x1
+`define USE_GPS 1    // DEFh 0x1
+//`define USE_RX_CICF    // DEFh 0x0
 `define USE_DEBUG 1    // DEFh 0x1
 //`define USE_RX_SEQ    // DEFh 0x0
 `define USE_VIVADO 1    // DEFh 0x1
@@ -44,9 +45,9 @@
 `define DEF_NUM_CMDS_BASE 1
 	localparam NUM_CMDS_SDR = 14;    // DEFp 0xe
 `define DEF_NUM_CMDS_SDR 1
-	localparam NUM_CMDS_GPS = 16;    // DEFp 0x10
+	localparam NUM_CMDS_GPS = 17;    // DEFp 0x11
 `define DEF_NUM_CMDS_GPS 1
-	localparam NUM_CMDS = 43;    // DEFp 0x2b
+	localparam NUM_CMDS = 44;    // DEFp 0x2c
 `define DEF_NUM_CMDS 1
 `define SPI_32 1    // DEFh 0x1
 	localparam SPIBUF_W = 2048;    // DEFp 0x800
@@ -67,10 +68,10 @@
 `define DEF_CICF_DECIM_BY_2 1
 	localparam MAX_SND_RATE = 20250;    // DEFp 0x4f1a
 `define DEF_MAX_SND_RATE 1
-	localparam MIN_SND_RATE = 12000;    // DEFp 0x2ee0
-`define DEF_MIN_SND_RATE 1
 	localparam SND_RATE_3CH = 20250;    // DEFp 0x4f1a
 `define DEF_SND_RATE_3CH 1
+	localparam MIN_SND_RATE = 12000;    // DEFp 0x2ee0
+`define DEF_MIN_SND_RATE 1
 	localparam SND_RATE_4CH = 12000;    // DEFp 0x2ee0
 `define DEF_SND_RATE_4CH 1
 	localparam SND_RATE_8CH = 12000;    // DEFp 0x2ee0
@@ -148,8 +149,8 @@
 `define DEF_WF_1CIC_MAXD 1
 	localparam WF_2CIC_MAXD = 0;    // DEFp 0x0
 //`define DEF_WF_2CIC_MAXD
-	localparam MAX_GPS_CHANS = 12;    // DEFp 0xc
-`define DEF_MAX_GPS_CHANS 1
+	localparam GPS_MAX_CHANS = 12;    // DEFp 0xc
+`define DEF_GPS_MAX_CHANS 1
 	localparam GPS_INTEG_BITS = 20;    // DEFp 0x14
 `define DEF_GPS_INTEG_BITS 1
 	localparam GPS_REPL_BITS = 18;    // DEFp 0x12
@@ -213,8 +214,8 @@
 	localparam RDREG2_200 = 9;    // DEFb: bit number for value: 0x200
 	localparam RDREG2_400 = 10;    // DEFb: bit number for value: 0x400
 	localparam HOST_TX = 0;    // DEFb: bit number for value: 0x1
-	localparam SET_MASK = 1;    // DEFb: bit number for value: 0x2
-	localparam SET_CHAN = 2;    // DEFb: bit number for value: 0x4
+	localparam SET_GPS_MASK = 1;    // DEFb: bit number for value: 0x2
+	localparam SET_GPS_CHAN = 2;    // DEFb: bit number for value: 0x4
 	localparam SET_CG_NCO = 3;    // DEFb: bit number for value: 0x8
 	localparam SET_LO_NCO = 4;    // DEFb: bit number for value: 0x10
 	localparam SET_SAT = 5;    // DEFb: bit number for value: 0x20
@@ -270,23 +271,32 @@
 	localparam STAT_FW_ID = 28672;    // DEFp 0x7000
 `define DEF_STAT_FW_ID 1
 	localparam STAT_OVFL = 15;    // DEFb: bit number for value: 0x8000
-	localparam CTRL_0001 = 0;    // DEFb: bit number for value: 0x1
-	localparam CTRL_0002 = 1;    // DEFb: bit number for value: 0x2
-	localparam CTRL_0004 = 2;    // DEFb: bit number for value: 0x4
-	localparam CTRL_0008 = 3;    // DEFb: bit number for value: 0x8
-	localparam CTRL_0010 = 4;    // DEFb: bit number for value: 0x10
-	localparam CTRL_0020 = 5;    // DEFb: bit number for value: 0x20
-	localparam CTRL_0040 = 6;    // DEFb: bit number for value: 0x40
-	localparam CTRL_USE_GEN = 10;    // DEFb: bit number for value: 0x400
-	localparam CTRL_GEN_FIR = 7;    // DEFb: bit number for value: 0x80
-	localparam CTRL_OSC_EN = 8;    // DEFb: bit number for value: 0x100
+	localparam CTRL_SER_NONE = 0;    // DEFp 0x0
+//`define DEF_CTRL_SER_NONE
+	localparam CTRL_SER_DNA = 1;    // DEFp 0x1
+`define DEF_CTRL_SER_DNA 1
+	localparam CTRL_SER_ATTN = 2;    // DEFp 0x2
+`define DEF_CTRL_SER_ATTN 1
+	localparam CTRL_SER_GPS = 3;    // DEFp 0x3
+`define DEF_CTRL_SER_GPS 1
+	localparam CTRL_SER_MASK = 3;    // DEFp 0x3
+`define DEF_CTRL_SER_MASK 1
+	localparam CTRL_SER_LE_CSN = 2;    // DEFb: bit number for value: 0x4
+	localparam CTRL_SER_CLK = 3;    // DEFb: bit number for value: 0x8
+	localparam CTRL_SER_DATA = 4;    // DEFb: bit number for value: 0x10
+	localparam CTRL_STEN = 5;    // DEFb: bit number for value: 0x20
+	localparam CTRL_DEBUG1 = 6;    // DEFb: bit number for value: 0x40
+	localparam CTRL_DEBUG2 = 7;    // DEFb: bit number for value: 0x80
+	localparam CTRL_OSC_DIS = 8;    // DEFb: bit number for value: 0x100
 	localparam CTRL_EEPROM_WP = 9;    // DEFb: bit number for value: 0x200
-	localparam CTRL_UNUSED_OUT = 9;    // DEFb: bit number for value: 0x200
+	localparam CTRL_USE_GEN = 10;    // DEFb: bit number for value: 0x400
 	localparam CTRL_CMD_READY = 11;    // DEFb: bit number for value: 0x800
 	localparam CTRL_SND_INTR = 12;    // DEFb: bit number for value: 0x1000
-	localparam CTRL_DNA_READ = 13;    // DEFb: bit number for value: 0x2000
-	localparam CTRL_DNA_SHIFT = 14;    // DEFb: bit number for value: 0x4000
-	localparam CTRL_DNA_CLK = 15;    // DEFb: bit number for value: 0x8000
+	localparam CTRL_GPS_CLK_EN = 13;    // DEFb: bit number for value: 0x2000
+	localparam CTRL_4000 = 14;    // DEFb: bit number for value: 0x4000
+	localparam CTRL_8000 = 15;    // DEFb: bit number for value: 0x8000
+	localparam CTRL_UNUSED_OUT = 9;    // DEFb: bit number for value: 0x200
+	localparam CTRL_GEN_FIR = 7;    // DEFb: bit number for value: 0x80
 
 
 // from verilog/kiwi.inline.vh

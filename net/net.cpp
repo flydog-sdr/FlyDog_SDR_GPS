@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2014-2016 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2016 John Seamons, ZL4VO/KF6VO
 
 #include "kiwi.h"
 #include "types.h"
@@ -649,11 +649,12 @@ int DNS_lookup(const char *domain_name, ip_lookup_t *r_ips, int n_ips, const cha
 	kstr_t *reply = non_blocking_cmd(cmd_p, &status);
 	
 	if (reply != NULL && status >= 0 && WEXITSTATUS(status) == 0) {
-		char *ips[N_IPS], *r_buf;
+		char *r_buf;
+		str_split_t ips[N_IPS];
 		n = kiwi_split(kstr_sp(reply), &r_buf, "\n", ips, n_ips-1);
 
         for (i = 0; i < n; i++) {
-            ip_list[i] = strndup(ips[i], NET_ADDRSTRLEN);
+            ip_list[i] = strndup(ips[i].str, NET_ADDRSTRLEN);
             int slen = strlen(ip_list[i]);
             if (ip_list[i][slen-1] == '\n') ip_list[i][slen-1] = '\0';    // remove trailing \n
 	        printf("LOOKUP: \"%s\" %s\n", domain_name, ip_list[i]);
@@ -756,6 +757,7 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
         csnd = rx_server_websocket(WS_INTERNAL_CONN, mcs, ws_flags);
         if (csnd == NULL) goto error;
         iconn->csnd = csnd;
+        csnd->internal_want_snd = true;
         input_msg_internal(csnd, (char *) "SET auth t=kiwi p=");
         input_msg_internal(csnd, (char *) "SET AR OK in=12000 out=44100");
         input_msg_internal(csnd, (char *) "SET agc=1 hang=0 thresh=-100 slope=6 decay=1000 manGain=50");
@@ -777,6 +779,7 @@ bool internal_conn_setup(u4_t ws, internal_conn_t *iconn, int instance, int port
         cwf = rx_server_websocket(WS_INTERNAL_CONN, mcw, ws_flags);
         if (cwf == NULL) goto error;
         iconn->cwf = cwf;
+        cwf->internal_want_wf = true;
         input_msg_internal(cwf, (char *) "SET auth t=kiwi p=");
         input_msg_internal(cwf, (char *) "SET zoom=%d cf=%.3f", zoom, cf_kHz);
         input_msg_internal(cwf, (char *) "SET maxdb=%d mindb=%d", max_dB, min_dB);

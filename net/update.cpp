@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2016 John Seamons, ZL/KF6VO
+// Copyright (c) 2016 John Seamons, ZL4VO/KF6VO
 
 #include "types.h"
 #include "config.h"
@@ -84,7 +84,7 @@ static void update_build_ctask(void *param)
         struct stat st;
         bool use_git_proto = kiwi_file_exists(DIR_CFG "/opt.git_no_https");
 	    asprintf(&cmd_p, "cd /root/" REPO_NAME "; " \
-	        "git pull -v %s://github.com/flydog-sdr/FlyDog_SDR_GPS.git >>/root/build.log 2>&1; ", \
+	        "git pull -v %s://github.com/" REPO_GIT " >>/root/build.log 2>&1; ", \
 		    use_git_proto? "git" : "https" \
 		);
 		status = system(cmd_p);
@@ -95,7 +95,7 @@ static void update_build_ctask(void *param)
         // must use git: protocol otherwise https: cert mismatch error will occur
         if (status != 0) {
             asprintf(&cmd_p, "cd /root/" REPO_NAME "; " \
-                "git pull -v git://" GITHUB_COM_PUBLIC_IP "/flydog-sdr/FlyDog_SDR_GPS.git >>/root/build.log 2>&1; "
+                "git pull -v git://" GITHUB_COM_PUBLIC_IP "/" REPO_GIT " >>/root/build.log 2>&1; "
             );
             status = system(cmd_p);
             kiwi_ifree(cmd_p);
@@ -139,7 +139,7 @@ static void report_result(conn_t *conn)
 	send_msg(conn, false, "MSG update_cb="
 	    "{\"f\":%d,\"p\":%d,\"i\":%d,\"r\":%d,\"g\":%d,"
 	    "\"v1\":%d,\"v2\":%d,\"p1\":%d,\"p2\":%d,\"d\":\"%s\",\"t\":\"%s\"}",
-		fail_reason, update_pending, update_in_progress, rx_chans, GPS_CHANS,
+		fail_reason, update_pending, update_in_progress, rx_chans, gps_chans,
 		version_maj, version_min, pending_maj, pending_min, date_m, time_m);
 	kiwi_ifree(date_m);
 	kiwi_ifree(time_m);

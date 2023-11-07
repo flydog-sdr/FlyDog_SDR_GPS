@@ -5,11 +5,11 @@
 # DANGER: Can't use any "echo ..." in below otherwise scp's to the Kiwi will silently FAIL.
 # Do an "export xx=yy" and "pe xx" instead to see what's happening.
 
-BBG_BBB="$(cat /proc/device-tree/model | grep -q -s "AM335x" && echo "true" || echo "false")"
-BBAI_64="$(cat /proc/device-tree/model | grep -q -s "BeagleBone AI-64" && echo "true" || echo "false")"
-BBAI="$(cat /proc/device-tree/model | sed "s/\(.*\)./\1x/" | grep -q -s "BeagleBone AIx" && echo "true" || echo "false")"
-DEBIAN_7="$(cat /etc/debian_version | grep -q -s "7\." && echo "true" || echo "false")"
-RPI="$(cat /proc/device-tree/model | grep -q -s "Raspberry Pi" && echo "true" || echo "false")"
+BBG_BBB="$(test -e /proc/device-tree && cat /proc/device-tree/model | grep -q -s "AM335x" && echo "true" || echo "false")"
+BBAI_64="$(test -e /proc/device-tree && cat /proc/device-tree/model | grep -q -s "BeagleBone AI-64" && echo "true" || echo "false")"
+BBAI="$(test -e /proc/device-tree && cat /proc/device-tree/model | sed "s/\(.*\)./\1x/" | grep -q -s "BeagleBone AIx" && echo "true" || echo "false")"
+DEBIAN_7="$(test -e /proc/device-tree && cat /etc/debian_version | grep -q -s "7\." && echo "true" || echo "false")"
+RPI="$(test -e /proc/device-tree && cat /proc/device-tree/model | grep -q -s "Raspberry Pi" && echo "true" || echo "false")"
 
 APT_GET_FORCE=
 
@@ -78,11 +78,14 @@ alias i="echo ==== interfaces; ic -a; echo ==== /etc/network/interfaces; cat /et
 alias e="ethtool eth0"
 alias e10="ethtool -s eth0 speed 10 duplex full"
 alias e100="ethtool -s eth0 speed 100 duplex full"
+alias e1000="ethtool -s eth0 speed 1000 duplex full"
 alias ip="ifconfig eth0 | grep 'eth0\|inet'"
+alias netc="networkctl status eth0"
 alias mac='cat /sys/class/net/eth0/address'
 alias df="/bin/df -h"
 alias df.="/bin/df -h ."
 alias d.="/bin/df -h ."
+alias d.mb="/bin/df --block-size=1048576 . | tail -n 1 | awk '{print \$3}'"
 alias tr="traceroute"
 alias cdp="cd \${PROJ}"
 alias cd2="cd \${PROJ2}"
@@ -108,6 +111,7 @@ alias col1="awk -- '{print \$1}'"
 alias json="echo \"jsonc <cmd>  jsonf <file>\""
 alias jsonc="function _json () { \$* | jq '.' ; } ; _json"
 alias jsonf="function _json () { cat \$* | jq '.' ; } ; _json"
+alias trunc="truncate -s 0"
 
 # pki colordiff
 p_diff_exclude="--exclude=.DS_Store --exclude=.git --exclude=.svn ${no_diff}"
@@ -269,7 +273,7 @@ alias scen="function _sys () { systemctl --lines=100 enable \${*}.service ; } ; 
 alias sa="service --status-all"
 
 # packages
-alias pk="echo pk: s=search_available ls=list_installed ver,vers,show,pol=versions i=install rm=remove ar=autoremove; echo pk: ch=allow-rel-info-chg up=update upp=single_pkg ug=dist-upgrade; echo pk: c=clean sz=sizes f,f2=which_pkg_has_file fu=file_update fi=files_installed co=cape_overlays"
+alias pk="echo pk: s=search_available ls=list_installed ver,vers,sh,pol=versions i=install rm=remove ar=autoremove; echo pk: ch=allow-rel-info-chg up=update upp=single_pkg ug=dist-upgrade; echo pk: c=clean sz=sizes f,f2=which_pkg_has_file fu=file_update fi=files_installed co=cape_overlays"
 alias pks="echo available pkgs:; apt-cache search"
 alias pkls="echo installed pkgs:; dpkg -l | gr"
 alias pksh="apt show"

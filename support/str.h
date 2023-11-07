@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2014-2017 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2017 John Seamons, ZL4VO/KF6VO
 
 #pragma once
 
@@ -58,6 +58,7 @@ void kiwi_chrrep(char *str, const char from, const char to);
 bool kiwi_str_begins_with(char *s, const char *cs);
 char *kiwi_str_ends_with(char *s, const char *cs);
 char *kiwi_skip_over(char *s, const char *skip);
+char *kstr_sp_less_trailing_nl(char *s_kstr_cstr);
 
 char *kiwi_overlap_strcpy(char *dst, const char *src);
 int kiwi_strnlen(const char *s, int limit);
@@ -75,8 +76,12 @@ bool kiwi_sha256_strcmp(char *str, const char *key);
 enum { FEWER_ENCODED = true };
 char *kiwi_str_decode_selective_inplace(char *src, bool fewer_encoded DEF_FALSE);
 
+typedef struct {
+    char *str;
+    char delim;
+} str_split_t;
 enum { KSPLIT_NO_SKIP_EMPTY_FIELDS = 0x1, KSPLIT_HANDLE_EMBEDDED_DELIMITERS = 0x2 };
-int kiwi_split(char *ocp, char **mbuf, const char *delims, char *argv[], int nargs, int flags DEF_0);
+int kiwi_split(char *ocp, char **mbuf, const char *delims, str_split_t argv[], int nargs, int flags DEF_0);
 
 extern char ASCII[256][4];
 

@@ -19,7 +19,7 @@ This file is part of OpenWebRX.
 
 */
 
-// Copyright (c) 2015-2023 John Seamons, ZL/KF6VO
+// Copyright (c) 2015-2023 John Seamons, ZL4VO/KF6VO
 
 var owrx = {
    debug_drag: false,
@@ -412,10 +412,10 @@ function kiwi_main_ready()
 
          var attn_ampl = 0;
          if (gen_attn != 0) {
-            var dB = gen_attn + cfg.waterfall_cal;
+            var dB = gen_attn + wf.cal;
             var ampl_gain = Math.pow(10, -dB/20);		// use the amplitude form since we are multipling a signal
             attn_ampl = 0x01ffff * ampl_gain;
-            //console.log('### GEN dB='+ dB +' ampl_gain='+ ampl_gain +' attn_ampl='+ attn_ampl +' / '+ attn_ampl.toHex() +' offset='+ cfg.waterfall_cal);
+            //console.log('### GEN dB='+ dB +' ampl_gain='+ ampl_gain +' attn_ampl='+ attn_ampl +' / '+ attn_ampl.toHex() +' offset='+ wf.cal);
          }
    
          // always setup gen so it will get disabled (attn=0) if an rx0 page reloads using a URL where no gen is
@@ -720,6 +720,14 @@ function init_rx_photo()
    el.src = kiwi_decodeURIComponent('RX_PHOTO_FILE', cfg.index_html_params.RX_PHOTO_FILE);
    el.alt = el.title = kiwi_decodeURIComponent('RX_PHOTO_DESC', cfg.index_html_params.RX_PHOTO_DESC);
 
+   if (el.src.endsWith('kiwi/pcb.png')) {
+      var st1 = w3_el('id-rx-photo-title');
+      var st2 = w3_el('id-rx-photo-desc');
+      st1.style.background = st2.style.background = 'darkViolet';
+      if (st1.innerText != '') st1.style.padding = '0 6px 2px';
+      if (st2.innerText != '') st2.style.padding = '0 6px 2px';
+   }
+
    el.style.paddingLeft = cfg.index_html_params.RX_PHOTO_LEFT_MARGIN? '50px' : 0;
 	owrx.RX_PHOTO_HEIGHT = +(cfg.index_html_params.RX_PHOTO_HEIGHT) + rx_photo_spacer_height;
 	w3_el("id-top-photo-clip").style.maxHeight = px(owrx.RX_PHOTO_HEIGHT);
@@ -735,9 +743,9 @@ var rx_photo_state=1;
 function open_rx_photo()
 {
 	rx_photo_state=1;
-	html("id-rx-photo-desc").style.opacity=1;
-	html("id-rx-photo-title").style.opacity=1;
-	animate_to(html("id-top-photo-clip"), "maxHeight", "px", owrx.RX_PHOTO_HEIGHT, 0.93, kiwi_isMobile()? 1:1000, 60, function(){resize_waterfall_container(true);});
+	w3_opacity("id-rx-photo-desc", 1);
+	w3_opacity("id-rx-photo-title", 1);
+	animate_to("id-top-photo-clip", "maxHeight", "px", owrx.RX_PHOTO_HEIGHT, 0.93, kiwi_isMobile()? 1:1000, 60, function(){resize_waterfall_container(true);});
 	w3_hide('id-rx-details-arrow-down');
 	w3_show_block('id-rx-details-arrow-up');
 }
@@ -745,7 +753,7 @@ function open_rx_photo()
 function close_rx_photo()
 {
 	rx_photo_state=0;
-	animate_to(html("id-top-photo-clip"), "maxHeight", "px", rx_photo_spacer_height, 0.93, kiwi_isMobile()? 1:1000, 60, function(){resize_waterfall_container(true);});
+	animate_to("id-top-photo-clip", "maxHeight", "px", rx_photo_spacer_height, 0.93, kiwi_isMobile()? 1:1000, 60, function(){resize_waterfall_container(true);});
 	w3_show_block('id-rx-details-arrow-down');
 	w3_hide('id-rx-details-arrow-up');
 }
@@ -799,11 +807,13 @@ function animate(object, style_name, unit, from, to, accel, time_ms, fps, to_exe
 		},1000/fps);
 }
 
-function animate_to(object, style_name, unit, to, accel, time_ms, fps, to_exec)
+function animate_to(id, style_name, unit, to, accel, time_ms, fps, to_exec)
 {
-	from = parseFloat(style_value(object, style_name));
-	//console.log("FROM "+style_name+'='+from);
-	animate(object, style_name, unit, from, to, accel, time_ms, fps, to_exec);
+   var el = w3_el(id);
+   if (!el) return;
+	from = parseFloat(style_value(el, style_name));
+	//console.log("animate_to: FROM "+ style_name +'='+ from);
+	animate(el, style_name, unit, from, to, accel, time_ms, fps, to_exec);
 }
 
 function style_value(of_what, which)
@@ -1409,10 +1419,9 @@ function demodulator_default_analog(offset_frequency, subtype, locut, hicut)
 		mkenvelopes(this.visible_range);
 		freqset_car_Hz(this.parent.offset_frequency + center_freq);
 		this.parent.set();
-		freqset_update_ui(owrx.FSET_PB_CHANGE);
-
-		//will have to change this when changing to multi-demodulator mode:
-		//html("id-control-freq1").innerHTML=format_frequency("{x} MHz",center_freq+this.parent.offset_frequency,1e6,4);
+		//console_nv('drag_move', {do_lo}, {do_hi});
+		freqset_update_ui((do_lo || do_hi)? owrx.FSET_PB_CHANGE : owrx.FSET_NOP);
+		//kiwi_trace();
 		return true;
 	};
 	
@@ -2437,7 +2446,8 @@ function canvas_contextmenu(evt)
 	if (evt && evt.currentTarget && evt.currentTarget.id == 'id-dx-container') {
 	   //console.log('canvas_contextmenu: synthetic ctrl-dx_click');
 	   dx.ctrl_click = true;
-	   w3_el(evt.target.id).click();
+	   if (evt.target.id != '')
+	      w3_el(evt.target.id).click();
 	}
 	
 	// must always cancel even so system context menu doesn't appear
@@ -5082,7 +5092,7 @@ function dB_wire_to_dBm(db_value)
 	if (db_value < 0) db_value = 0;
 	if (db_value > 255) db_value = 255;
 	var dBm = -(255 - db_value);
-	return (dBm + cfg.waterfall_cal);
+	return (dBm + wf.cal);
 }
 
 function color_index(db_value, sqrt)
@@ -5676,7 +5686,8 @@ function freqset_update_ui(from)
 	vfo_update();
 	
 	// don't add to freq memory while tuning across scale except for final position
-	if (from != owrx.FSET_NOP && from != owrx.FSET_SCALE_DRAG && from != owrx.FSET_SCALE_TOUCH_DRAG) {
+	if (from != owrx.FSET_NOP && from != owrx.FSET_SCALE_DRAG && from != owrx.FSET_SCALE_TOUCH_DRAG && from != owrx.FSET_PB_CHANGE) {
+      //console.log('>>> freq_memory_update freq='+ freq_displayed_kHz_str_with_freq_offset);
 	   freq_memory_update(freq_displayed_kHz_str_with_freq_offset);
 	}
 
@@ -7314,6 +7325,7 @@ function dx_init()
          },
          function() {
             console.log('DX URL '+ dq(dx.url_p));
+            var do_filter = false;
             if (dx.url_p != '') {
                var r, p = dx.url_p.split(',');
                p.forEach(function(a, i) {
@@ -7341,6 +7353,22 @@ function dx_init()
                      open = true;
                      dx.help = true;
                   } else
+                  if ((r = w3_ext_param('ident', a)).match) {
+                     dx.filter_ident = r.string_case;
+                     do_filter = true;
+                  } else
+                  if ((r = w3_ext_param('notes', a)).match) {
+                     dx.filter_notes = r.string_case;
+                     do_filter = true;
+                  } else
+                  if (w3_ext_param('case', a).match) {
+                     console.log('DX URL SET case');
+                     dx_filter_opt_cb('dx.filter_case', 1);
+                  } else
+                  if (w3_ext_param('grep', a).match) {
+                     console.log('DX URL SET grep');
+                     dx_filter_opt_cb('dx.filter_grep', 1);
+                  } else
                   w3_ext_param_array_match_str(dx.eibi_svc_s, a, function(i,a) {
                         var v = dx.eibi_types_mask & (1 << i);
                         if (v)
@@ -7353,6 +7381,10 @@ function dx_init()
             }
          
             console.log('DX URL DONE db='+ dx.db +' open='+ open +' eibi_types_mask='+ dx.eibi_types_mask.toHex(8) +' help='+ dx.help);
+            if (do_filter) {
+               console.log('DX URL DONE ident=<'+ dx.filter_ident +'> notes=<'+ dx.filter_notes +'>');
+               dx_filter_cb();
+            }
             dx_schedule_update();
          }, null,
          500
@@ -7961,8 +7993,16 @@ function dx_label_render_cb(arr)
 	}
 }
 
-function dx_filter()
+function dx_filter(shift_plus_ctl_alt)
 {
+   if (shift_plus_ctl_alt == true) {
+      dx_filter_opt_cb('dx.filter_case', 0);
+      dx_filter_opt_cb('dx.filter_grep', 0);
+      dx.filter_ident = dx.filter_notes = '';
+      dx_filter_cb(null, null, false, /* no_close */ true);
+      return;
+   }
+   
 	var s =
 		w3_div('w3-medium w3-text-aqua w3-bold', 'DX label filter') +
 		w3_divs('w3-text-aqua',
@@ -8030,7 +8070,7 @@ function dx_filter_opt_cb(path, val, first)
    // pass "no_close = true" to prevent panel closing if fields empty
    dx_filter_cb('dx.filter_ident', dx.filter_ident, false, /* no_close */ true);
 
-   //console.log('dx_filter_opt_cb path='+ path +' val='+ val);
+   console.log('dx_filter_opt_cb path='+ path +' val='+ val);
    w3_checkbox_set(path, val);
    
    // wild and grep are exclusive
@@ -8702,6 +8742,13 @@ function dx_click(ev, gid)
 	   w3_menu_close('dx_click');
 	   dx_sig_bw(gid);
 	   
+	   // allow anchor links within the ident to be clicked
+	   if (ev.target.nodeName == 'A') {
+	      console.log('dx_click: link within label');
+		   dx.ctrl_click = false;
+		   return ev;     // let click to through to anchor element
+	   }
+	   
 	   owrx.dx_click_gid_last_stored = (dx.db == dx.DB_STORED)? gid : undefined;
 	   owrx.dx_click_gid_last_until_tune = gid;
 	   var label = dx.list[gid];
@@ -9213,7 +9260,7 @@ function keyboard_shortcut_init()
          w3_inline_percent('w3-padding-tiny', 'v V space', 25, 'volume less/more, mute'),
          w3_inline_percent('w3-padding-tiny', 'o', 25, 'toggle between option bar <x1>off</x1> and <x1>stats</x1> mode,<br>others selected by related shortcut key'),
          w3_inline_percent('w3-padding-tiny', '!', 25, 'toggle aperture manual/auto menu'),
-         w3_inline_percent('w3-padding-tiny', '@', 25, 'DX label filter'),
+         w3_inline_percent('w3-padding-tiny', '@ alt-@', 25, 'open DX label filter, quick clear'),
          w3_inline_percent('w3-padding-tiny', '\\ |', 25, 'toggle (& open) DX stored/EiBi/community database,<br>alt to toggle <x1>filter by time/day-of-week</x1> checkbox'),
          w3_inline_percent('w3-padding-tiny', 'x y', 25, 'toggle visibility of control panels, top bar'),
          w3_inline_percent('w3-padding-tiny', 'esc', 25, 'close/cancel action'),
@@ -9368,7 +9415,7 @@ function keyboard_shortcut(key, key_mod, ctlAlt, keyCode)
    case 'r': toggle_or_set_rec(); break;
    case 'x': toggle_or_set_hide_panels(); break;
    case 'y': toggle_or_set_hide_bars(); break;
-   case '@': dx_filter(); shortcut.nav_click = true; break;
+   case '@': dx_filter(key_mod == shortcut.SHIFT_PLUS_CTL_ALT); shortcut.nav_click = true; break;
    case 'e': extension_scroll(1); break;
    case 'E': extension_scroll(-1); break;
    case '?': case 'h': keyboard_shortcut_help(); break;
@@ -9608,7 +9655,7 @@ function play_button()
    } catch(ex) { add_problem("audio start"); }
 
    // CSS is setup so opacity fades
-	w3_el('id-play-button-container').style.opacity = 0;
+	w3_opacity('id-play-button-container', 0);
 	setTimeout(function() { w3_hide('id-play-button-container'); }, 1100);
 	audio_reset();    // handle possible audio overflow condition during wait for button click
    freqset_select();
@@ -10212,6 +10259,7 @@ var wf_speeds = ['off', '1 Hz', 'slow', 'med', 'fast'];
 
 var wf = {
    no_wf: false,
+   cal: 0,
    url_tstamp: 0,
    ts_tz: 0,
    
@@ -11646,14 +11694,12 @@ function place_panels()
 {
 	var left_col = [];
 	var right_col = [];
-	var plist = html("id-panels-container").children;
-	
-	for (var i=0; i < plist.length; i++) {
-		var c = plist[i];
+
+	w3_iterate_children('id-panels-container', function(c) {
 		if (c.classList.contains('class-panel')) {
 			var position = c.getAttribute('data-panel-pos');
 			//console.log('place_panels: '+ c.id +' '+ position);
-			if (!position) continue;
+			if (!position) return;
 			var newSize = c.getAttribute('data-panel-size').split(",");
 			if (position == "left") { left_col.push(c); }
 			else if (position == "right") { right_col.push(c); }
@@ -11688,7 +11734,7 @@ function place_panels()
 				c.style.visibility = "hidden";
 			}
 		}
-	}
+	});
 	
 	y=0;
 	while (left_col.length > 0) {
@@ -11843,7 +11889,7 @@ var zoom_server = 0;
 
 // Process owrx server-to-client MSGs from SND or W/F web sockets.
 // Not called if MSG handled first by kiwi.js:kiwi_msg()
-function owrx_msg_cb(param, ws)
+function owrx_msg_cb(param, ws)     // #msg-proc
 {
 	switch (param[0]) {
 		case "wf_setup":
@@ -11873,7 +11919,8 @@ function owrx_msg_cb(param, ws)
 			wf_fps = parseInt(param[1]);
 		   //console.log('# wf_fps='+ wf_fps);
 			break;
-		case "wf_cal":    // for benefit of kiwirecorder
+		case "wf_cal":    // for benefit of kiwirecorder as well
+		   wf.cal = parseInt(param[1]);
 		   break;
 		case "start":
 			bin_server = parseInt(param[1]);

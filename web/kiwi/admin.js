@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 John Seamons, ZL/KF6VO
+// Copyright (c) 2016-2023 John Seamons, ZL4VO/KF6VO
 
 // TODO
 //		input range validation
@@ -9,8 +9,9 @@ var admin = {
    console_open: false,
    
    long_running: false,
-   no_admin_reopen_retry: false,
    is_multi_core: false,
+   
+   update_interval: null,
    reg_status: {},
    
    pie_size: 25,
@@ -475,7 +476,7 @@ function control_confirm_cb()
 	} else
 	if (pending_power_off) {
 		ext_send('SET power_off');
-		admin_wait_then_reload(0, 'Powering off Beagle');
+		wait_then_reload_page(0, 'Powering off Beagle');
 	} else {
 	   w3_call(control_confirm_cb_func);
 	}
@@ -1074,107 +1075,53 @@ function update_build_now_cb(id, idx)
 
 function backup_html()
 {
+   sd_backup_init();
+   
 	var s =
-	w3_div('id-backup w3-hide',
-		'<hr>',
-		w3_div('w3-section w3-text-teal w3-bold', 'Backup configuration by uploading archive to <a href="https://transfer.sh" target="_blank">Transfer.sh</a>'),
-      w3_div('id-backup-container w3-hide', 
-         //w3_div('w3-container w3-text w3-red', 'WARNING: after SD card is written immediately remove from Beagle.<br>Otherwise on next reboot Beagle will be re-flashed from SD card.'),
+      w3_div('id-backup w3-hide',
          '<hr>',
-         w3_third('w3-container', 'w3-valign',
-            w3_button('w3-aqua w3-margin', 'Click to backup', 'backup_sd_write'),
+         w3_div('w3-section w3-text-teal w3-bold', 'Backup complete contents of KiwiSDR by writing Beagle filesystem onto a user provided micro-SD card'),
 
-            w3_div('',
-               w3_div('id-progress-container w3-progress-container w3-round-large w3-gray w3-show-inline-block',
-                  w3_div('id-progress w3-progressbar w3-round-large w3-light-green w3-width-zero',
-                     w3_div('id-progress-text w3-container')
-                  )
-               ),
+         w3_div('id-sd-backup-container', 
+            w3_div('w3-container w3-text w3-red', 'WARNING: after SD card is written immediately remove from Beagle.<br>Otherwise on next reboot Beagle will be re-flashed from SD card.'),
+            '<hr>',
+
+            w3_div('w3-container w3-valign',
+               w3_button('w3-aqua w3-margin', 'Click to write micro-SD card', 'sd_backup_click_cb'),
+
+               w3_div('w3-margin-L-64',
+                  w3_div('id-sd-progress-container w3-progress-container w3-round-large w3-css-lightGray w3-show-inline-block',
+                     w3_div('id-sd-progress w3-progressbar w3-round-large w3-light-green w3-width-zero',
+                        w3_div('id-sd-progress-text w3-container')
+                     )
+                  ),
          
-               w3_div('w3-margin-T-8',
-                  w3_div('id-progress-time w3-show-inline-block') +
-                  w3_div('id-progress-icon w3-show-inline-block w3-margin-left')
+                  w3_inline('w3-margin-T-8/',
+                     w3_div('id-sd-backup-time'),
+                     w3_div('id-sd-backup-icon w3-margin-left'),
+                     w3_div('id-sd-backup-msg w3-margin-left')
+                  )
                )
             ),
+            '<hr>',
 
-            w3_div('id-sd-status class-sd-status')
-         ),
-         '<hr>',
-         w3_div('id-output-msg w3-container w3-text-output w3-scroll-down w3-small w3-margin-B-16')
-      )
-	);
+            w3_div('id-output-msg w3-container w3-text-output w3-scroll-down w3-small w3-margin-B-16')
+         )
+      );
 	return s;
 }
 
 function backup_focus()
 {
-	var el;
-	el = w3_el('id-progress-container');
-	if (el) el.style.width = px(300);
-	el = w3_el('id-output-msg');
-	if (el) el.style.height = px(300);
-
-   w3_do_when_cond(
-      function() { return isNumber(kiwi.debian_maj); },
-      function() {
-         if (kiwi.debian_maj >= 11) {
-            w3_innerHTML('id-backup-container',
-               w3_div('w3-container w3-text w3-red', 'Debian '+ kiwi.debian_maj +' does not yet support the backup function.'));
-         }
-         w3_show('id-backup-container', 'w3-show-inline');
-      }, null,
-      250
-   );
-   // REMINDER: w3_do_when_cond() returns immediately
+	w3_width_height('id-sd-progress-container', 300);
+	w3_width_height('id-output-msg', null, 300);
+	
+   sd_backup_focus();
 }
 
-var sd_progress, sd_progress_max = 10;    // measured estimate -- in secs (varies with SD card write speed)
-var backup_sd_interval;
-var backup_refresh_icon = w3_icon('', 'fa-refresh fa-spin', 20);
-
-function backup_sd_write(id, idx)
+function backup_blur()
 {
-	var el = w3_el('id-sd-status');
-	el.innerHTML = "Backup in progress...";
-
-	w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '0%';
-
-	sd_progress = -1;
-	backup_sd_progress();
-	backup_sd_interval = setInterval(backup_sd_progress, 1000);
-
-	w3_el('id-progress-icon').innerHTML = backup_refresh_icon;
-
-	ext_send("SET microSD_write");
-}
-
-function backup_sd_progress()
-{
-	sd_progress++;
-	var pct = ((sd_progress / sd_progress_max) * 100).toFixed(0);
-	if (pct <= 99) {	// stall updates until we actually finish in case SD is writing slowly
-		w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = pct +'%';
-	}
-	var secs = (sd_progress % 60).toFixed(0).leadingZeros(2);
-	var mins = Math.floor(sd_progress / 60).toFixed(0);
-	w3_el('id-progress-time').innerHTML = mins +':'+ secs;
-}
-
-function backup_sd_write_done(err)
-{
-	var el = w3_el('id-sd-status');
-	var msg = err? ('FAILED error '+ err.toString()) : 'WORKED';
-	if (err == 1) msg += '<br>Internet is not connected';
-	if (err == 15) msg += '<br>Failed to upload archive';
-	el.innerHTML = msg;
-	el.style.color = err? 'red':'lime';
-
-	if (!err) {
-		// force to max in case we never made it during updates
-		w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '100%';
-	}
-	kiwi_clearInterval(backup_sd_interval);
-	w3_el('id-progress-icon').innerHTML = '';
+   sd_backup_blur();
 }
 
 
@@ -1297,8 +1244,8 @@ function network_html()
                   w3_div('id-network-check-gw w3-green')
                ),
                w3_third('w3-valign w3-margin-bottom w3-text-teal', 'w3-container',
-                  w3_input_get('', 'DNS-1 (n.n.n.n where n = 0..255)', 'adm.ip_address.dns1', 'w3_string_set_cfg_cb', ''),
-                  w3_input_get('', 'DNS-2 (n.n.n.n where n = 0..255)', 'adm.ip_address.dns2', 'w3_string_set_cfg_cb', ''),
+                  w3_input_get('', 'DNS-1 (n.n.n.n where n = 0..255)', 'adm.ip_address.dns1', 'net_set_dns_cb', ''),
+                  w3_input_get('', 'DNS-2 (n.n.n.n where n = 0..255)', 'adm.ip_address.dns2', 'net_set_dns_cb', ''),
                   w3_div('',
                      w3_label('', '<br>') +     // makes the w3-valign above work for button below
                      w3_button('w3-show-inline w3-aqua', 'Use well-known public DNS servers', 'net_public_dns_cb')
@@ -1796,7 +1743,7 @@ function network_dhcp_static_update_cb(path, idx)
    var use_static = adm.ip_address.use_static;
 	if (use_static) {
       ext_send('SET dns dns1=x'+ encodeURIComponent(adm.ip_address.dns1) +' dns2=x'+ encodeURIComponent(adm.ip_address.dns2));
-      ext_send('SET static_ip='+ kiwi_ip_str(network_ip) +' static_nm='+ kiwi_ip_str(network_nm) +' static_gw='+ kiwi_ip_str(network_gw));
+      ext_send('SET static_ip='+ kiwi_ip_str(network_ip) +' static_nb='+ network_nm.nm +' static_nm='+ kiwi_ip_str(network_nm) +' static_gw='+ kiwi_ip_str(network_gw));
 	} else {
 		ext_send('SET use_DHCP');
 	}
@@ -1804,10 +1751,11 @@ function network_dhcp_static_update_cb(path, idx)
    ext_set_cfg_param('adm.ip_address.commit_use_static', use_static, EXT_SAVE)
    w3_hide('id-net-need-update');
    
-   if (debian_ver <= 9)    // Debian 10 and above use connmanctl which has immediate effect (no reboot required)
+   if (debian_ver <= 9)
       w3_reboot_cb();      // show reboot button after confirm button pressed
    else
-		admin_wait_then_reload(10, 'Waiting for configuration change');
+      // Debian 10 and above use connmanctl/networkctl which has immediate effect (no reboot required)
+		wait_then_reload_page(10, 'Waiting for configuration change');
 }
 
 function network_static_init()
@@ -1955,12 +1903,20 @@ function network_gw_address_cb(path, val, first)
 	network_show_check('network-check-gw', 'gateway', path, val, network_gw, first);
 }
 
+function net_set_dns_cb(path, s)
+{
+   //console.log('net_set_dns_cb path='+ path +' s='+ s);
+   w3_string_set_cfg_cb(path, s);
+	network_show_update(false);
+}
+
 function net_public_dns_cb(id, idx)
 {
 	w3_string_set_cfg_cb('adm.ip_address.dns1', '1.1.1.1');
 	w3_set_value('adm.ip_address.dns1', '1.1.1.1');
 	w3_string_set_cfg_cb('adm.ip_address.dns2', '8.8.8.8');
 	w3_set_value('adm.ip_address.dns2', '8.8.8.8');
+	network_show_update(false);
 }
 
 
@@ -2276,6 +2232,8 @@ function gps_update_admin_cb()
       for (var cn=0; cn < gps.ch.length; cn++) {
          s += w3_table_row('id-gps-ch-'+ cn, '');
       }
+
+      s += w3_table_row('','&nbsp;');
 
 	w3_el("id-gps-ch").innerHTML = s;
 	
@@ -2931,7 +2889,7 @@ function log_update()
 
 function console_html()
 {
-   // must set "remove_returns" since pty output lines are terminated with \r\n instead of \n alone
+   // must set "inline_returns" since pty output lines are terminated with \r\n instead of \n alone
    // otherwise the \r overwrite logic in kiwi_output_msg() will be triggered
    //console.log('$console SETUP');
    //kiwi_trace();
@@ -3559,7 +3517,7 @@ function admin_draw(sdr_mode)
          w3_nav(admin_colors[ci++], 'DX', 'dx', 'admin_nav');
    s += 
       //w3_nav(admin_colors[ci++], 'Update', 'update', 'admin_nav') +
-      w3_nav(admin_colors[ci++], 'Backup', 'backup', 'admin_nav') +
+      //w3_nav(admin_colors[ci++], 'Backup', 'backup', 'admin_nav') +
       w3_nav(admin_colors[ci++], 'Network', 'network', 'admin_nav') +
       (sdr_mode? w3_nav(admin_colors[ci++], 'GPS', 'gps', 'admin_nav') : '') +
       w3_nav(admin_colors[ci++], 'Log', 'log', 'admin_nav') +
@@ -3670,10 +3628,10 @@ function admin_close()
 {
    // don't show message if reload countdown running
    kiwi_clearTimeout(admin.keepalive_timeoout);
-   if (admin.no_admin_reopen_retry) {
+   if (kiwi.no_reopen_retry) {
 	      w3_hide('id-kiwi-msg-container');      // in case password entry panel is being shown
          w3_show_block('id-kiwi-container');
-         admin_wait_then_reload(0, 'Server has closed connection.');
+         wait_then_reload_page(0, 'Server has closed connection.');
    } else
    if (isUndefined(adm.admin_keepalive) || adm.admin_keepalive == true) {
       if (!admin.reload_rem && !admin.long_running) {
@@ -3681,13 +3639,49 @@ function admin_close()
          w3_show_block('id-kiwi-container');
          //kiwi_show_msg('Server has closed connection.');
          //if (dbgUs) console.log('admin close'); else
-            admin_wait_then_reload(60, 'Server has closed connection. Will retry.');
+            wait_then_reload_page(60, 'Server has closed connection. Will retry.');
       }
    } else {
       //console.log('ignoring admin keepalive (websocket close)');
       w3_show_block('id-admin-closed');
       w3_scrollTop('id-kiwi-container');
    }
+}
+
+function admin_update_start()
+{
+	ext_send_after_cfg_save("SET admin_update");
+	admin.update_interval = setInterval(function() {ext_send("SET admin_update");}, 5000);
+}
+
+function admin_update_stop()
+{
+	kiwi_clearInterval(admin.update_interval);
+}
+
+function admin_update(p)
+{
+	var i;
+	var json = decodeURIComponent(p);
+	//console.log('admin_update='+ json);
+   var obj = kiwi_JSON_parse('admin_update', json);
+	if (obj) admin.reg_status = obj;
+	
+	// rx.kiwisdr.com registration status
+	if (adm.kiwisdr_com_register && admin.reg_status.kiwisdr_com != undefined && admin.reg_status.kiwisdr_com != '') {
+	   w3_innerHTML('id-kiwisdr_com-reg-status', 'rx.kiwisdr.com registration: successful');
+	}
+	
+	// GPS has had a solution, show buttons
+	if (admin.reg_status.lat != undefined) {
+		w3_show_inline_block('id-webpage-grid-set');
+		w3_show_inline_block('id-public-grid-set');
+		w3_show_inline_block('id-webpage-gps-set');
+		w3_show_inline_block('id-public-gps-set');
+
+		w3_show_inline_block('id-wspr-grid-set');
+		w3_show_inline_block('id-ft8-grid-set');
+	}
 }
 
 // Process replies to our messages sent via ext_send('SET ...')
@@ -3738,6 +3732,7 @@ function admin_msg(param)
 		   break;
 
 		case "keepalive":
+         //console.log('ADMIN keepalive');
 		   kiwi_clearTimeout(admin.keepalive_timeoout);
 		   if (adm.admin_keepalive) {
 		      //console.log('admin keepalive');
@@ -3776,7 +3771,7 @@ function admin_recv(data)
 		var param = params[i].split("=");
 
 		//console.log('admin_recv: '+ param[0]);
-		switch (param[0]) {
+		switch (param[0]) {     // #msg-proc
 
 			case "admin_sdr_mode":
 				admin_sdr_mode = (+param[1])? 1:0;
@@ -3798,6 +3793,13 @@ function admin_recv(data)
 			   admin.repo_git = decodeURIComponent(param[1]);
 				break;
 
+			case "gps_info":
+				var func = admin_sdr.ext_cur_nav +'_gps_info_cb';
+				var param = decodeURIComponent(param[1]);
+				//console.log('gps_info: func='+ func +' param='+ param);
+				w3_call(func, param);
+				break;
+
 			case "ext_call":
 			   // assumes that '=' is a safe delimiter to split func/param
 				var ext_call = decodeURIComponent(param[1]).split('=');
@@ -3807,8 +3809,8 @@ function admin_recv(data)
 				w3_call(ext_func, ext_param);
 				break;
 
-			case "public_update":
-				public_update(param[1]);
+			case "admin_update":
+				admin_update(param[1]);
 				break;
 
 			case "auto_nat":
@@ -3866,7 +3868,7 @@ function admin_recv(data)
 				break;
 
 			case "microSD_done":
-				backup_sd_write_done(parseFloat(param[1]));
+				sd_backup_write_done(parseFloat(param[1]));
 				break;
 
 			case "DUC_status":
@@ -3932,59 +3934,10 @@ function w3_reboot_cb()
 	w3_scrollTop('id-kiwi-container');
 }
 
-function admin_draw_pie() {
-	w3_el('id-admin-reload-secs').innerHTML = 'Admin page reload in '+ admin.reload_rem + ' secs';
-	if (admin.reload_rem > 0) {
-		admin.reload_rem--;
-		kiwi_draw_pie('id-admin-pie', admin.pie_size, (admin.reload_secs - admin.reload_rem) / admin.reload_secs);
-	} else {
-	   try {
-		   window.location.reload(true);
-		} catch(ex) {
-		   console.log('RELOAD FAILED?');
-		   console.log(ex);
-		}
-	}
-};
-
-function admin_wait_then_reload(secs, msg)
-{
-	var ael = w3_el("id-admin");
-	var s2;
-	
-	if (secs) {
-		s2 =
-			w3_divs('w3-valign w3-margin-T-8/w3-container',
-				w3_div('w3-show-inline-block', kiwi_pie('id-admin-pie', admin.pie_size, '#eeeeee', 'deepSkyBlue')),
-				w3_div('w3-show-inline-block',
-					w3_div('id-admin-reload-msg'),
-					w3_div('id-admin-reload-secs')
-				)
-			);
-	} else {
-		s2 =
-			w3_divs('w3-valign w3-margin-T-8/w3-container',
-				w3_div('id-admin-reload-msg')
-			);
-	}
-	
-	var s = '<header class="w3-container w3-teal"><h5>Admin interface</h5></header>'+ s2;
-	//console.log('s='+ s);
-	ael.innerHTML = s;
-	
-	if (msg) w3_el("id-admin-reload-msg").innerHTML = msg;
-	
-	if (secs) {
-		admin.reload_rem = admin.reload_secs = secs;
-		setInterval(admin_draw_pie, 1000);
-		admin_draw_pie();
-	}
-}
-
 function admin_restart_now_cb()
 {
 	ext_send('SET restart');
-	admin_wait_then_reload(60, 'Restarting KiwiSDR server');
+	wait_then_reload_page(60, 'Restarting KiwiSDR server');
 }
 
 function admin_restart_cancel_cb()
@@ -3996,7 +3949,7 @@ function admin_restart_cancel_cb()
 function admin_reboot_now_cb()
 {
 	ext_send('SET reboot');
-	admin_wait_then_reload(90, 'Rebooting Beagle');
+	wait_then_reload_page(90, 'Rebooting Beagle');
 }
 
 function admin_reboot_cancel_cb()
@@ -4075,7 +4028,7 @@ function admin_radio_YN_cb(path, idx, first)
 
 function admin_select_cb(path, idx, first)
 {
-	console.log('admin_select_cb idx='+ idx +' path='+ path +' first='+ first);
+	//console.log('admin_select_cb idx='+ idx +' path='+ path +' first='+ first);
 	idx = +idx;
 	if (idx != -1) {
       // if first time don't save, otherwise always save
