@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 John Seamons, ZL/KF6VO */
+/* Copyright (c) 2016 John Seamons, ZL4VO/KF6VO */
 
 /*****************************/
 /* KiwiSDR W3.CSS extensions */
@@ -599,6 +599,16 @@ input[type=range]::-moz-range-thumb {
 .w3-margin-TRL-10
 {
     margin: 10px 10px 0 10px
+}
+
+.w3-margin-B-2
+{
+    margin-bottom: 2px !important
+}
+
+.w3-margin-B-3
+{
+    margin-bottom: 3px !important
 }
 
 .w3-margin-B-4

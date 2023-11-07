@@ -3,7 +3,7 @@
 "status_msg":"Try other SDRs world-wide at <a href='http://rx.kiwisdr.com' target='_blank'>rx.kiwisdr.com</a>",
 "index_html_params":{
 	"PAGE_TITLE":"FlyDog SDR",
-	"RX_PHOTO_FILE":"kiwi/pcb.jpg",
+	"RX_PHOTO_FILE":"kiwi/pcb.png",
 	"RX_PHOTO_HEIGHT":"350",
 	"RX_PHOTO_TITLE":"FlyDog SDR: The 16-Bit ADC KiwiSDR derivation Wide-band SDR + GPS cape for Raspberry Pi",
 	"RX_PHOTO_DESC":"FlyDog SDR PCB",

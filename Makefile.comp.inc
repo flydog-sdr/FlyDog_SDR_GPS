@@ -50,7 +50,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
         ifeq ($(HAS_PROC),true)
             BBAI_64 := $(shell cat $(KIWI_XC_REMOTE_FS)/proc/device-tree/model | grep -q -s "BeagleBone AI-64" && echo true)
             BBAI := $(shell cat $(KIWI_XC_REMOTE_FS)/proc/device-tree/model | sed "s/\(.*\)./\1x/" | grep -q -s "BeagleBone AIx" && echo true)
-            RPI := $(shell cat $(KIWI_XC_REMOTE_FS)/proc/device-tree/model | grep -q -s "Raspberry Pi 3" && echo true)
+            RPI := $(shell cat $(KIWI_XC_REMOTE_FS)/proc/device-tree/model | grep -q -s "Raspberry Pi" && echo true)
         else
             # nfs doesn't see special files in /proc, so have to distinguish BBAI, BBAI-64 manually
             BBAI_64 := 
@@ -159,7 +159,15 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
         CPP_FLAGS += -std=gnu++11
         APT_GET_FORCE = --no-install-recommends --force-yes
     else ifeq ($(BBG_BBB),true)
-        ifeq ($(DEBIAN_VERSION),10)
+        ifeq ($(DEBIAN_VERSION),11)
+            CC = clang-11
+            CPP = clang++-11
+            VIS_OPT = -Ofast
+            # needed for iq_display.cpp et al
+            CPP_FLAGS += -std=gnu++11
+            # clang still used by other things (e_cpu etc)
+            CMD_DEPS_DEBIAN := /usr/bin/clang-11
+        else ifeq ($(DEBIAN_VERSION),10)
             CC = clang-8
             CPP = clang++-8
             #CC = clang

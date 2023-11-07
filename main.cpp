@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2014-2022 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2022 John Seamons, ZL4VO/KF6VO
 
 #include "types.h"
 #include "config.h"
@@ -31,6 +31,7 @@ Boston, MA  02110-1301, USA.
 #include "spi.h"
 #include "spi_dev.h"
 #include "gps.h"
+#include "gps_fe.h"
 #include "coroutines.h"
 #include "cfg.h"
 #include "net.h"
@@ -66,7 +67,7 @@ int fw_sel, fpga_id, rx_chans, wf_chans, nrx_bufs, nrx_samps, nrx_samps_loop, nr
 
 int p0=0, p1=0, p2=0, wf_sim, wf_real, wf_time, ev_dump=0, wf_flip, wf_start=1, tone, down,
 	rx_cordic, rx_cic, rx_cic2, rx_dump, wf_cordic, wf_cic, wf_mult, wf_mult_gen, do_slice=-1,
-	rx_yield=1000, gps_chans=GPS_CHANS, spi_clkg, spi_speed=SPI_48M, wf_max, rx_num, wf_num,
+	rx_yield=1000, gps_chans=GPS_MAX_CHANS, spi_clkg, spi_speed=SPI_48M, wf_max, rx_num, wf_num,
 	do_gps, do_sdr=1, navg=1, wf_olap, meas, spi_delay=100, do_fft, debian_ver, monitors_max,
 	noisePwr=-160, unwrap=0, rev_iq, ineg, qneg, fft_file, fftsize=1024, fftuse=1024, bg,
 	print_stats, ecpu_cmds, ecpu_tcmds, use_spidev, debian_maj, debian_min, test_flag, dx_print,
@@ -108,7 +109,7 @@ int main(int argc, char *argv[])
 {
 	int i;
 	int p_gps = 0, gpio_test_pin = 0;
-	bool ext_clk = false, err;
+	bool err;
 
 	#define FW_CONFIGURED   -2  // -2 because -1 means "other" firmware and 0-N is Kiwi firmware
 	#define FW_OTHER        -1
@@ -178,6 +179,7 @@ int main(int argc, char *argv[])
 		if (ARG("-kiwi_reg")) kiwi_reg_debug = TRUE; else
 		if (ARG("-cmd_debug")) cmd_debug = TRUE; else
 		if (ARG("-bg")) { background_mode = TRUE; bg=1; } else
+		if (ARG("-log")) { log_foreground_mode = TRUE; } else
 		if (ARG("-fopt")) use_foptim = 1; else   // in EDATA_DEVEL mode use foptim version of files
 		if (ARG("-down")) down = 1; else
 		if (ARG("+gps")) p_gps = 1; else
@@ -201,7 +203,7 @@ int main(int argc, char *argv[])
 
 		if (ARG("-debian")) {} else     // dummy arg so Kiwi version can appear in e.g. htop
 		if (ARG("-ctrace")) { ARGL(web_caching_debug); } else
-		if (ARG("-ext")) ext_clk = true; else
+		if (ARG("-ext")) kiwi.ext_clk = true; else
 		if (ARG("-use_spidev")) { ARGL(use_spidev); } else
 		if (ARG("-eeprom")) create_eeprom = true; else
 		if (ARG("-sim")) wf_sim = 1; else
@@ -368,6 +370,7 @@ int main(int argc, char *argv[])
         fpga_id = FPGA_ID_RX14_WF0;
         rx_chans = 14;
         wf_chans = 0;
+        gps_chans = 10;
         snd_rate = SND_RATE_14CH;
         rx_decim = RX_DECIM_14CH;
         nrx_bufs = RXBUF_SIZE_14CH / NRX_SPI;
@@ -386,7 +389,7 @@ int main(int argc, char *argv[])
         if (err) no_wf = false;
         if (no_wf) wf_chans = 0;
 
-        lprintf("firmware: rx_chans=%d wf_chans=%d\n", rx_chans, wf_chans);
+        lprintf("firmware: rx_chans=%d wf_chans=%d gps_chans=%d\n", rx_chans, wf_chans, gps_chans);
 
         assert(rx_chans <= MAX_RX_CHANS);
         assert(wf_chans <= MAX_WF_CHANS);
@@ -436,12 +439,12 @@ int main(int argc, char *argv[])
 		//pru_start();
 		eeprom_update();
 		
-		bool ext_ADC_clk = cfg_bool("ext_ADC_clk", &err, CFG_OPTIONAL);
-		if (err) ext_ADC_clk = false;
+		kiwi.ext_clk = cfg_bool("ext_ADC_clk", &err, CFG_OPTIONAL);
+		if (err) kiwi.ext_clk = false;
 		
 		u2_t ctrl = CTRL_EEPROM_WP;
 		ctrl_clr_set(0xffff, ctrl);
-		if (!(ext_clk || ext_ADC_clk)) ctrl |= CTRL_OSC_EN;
+		if (kiwi.ext_clk) ctrl |= CTRL_OSC_DIS;
 		ctrl_clr_set(0, ctrl);
 
 		net.dna = fpga_dna();
@@ -463,12 +466,20 @@ int main(int argc, char *argv[])
 
 	web_server_init(WS_INIT_START);
 
+    // need to do gps clock switch even if gps is not enabled
+    gps_fe_init();
+
 	if (do_gps) {
 		if (!GPS_CHANS) panic("no GPS_CHANS configured");
         #ifdef USE_GPS
 		    gps_main(argc, argv);
 		#endif
 	}
+    
+    printf("switching GPS clock..\n");
+    kiwi_msleep(100);
+    ctrl_clr_set(0, CTRL_GPS_CLK_EN);
+    kiwi_msleep(100);
 	
 	CreateTask(stat_task, NULL, MAIN_PRIORITY);
 

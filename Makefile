@@ -1,12 +1,12 @@
 VERSION_MAJ = 1
-VERSION_MIN = 624
+VERSION_MIN = 633
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
 #
 # Makefile for KiwiSDR project
 #
-# Copyright (c) 2014-2023 John Seamons, ZL/KF6VO
+# Copyright (c) 2014-2023 John Seamons, ZL4VO/KF6VO
 #
 # This Makefile can be run on both a build machine (I use a MacBook Pro) and the
 # BeagleBone Black target (Debian release).
@@ -36,7 +36,7 @@ include Makefile.comp.inc
 # for any config-specific options/dependencies
 -include ../kiwi.config/Makefile.kiwi.inc
 
-REPO_USER := bclswl0827
+REPO_USER := flydog-sdr
 REPO_NAME := FlyDog_SDR_GPS
 REPO_GIT  := $(REPO_USER)/$(REPO_NAME).git
 REPO := https://github.com/$(REPO_GIT)
@@ -100,10 +100,11 @@ debug: check_device_detect make_prereq
 check_device_detect:
     ifeq ($(BAD_DEV_DETECT),true)
 	    @echo "bad device detect"
-	    @echo BBAI_64 = $(BBAI_64)
-	    @echo BBAI = $(BBAI)
-	    @echo RPI = $(RPI)
-	    @echo BBG_BBB = $(BBG_BBB)
+	    @echo "BBAI_64 = $(BBAI_64)"
+	    @echo "BBAI = $(BBAI)"
+	    @echo "RPI = $(RPI)"
+	    @echo "BBG_BBB = $(BBG_BBB)"
+	    @echo "DEBIAN_VERSION = $(DEBIAN_VERSION)"
 	    @exit -1
     endif
 
@@ -267,6 +268,10 @@ else
 	DIR_CFG = /root/kiwi.config
 	CFG_PREFIX =
 
+	ifeq ($(DEBIAN_VERSION),10)
+	    CMD_DEPS += /usr/bin/connmanctl
+	endif
+
 # currently a bug where -lcrypt and -lssl can't be used together for some reason (crash at startup)
 	ifeq ($(DEBIAN_10_AND_LATER),true)
 #       USE_SSL isn't compatible with gdb. So for now we revert to USE_CRYPT
@@ -347,9 +352,10 @@ $(INSTALL_CERTIFICATES):
 # NB not a typo: "clang-6.0" vs "clang-7"
 
 /usr/bin/clang-6.0:
-	# only available recently?
+	# With D8 now archived, clang-6.0 must be obtained from the archived D9 backports.
+	# But that repo makes use of an interactive script that requires noninteractive handling.
 	-apt-get -y $(APT_GET_FORCE) update
-	apt-get -y $(APT_GET_FORCE) install clang-6.0
+	(UCF_FORCE_CONFOLD=1 DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -y install clang-6.0)
 
 /usr/bin/clang-7:
 	-apt-get -y $(APT_GET_FORCE) update
@@ -396,27 +402,29 @@ $(INSTALL_CERTIFICATES):
 /usr/bin/dtc:
 	#-apt-get -y $(APT_GET_FORCE) install device-tree-compiler
 
-ifeq ($(DEBIAN_10_AND_LATER),true)
-/usr/include/openssl/ssl.h:
-	-apt-get -y install openssl libssl1.1 libssl-dev
+ifeq ($(DEBIAN_VERSION),10)
+    /usr/bin/connmanctl:
+	    #-apt-get -y $(APT_GET_FORCE) install connman
+endif
 
-/usr/bin/connmanctl:
-	#-apt-get -y $(APT_GET_FORCE) install connman
+ifeq ($(DEBIAN_10_AND_LATER),true)
+    /usr/include/openssl/ssl.h:
+	    -apt-get -y install openssl libssl1.1 libssl-dev
 endif
 
 ifeq ($(BBAI_64),true)
-/usr/bin/cpufreq-info:
-	#-apt-get -y install cpufrequtils
+    /usr/bin/cpufreq-info:
+	    #-apt-get -y install cpufrequtils
 endif
 
 ifeq ($(BBAI),true)
-/usr/bin/cpufreq-info:
-	#-apt-get -y install cpufrequtils
+    /usr/bin/cpufreq-info:
+	    #-apt-get -y install cpufrequtils
 endif
 
 ifneq ($(DEBIAN_VERSION),7)
-/usr/bin/jq:
-	-apt-get -y $(APT_GET_FORCE) install jq
+    /usr/bin/jq:
+	    -apt-get -y $(APT_GET_FORCE) install jq
 endif
 
 endif
@@ -709,7 +717,7 @@ make_vars: check_device_detect
 	@echo
 	@echo UNAME = $(UNAME)
 	@echo DEBIAN_DEVSYS = $(DEBIAN_DEVSYS)
-	@echo DEBIAN = $(DEBIAN_VERSION)
+	@echo DEBIAN_VERSION = $(DEBIAN_VERSION)
 	@echo DEBIAN_10_AND_LATER = $(DEBIAN_10_AND_LATER)
 	@echo
 	@echo BBAI_64 = $(BBAI_64)
@@ -1082,6 +1090,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 
     DTS_DEP_DST = $(DIR_DTB)/$(DTS)
     DTS_DEP_SRC = $(DIR_DTS)/$(DTS)
+    DTS2_DEP_SRC = $(addprefix $(DIR_DTS)/,$(DTS2))
 
     $(DO_ONCE):
 	    @mkdir -p $(DIR_CFG)
@@ -1099,7 +1108,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
         DIR_DTB = $(DIR_DTB_BASE)/src/arm64
 
         # re-install device tree if changes made to *.dts source file
-        $(DTS_DEP_DST): $(DTS_DEP_SRC)
+        $(DTS_DEP_DST): $(DTS_DEP_SRC) $(DTS2_DEP_SRC)
 	        @echo "BBAI-64: re-install Kiwi device tree to configure GPIO pins"
 	        make install_kiwi_device_tree
 	        touch $(FORCE_REBOOT)
@@ -1107,8 +1116,8 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
         install_kiwi_device_tree:
 	        @echo "BBAI-64: install Kiwi device tree to configure GPIO pins"
 	        @echo $(SYS_MAJ).$(SYS_MIN) $(SYS)
-	        cp $(DIR_DTS)/$(DTS) $(DIR_DTB)
-	        cp $(DIR_DTS)/$(DTS2) $(DIR_DTB)
+	        cp $(DTS_DEP_SRC) $(DIR_DTB)
+	        cp $(DTS2_DEP_SRC) $(DIR_DTB)
 	        (cd $(DIR_DTB_BASE); make all)
 	        (cd $(DIR_DTB_BASE); make install)
     endif
@@ -1133,7 +1142,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
         install_kiwi_device_tree:
 	        @echo "BBAI: install Kiwi device tree to configure GPIO/SPI pins"
 	        @echo $(SYS_MAJ).$(SYS_MIN) $(SYS)
-	        cp $(DIR_DTS)/$(DTS) $(DIR_DTB)
+	        cp $(DTS_DEP_SRC) $(DIR_DTB)
 	        (cd $(DIR_DTB_BASE); make)
 	        # intentionally don't do "make install" -- instead only copy single .dtb below
 	        cp $(DIR_DTB)/$(DTB_KIWI) /boot
@@ -1153,16 +1162,18 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
         DIR_DTB = /lib/firmware
 
         # re-install device tree if changes made to *.dts source file
-        $(DTS_DEP_DST): $(DTS_DEP_SRC)
+        $(DTS_DEP_DST): $(DTS_DEP_SRC) $(DTS2_DEP_SRC)
 	        @echo "BBG_BBB: re-install Kiwi device tree to configure GPIO pins"
 	        make install_kiwi_device_tree
+	        touch $(FORCE_REBOOT)
 
         install_kiwi_device_tree:
 	        @echo "BBG_BBB: install Kiwi device tree to configure GPIO pins (but not SPI)"
 	        -cp --backup=numbered /boot/uEnv.txt /boot/uEnv.txt.save
 	        -sed -i -e 's/^#uboot_overlay_addr4=\/lib\/firmware\/<file4>.dtbo/uboot_overlay_addr4=\/lib\/firmware\/cape-bone-kiwi-00A0.dtbo/' /boot/uEnv.txt
-	        cp $(DIR_DTS)/$(DTS) $(DIR_DTB)
-	        cp $(addprefix $(DIR_DTS)/,$(DTS2)) $(DIR_DTB)
+	        cp $(DTS_DEP_SRC) $(DIR_DTB)
+	        cp $(DTS2_DEP_SRC) $(DIR_DTB)
+#	        (cd /lib/firmware; dtc -O dtb -o cape-bone-kiwi-00A0.dtbo -b 0 -@ cape-bone-kiwi-00A0.dts);
     endif
 endif
 
@@ -1192,12 +1203,16 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
     EXISTS_DX_COMM := $(shell test -f $(DIR_CFG)/$(DX_COMM) && echo true)
     DX_COMM_CFG = dx_community_config.json
     EXISTS_DX_COMM_CFG := $(shell test -f $(DIR_CFG)/$(DX_COMM_CFG) && echo true)
+
+    ETC_HOSTNAME_IS_BB := $(shell grep -qi beaglebone /etc/hostname && echo true)
+    ETC_HOSTS_HAS_KIWI := $(shell grep -qi kiwisdr /etc/hosts && echo true)
+
+    SSH_KEYS = /root/.ssh/authorized_keys
+    EXISTS_SSH_KEYS := $(shell test -f $(SSH_KEYS) && echo true)
+
+    # because different Debian distros install iptables in different dirs do detection this way
+    MISSING_IPTABLES := $(shell which iptables || echo true)
 endif
-
-ETC_HOSTS_HAS_KIWI := $(shell grep -qi kiwisdr /etc/hosts && echo true)
-
-SSH_KEYS = /root/.ssh/authorized_keys
-EXISTS_SSH_KEYS := $(shell test -f $(SSH_KEYS) && echo true)
 
 # Doing a 'make install' on the development machine is only used to build the optimized files.
 # For the Beagle this installs the device tree files in the right place and other misc stuff.
@@ -1302,7 +1317,6 @@ endif
 	install -D -o root -g root -m 0644 $(DIR_CFG_SRC)/rsyslog.sed $(DIR_CFG)/rsyslog.sed
 #
 	rsync -av --delete $(DIR_CFG_SRC)/samples/ $(DIR_CFG)/samples
-	install -D -o root -g root tools/backup_sdr_config.sh /usr/local/bin/backup_sdr_config.sh
 	cat Makefile | head -2 | cut -d " " -f3 | tr -d "\n" > $(DIR_CFG)/_VER
 	install -D -o root -g root -m 0644 $(DIR_CFG_SRC)/_UPDATE $(DIR_CFG)/_UPDATE
 
@@ -1328,6 +1342,7 @@ ifneq ($(EXISTS_DX),true)
 	@echo "\nINSTALLING $(DIR_CFG)/$(DX)"
 	@mkdir -p $(DIR_CFG)
 	cp $(DIR_CFG_SRC)/dist.$(DX) $(DIR_CFG)/$(DX)
+	cp $(DIR_CFG_SRC)/dist.$(DX_CFG) $(DIR_CFG)/$(DX_CFG)
 endif
 
 	@echo "\nDX_SHA256=$(DX_SHA256) DX_NEEDS_UPDATE=$(DX_NEEDS_UPDATE)"
@@ -1359,6 +1374,11 @@ ifneq ($(EXISTS_CONFIG),true)
 	cp $(DIR_CFG_SRC)/dist.$(CFG_CONFIG) $(DIR_CFG)/$(CFG_CONFIG)
 endif
 
+ifeq ($(ETC_HOSTNAME_IS_BB),true)
+	@echo "CHANGING /etc/hostname to kiwisdr"
+	@echo 'kiwisdr' >/etc/hostname
+endif
+
 ifneq ($(ETC_HOSTS_HAS_KIWI),true)
 	@echo "\nAPPENDING kiwisdr to /etc/hosts"
 	@echo '127.0.0.1       kiwisdr' >>/etc/hosts
@@ -1370,6 +1390,10 @@ endif
 # remove public keys leftover from development
 ifeq ($(EXISTS_SSH_KEYS),true)
 	@-sed -i -e '/.*jks-/d' $(SSH_KEYS)
+endif
+
+ifeq ($(MISSING_IPTABLES),true)
+	-apt-get -y $(APT_GET_FORCE) install iptables
 endif
 
 # must be last obviously
@@ -1419,8 +1443,14 @@ log:
 	-@$(LOGS) | grep -a kiwid
 	@rm -f /tmp/kiwi.log
 
+LOGS_SHORT = \
+	cat /var/log/user.log.1 > /tmp/kiwi.log; \
+	cat /var/log/user.log >> /tmp/kiwi.log; \
+	cat /tmp/kiwi.log
+
 slog:
-	-@cat /var/log/user.log | grep -a kiwid
+	-@$(LOGS_SHORT) | grep -a kiwid
+	@rm -f /tmp/kiwi.log
 
 tlog:
 	-@cat /var/log/user.log | grep -a kiwid | tail -500
@@ -1697,24 +1727,27 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 	#apt-get -y $(APT_GET_FORCE) install xz-utils
 
 #
-# DANGER: "count=2400M" below (i.e. 1.6 GB) must be larger than the partition size (currently ~2.1 GB)
-# computed by the tools/kiwiSDR-make-microSD-flasher-from-eMMC.sh script.
+# DANGER: "DD_SIZE := 2700M" below must be ~200 MB larger than the partition "used" size
+# (currently ~2.5 GB) computed by the "d.mb" command alias.
 # Otherwise the image file will have strange effects like /boot/uEnv.txt being the correct size but
 # filled with zeroed bytes (which of course is a disaster).
 #
-DEBIAN_VER := 10.11
-USE_MMC := 0
+DISTRO_DEBIAN_VER := 11.7
+SD_CARD_MMC := 0
+DD_SIZE := 2700M
+
 create_img_from_sd: /usr/bin/xz
 	@echo "--- this takes about an hour"
 	@echo "--- KiwiSDR server will be stopped to maximize write speed"
 	lsblk
-	@echo "CAUTION: USE_MMC = $(USE_MMC) -- VERIFY THIS ABOVE"
+	@echo "CAUTION: SD_CARD_MMC = $(SD_CARD_MMC)"
+	@echo "CAUTION: VERIFY FROM THE LIST ABOVE THAT THE SD CARD IS THE MMC NUMBER SHOWN"
 	@echo -n 'ARE YOU SURE? '
 	@read not_used
 	make stop
 	date
-	dd if=/dev/mmcblk$(USE_MMC) bs=1M iflag=count_bytes count=2400M | xz --verbose > ~/KiwiSDR_$(VER)_BBB_Debian_$(DEBIAN_VER).img.xz
-	sha256sum ~/KiwiSDR_$(VER)_BBB_Debian_$(DEBIAN_VER).img.xz
+	dd if=/dev/mmcblk$(SD_CARD_MMC) bs=1M iflag=count_bytes count=$(DD_SIZE) | xz --verbose > ~/KiwiSDR_$(VER)_BBB_Debian_$(DISTRO_DEBIAN_VER).img.xz
+	sha256sum ~/KiwiSDR_$(VER)_BBB_Debian_$(DISTRO_DEBIAN_VER).img.xz
 	date
 
 endif

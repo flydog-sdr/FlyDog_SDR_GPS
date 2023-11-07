@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2014-2017 John Seamons, ZL/KF6VO
+// Copyright (c) 2014-2017 John Seamons, ZL4VO/KF6VO
 
 #include "types.h"
 #include "config.h"
@@ -190,6 +190,18 @@ char *kstr_sp(char *s_kstr_cstr)
 	}
 }
 
+// return C-string pointer from kstr object less trailing newline
+// s_kstr_cstr: kstr|C-string|NULL
+char *kstr_sp_less_trailing_nl(char *s_kstr_cstr)
+{
+	char *sp = kstr_sp(s_kstr_cstr);
+	if (sp == NULL) return NULL;
+	int sl = strlen(sp);
+	if (sl >= 1 && (sp[sl-1] == '\n' || sp[sl-1] == '\r')) sp[sl-1] = '\0';
+	if (sl >= 2 && (sp[sl-2] == '\n' || sp[sl-2] == '\r')) sp[sl-2] = '\0';
+	return sp;
+}
+
 // wrap a malloc()'d C-string in a kstr object so it is auto-freed later on
 char *kstr_wrap(char *s_malloced)
 {
@@ -357,18 +369,25 @@ static char *ed_strsep(char **sp, const char *delim)
 // Makes a copy of ocp since delimiters are turned into NULLs.
 // If ocp begins (or ends) with delimiter(s) null entries are _not_ made in argv
 // (and reflected in returned count), *unless* the KSPLIT_NO_SKIP_EMPTY_FIELDS flag is given.
+// Unlike strsep() delimiter hit is returned in str_split_t
 // Caller must free *mbuf
-int kiwi_split(char *ocp, char **mbuf, const char *delims, char *argv[], int nargs, int flags)
+int kiwi_split(char *ocp, char **mbuf, const char *delims, str_split_t argv[], int nargs, int flags)
 {
-	int n=0;
+	int n = 0;
+	//bool dbg = (strcmp(delims, "\r\n") == 0);
 	bool ed = ((flags & KSPLIT_HANDLE_EMBEDDED_DELIMITERS) != 0);
-	char **ap, *tp;
+	str_split_t *ap;
+	char *tp;
 	*mbuf = (char *) kiwi_imalloc("kiwi_split", strlen(ocp) + SPACE_FOR_NULL);
 	strcpy(*mbuf, ocp);
 	tp = *mbuf;
+	//if (dbg) real_printf("kiwi_split <%s> <%s>\n", delims, ocp);
 	
-	for (ap = argv; (*ap = (ed? ed_strsep(&tp, delims) : strsep(&tp, delims))) != NULL;) {
-		if ((flags & KSPLIT_NO_SKIP_EMPTY_FIELDS) || **ap != '\0') {
+	for (ap = argv; (ap->str = (ed? ed_strsep(&tp, delims) : strsep(&tp, delims))) != NULL;) {
+	    bool not_empty = (ap->str[0] != '\0');
+		if ((flags & KSPLIT_NO_SKIP_EMPTY_FIELDS) || not_empty) {
+            ap->delim = (not_empty && tp)? ocp[(tp - *mbuf) - 1] : '\0';
+            //if (dbg) real_printf("kiwi_split %d <%s> <%s>\n", n, ap->str, ASCII[ap->delim]);
 			n++;
 			if (++ap >= &argv[nargs])
 				break;
@@ -730,7 +749,8 @@ char *kiwi_overlap_strcpy(char *dst, const char *src)
 }
 
 
-// version of strlen() with limit to handle a corrupt string without proper null-termination
+// Version of strlen() with limit to handle a corrupt string without proper null-termination.
+// Also, unlike strlen(), returns 0 for NULL string pointer.
 int kiwi_strnlen(const char *s, int limit)
 {
     int i;

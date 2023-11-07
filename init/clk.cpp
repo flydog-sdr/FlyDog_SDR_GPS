@@ -15,7 +15,7 @@ Boston, MA  02110-1301, USA.
 --------------------------------------------------------------------------------
 */
 
-// Copyright (c) 2017 John Seamons, ZL/KF6VO
+// Copyright (c) 2017 John Seamons, ZL4VO/KF6VO
 
 #include "types.h"
 #include "config.h"
@@ -67,7 +67,8 @@ void clock_init()
     #else
         clk.adc_clock_base = clk.ext_ADC_clk? ext_clk_freq : ADC_CLOCK_TYP;
         printf("ADC_CLOCK: %s%.6f MHz\n",
-            clk.ext_ADC_clk? "EXTERNAL, J5 connector, " : "", clk.adc_clock_base/MHz);
+            clk.ext_ADC_clk? stprintf("EXTERNAL, J%d connector, ", (kiwi.model == KiwiSDR_1)? 5:2) : "",
+            clk.adc_clock_base/MHz);
     #endif
     
     clk.manual_adj = 0;
