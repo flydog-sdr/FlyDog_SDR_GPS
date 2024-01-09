@@ -85,12 +85,14 @@ void ext_register_receive_cmds(ext_receive_cmds_t func, int rx_chan);
 void ext_unregister_receive_cmds(int rx_chan);
 
 // general routines
-double ext_update_get_sample_rateHz(int rx_chan);		// return sample rate of audio channel
+enum { ADC_CLK_SYS = -1, ADC_CLK_TYP = -2, RX_CHAN_CUR = -3 };
+double ext_update_get_sample_rateHz(int rx_chan);   // return sample rate of audio channel
 typedef enum { AUTH_USER = 0, AUTH_LOCAL = 1, AUTH_PASSWORD = 2 } ext_auth_e;
 ext_auth_e ext_auth(int rx_chan);
 void ext_notify_connected(int rx_chan, u4_t seq, char *msg);
 void ext_kick(int rx_chan);
 double ext_get_displayed_freq_kHz(int rx_chan);
+int ext_get_mode(int rx_chan);
 
 // routines to send messages to extension client-part
 C_LINKAGE(int ext_send_msg(int rx_chan, bool debug, const char *msg, ...));

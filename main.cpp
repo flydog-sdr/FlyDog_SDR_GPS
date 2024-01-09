@@ -76,7 +76,7 @@ int p0=0, p1=0, p2=0, wf_sim, wf_real, wf_time, ev_dump=0, wf_flip, wf_start=1, 
 u4_t ov_mask, snd_intr_usec;
 
 bool create_eeprom, need_hardware, kiwi_reg_debug, have_ant_switch_ext, gps_e1b_only,
-    disable_led_task, is_multi_core, debug_printfs, cmd_debug, anti_aliased;
+    disable_led_task, is_multi_core, debug_printfs, cmd_debug;
 
 int main_argc;
 char **main_argv;
@@ -336,7 +336,6 @@ int main(int argc, char *argv[])
     }
     
     bool update_admcfg = false;
-    anti_aliased = admcfg_default_bool("anti_aliased", false, &update_admcfg);
     if (update_admcfg) admcfg_save_json(cfg_adm.json);      // during init doesn't conflict with admin cfg
     
     if (fw_sel == FW_SEL_SDR_RX4_WF4) {
@@ -370,7 +369,7 @@ int main(int argc, char *argv[])
         fpga_id = FPGA_ID_RX14_WF0;
         rx_chans = 14;
         wf_chans = 0;
-        gps_chans = 10;
+        gps_chans = GPS_RX14_CHANS;
         snd_rate = SND_RATE_14CH;
         rx_decim = RX_DECIM_14CH;
         nrx_bufs = RXBUF_SIZE_14CH / NRX_SPI;
@@ -401,7 +400,7 @@ int main(int argc, char *argv[])
         lprintf("firmware: RX rx_decim=%d RX1_STD_DECIM=%d RX2_STD_DECIM=%d USE_RX_CICF=%d\n",
             rx_decim, RX1_STD_DECIM, RX2_STD_DECIM, VAL_USE_RX_CICF);
         lprintf("firmware: RX srate=%.3f(%d) bufs=%d samps=%d loop=%d rem=%d intr_usec=%d\n",
-            ext_update_get_sample_rateHz(-2), snd_rate, nrx_bufs, nrx_samps, nrx_samps_loop, nrx_samps_rem, snd_intr_usec);
+            ext_update_get_sample_rateHz(ADC_CLK_TYP), snd_rate, nrx_bufs, nrx_samps, nrx_samps_loop, nrx_samps_rem, snd_intr_usec);
 
         assert(nrx_bufs <= MAX_NRX_BUFS);
         assert(nrx_samps <= MAX_NRX_SAMPS);
@@ -442,10 +441,7 @@ int main(int argc, char *argv[])
 		kiwi.ext_clk = cfg_bool("ext_ADC_clk", &err, CFG_OPTIONAL);
 		if (err) kiwi.ext_clk = false;
 		
-		u2_t ctrl = CTRL_EEPROM_WP;
-		ctrl_clr_set(0xffff, ctrl);
-		if (kiwi.ext_clk) ctrl |= CTRL_OSC_DIS;
-		ctrl_clr_set(0, ctrl);
+		ctrl_clr_set(0xffff, CTRL_EEPROM_WP);
 
 		net.dna = fpga_dna();
 		printf("device DNA %08x|%08x\n", PRINTF_U64_ARG(net.dna));
@@ -469,18 +465,24 @@ int main(int argc, char *argv[])
     // need to do gps clock switch even if gps is not enabled
     gps_fe_init();
 
+    printf("switching GPS clock..\n");
+    kiwi_msleep(100);
+    ctrl_clr_set(0, CTRL_GPS_CLK_EN);
+    kiwi_msleep(100);
+    
+    // switch to ext clock only after GPS clock switch occurs
+    if (kiwi.ext_clk) {
+        printf("switching to external ADC clock..\n");
+		ctrl_clr_set(0, CTRL_OSC_DIS);
+        kiwi_msleep(100);
+    }
+	
 	if (do_gps) {
-		if (!GPS_CHANS) panic("no GPS_CHANS configured");
         #ifdef USE_GPS
 		    gps_main(argc, argv);
 		#endif
 	}
     
-    printf("switching GPS clock..\n");
-    kiwi_msleep(100);
-    ctrl_clr_set(0, CTRL_GPS_CLK_EN);
-    kiwi_msleep(100);
-	
 	CreateTask(stat_task, NULL, MAIN_PRIORITY);
 
     #ifdef USE_OTHER

@@ -106,6 +106,12 @@ function dx_freq_cb(path, val, first)
    w3_set_value(path, val);      // NB: keep field numeric!
 	w3_num_cb(o.el, val);
    if (dx_update_check(o.idx, dx.UPD_MOD)) dx_button_highlight();
+
+   // with the admin DX tab make sure a changed frequency maintains a properly sorted list
+   if (o.idx != dx.IDX_USER) {
+      dx_update_admin();   // update (possibly re-sort) the list
+      ext_send('SET MARKER search_freq='+ val);    // force a freq search in case the entry is now off-screen
+   }
 }
 
 function dx_sel_cb(path, val, first)
@@ -222,9 +228,12 @@ function sd_backup_focus()
    w3_do_when_cond(
       function() { return isNumber(kiwi.debian_maj); },
       function() {
-         if (kiwi.debian_maj >= 11) {
+         var ng_D11 = (!dbgUs && kiwi.debian_maj == 11);
+         var ng_D12 = (kiwi.debian_maj > 12 || (kiwi.debian_maj == 12 && kiwi.debian_min > 2));
+         if (ng_D11 || ng_D12) {
             w3_innerHTML('id-sd-backup-container',
-               w3_div('w3-container w3-text w3-red', 'Debian '+ kiwi.debian_maj +' does not yet support the backup function.'));
+               w3_div('w3-container w3-text w3-red',
+                  'Debian '+ kiwi.debian_maj +'.'+  kiwi.debian_min +' does not yet support the backup function.'));
          }
          w3_show('id-sd-backup-container', 'w3-show-inline');
       }, null,
@@ -241,7 +250,7 @@ function sd_backup_blur()
 function sd_backup_click_cb(id, idx)
 {
    console.log('sd_backup_click_cb debian_maj='+ kiwi.debian_maj);
-   if (kiwi.debian_maj >= 11) {
+   if (!dbgUs && kiwi.debian_maj >= 11) {
       w3_innerHTML('id-sd-backup-msg', 'SD write not supported yet');
       return;
    }
@@ -295,6 +304,8 @@ function sd_backup_write_done(err)
 	   case 15: e = 'SD card I/O error'; break;
 	   case 30: e = 'SD card already mounted?'; break;
 	   case 31: e = 'SD card format error'; break;
+	   case 88: e = '(BBAI-64) must first update to latest Debian version'; break;
+	   case 89: e = 'SD card flasher enable failed!'; break;
 	   default: e = 'code '+ err; break;
 	}
 	if (e) msg = '<b>ERROR: '+ e +'</b>';

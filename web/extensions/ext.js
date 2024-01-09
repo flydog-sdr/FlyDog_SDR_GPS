@@ -29,7 +29,7 @@ var extint = {
    // FIXME: allow C-side API to specify
    no_lockout: [ 'noise_blank', 'noise_filter', 'ant_switch', 'iframe', 'colormap', 'devl', 'prefs' ],
    use_rf_tab: [ /* 'ant_switch' */ ],
-   excl_devl: [ 'devl', 's4285', 'prefs' ],
+   excl_devl: [ 'devl', 'digi_modes', 's4285', 'prefs' ],
    
    OPT_NOLOCAL: 1,
 };
@@ -206,6 +206,11 @@ function ext_get_cfg_param_string(path, init_val, save)
 
 function ext_set_cfg_param(path, val, save)
 {
+   if (path.startsWith('id-')) {
+      console.log('$WARNING: ext_set_cfg_param path='+ path);
+      return;
+   }
+   
 	path = w3_add_toplevel(path);	
 	setVarFromString(path, val);
 	save = (isArg(save) && save == EXT_SAVE)? true : false;
@@ -1169,7 +1174,7 @@ function extint_names_enum(func)
    for (i = value = 0; i < extint_names.length; i++) {
       var id = extint_names[i];
       if (!dbgUs && extint.excl_devl.includes(id)) continue;
-      if (id == 'sig_gen' && (rx_chan != 0 || rx_chans >= 14)) continue;   // sig gen only visible to chan 0
+      if (id == 'sig_gen' && rx_chan != 0) continue;     // sig gen only visible to chan 0
       if (id == 'wspr') id = 'WSPR';      // FIXME: workaround
 
       // workaround mistake that stored config enable ids don't match ext names

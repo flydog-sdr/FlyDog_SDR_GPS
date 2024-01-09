@@ -42,7 +42,6 @@ module RECEIVER (
     input  wire        wrEvt2,
     
     input  wire        use_gen_C,
-    input  wire        gen_fir_C,
     
     input  wire        self_test_en_C,
     output wire        self_test
@@ -85,7 +84,7 @@ module RECEIVER (
 	reg  [ADC_OVFL_CTR_BITS-1:0] adc_ovfl_ctr, adc_ovfl_cnt, cnt_mask_A;
     reg adc_ovfl_A;
 
-	wire set_cnt_mask_C = wrReg2 & op_11[SET_CNT_MASK];
+	wire set_cnt_mask_C = wrReg & op_11[SET_CNT_MASK];
 	wire set_cnt_mask_A;
 	SYNC_PULSE sync_set_cnt_mask (.in_clk(cpu_clk), .in(set_cnt_mask_C), .out_clk(adc_clk), .out(set_cnt_mask_A));
     always @ (posedge adc_clk)
@@ -214,15 +213,11 @@ module RECEIVER (
 	// an "undriven" error for rd_* results.
 	wire rd_i, rd_q;
 
-    wire use_FIR_A;
-    SYNC_WIRE sync_use_FIR (.in(gen_fir_C), .out_clk(adc_clk), .out(use_FIR_A));
-
 	RX #(.IN_WIDTH(RX_IN_WIDTH)) rx_inst [V_RX_CHANS-1:0] (
 		.adc_clk		(adc_clk),
 		.adc_data		(rx_data),
 		
 		.rx_sel_C		(rxn_sel_C),
-		.use_FIR_A      (use_FIR_A),
 
 		.rd_i			(rd_i),
 		.rd_q			(rd_q),
@@ -235,7 +230,7 @@ module RECEIVER (
 		.set_rx_freqH_C	(set_rx_freqH_C),
 		.set_rx_freqL_C	(set_rx_freqL_C)
 	);
-	
+
 
     //////////////////////////////////////////////////////////////////////////
 	// rx audio shared sample memory
@@ -253,6 +248,11 @@ module RECEIVER (
     always @ (posedge adc_clk)
         if (set_nsamps_A) nrx_samps <= freeze_tos_A;
     
+	reg [47:0] ticks_latched_A;
+	always @ (posedge adc_clk)
+		if (rxn_avail_A[0])
+		    ticks_latched_A <= ticks_A;
+
 	rx_audio_mem rx_audio_mem_inst (
 		.adc_clk		(adc_clk),
 		
@@ -263,7 +263,7 @@ module RECEIVER (
 		.rx_rd_C        (rx_rd_C),
 		.rx_dout_C      (rx_dout_C),
 		
-		.ticks_A        (ticks_A),
+		.ticks_A        (ticks_latched_A),
 		
 		.cpu_clk        (cpu_clk),
 		.nrx_samps      (nrx_samps),

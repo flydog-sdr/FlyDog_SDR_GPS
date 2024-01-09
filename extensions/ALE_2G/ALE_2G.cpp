@@ -108,7 +108,7 @@ static int ale_2g_input(int rx_chan, s2_t **inp = NULL, int *freqHz = NULL)
                 e->reset = false;
             }
 
-            if (inp) *inp = &rx->real_samples[e->rd_pos][0];
+            if (inp) *inp = &rx->real_samples_s2[e->rd_pos][0];
             if (freqHz) *freqHz = rx->freqHz[e->rd_pos];
             e->rd_pos = (e->rd_pos+1) & (N_DPBUF-1);
 
@@ -237,7 +237,7 @@ bool ale_2g_receive_cmds(u2_t key, char *cmd, int rx_chan)
 	        ale_2g_chan_t *e = &ale_2g_chan[rx_chan];
 	        e->tuned_f = freq;
             //printf("ALE_2G: CMD_TUNE freq=%.2f mode=%s\n", freq, mode_m);
-            kiwi_ifree(mode_m);
+            kiwi_asfree(mode_m);
             return true;
         }
     }

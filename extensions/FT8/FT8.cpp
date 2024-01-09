@@ -30,6 +30,7 @@ typedef struct {
 	int rx_chan;
 	int run;
 	int proto;
+	bool debug;
 	int last_freq_kHz;
 	
 	bool task_created;
@@ -106,7 +107,7 @@ static void ft8_task(void *param)
     ft8_t *e = &ft8[rx_chan];
     conn_t *conn = rx_channels[rx_chan].conn;
     rx_dpump_t *rx = &rx_dpump[rx_chan];
-    decode_ft8_setup(rx_chan);
+    decode_ft8_setup(rx_chan, e->debug);
     
 	while (1) {
 		TaskSleepReason("wait for wakeup");
@@ -132,7 +133,7 @@ static void ft8_task(void *param)
 		    
 		    //real_printf("%d ", e->rd_pos); fflush(stdout);
 		    ft8_conf.test = e->test;
-		    decode_ft8_samples(rx_chan, &rx->real_samples[e->rd_pos][0], FASTFIR_OUTBUF_SIZE, conn->freqHz, &e->start_test);
+		    decode_ft8_samples(rx_chan, &rx->real_samples_s2[e->rd_pos][0], FASTFIR_OUTBUF_SIZE, conn->freqHz, &e->start_test);
 			e->rd_pos = (e->rd_pos+1) & (N_DPBUF-1);
 		}
     }
@@ -181,6 +182,7 @@ bool ft8_msgs(char *msg, int rx_chan)
 
     int proto;
 	if (sscanf(msg, "SET ft8_start=%d", &proto) == 1) {
+	    e->debug = kiwi.dbgUs;
 	    e->proto = proto;
         conn_t *conn = rx_channels[e->rx_chan].conn;
 		e->last_freq_kHz = conn->freqHz/1e3;
@@ -237,7 +239,7 @@ bool ft8_msgs(char *msg, int rx_chan)
 		e->test = true;
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -263,7 +265,7 @@ bool ft8_update_vars_from_config(bool called_at_init_or_restart)
     cfg_default_string("ft8.callsign", s, &update_cfg);
 	cfg_string_free(s);
     s = (char *) cfg_string("ft8.callsign", NULL, CFG_REQUIRED);
-    kiwi_ifree(ft8_conf2.rcall);
+    kiwi_ifree(ft8_conf2.rcall, "ft8 rcall");
 	ft8_conf2.rcall = kiwi_str_encode(s);
 	cfg_string_free(s);
 
@@ -486,7 +488,7 @@ void FT8_main()
         return;
     }
     off_t fsize = kiwi_file_size(fn2);
-    kiwi_ifree(fn2);
+    kiwi_asfree(fn2);
     char *file = (char *) mmap(NULL, fsize, PROT_READ, MAP_PRIVATE, fd, 0);
     if (file == MAP_FAILED) {
         printf("FT8: mmap failed\n");

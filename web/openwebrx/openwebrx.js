@@ -42,8 +42,6 @@ var owrx = {
    last_pageX: 0,
    last_pageY: 0,
    mouse_freq: {},
-   freq_memory: [],
-   freq_memory_menu_shown: 0,
    override_fmem: null,
    vfo_ab: 0,
    vfo_first: true,
@@ -402,7 +400,7 @@ function kiwi_main_ready()
 
 	// FIXME: eliminate most of these
 	snd_send("SERVER DE CLIENT openwebrx.js SND");
-	snd_send("SET dbug_v="+ debug_v);
+	snd_send("SET dbug_v="+ debug_v +','+ (dbgUs? 1:0));
 
    // setup gen when configuration loaded
    w3_do_when_cond(
@@ -3361,6 +3359,7 @@ function zoom_step(dir, arg2)
             //console.log('zoom_band f='+ f +' ITU_region=R'+ ITU_region);
             
             var _dxcfg = dx_cfg_db();
+            if (!_dxcfg) { zoom_finally(); return; };
             var _kiwi_bands = kiwi_bands_db(dx.INIT_BANDS_NO);
 				for (i=0; i < _dxcfg.bands.length; i++) {    // search for first containing band
 					b1 = _dxcfg.bands[i];
@@ -4552,7 +4551,8 @@ function waterfall_add(data_raw, audioFFT)
       noise -= 10;
       
       if (wf.audioFFT_active) {
-         noise = (dbgUs && devl.p4)? Math.round(devl.p4) : -110;
+         //noise = (dbgUs && devl.p4)? Math.round(devl.p4) : -110;
+         noise = -110;
          console_log_dbgUs('audioFFT_active: force noise = '+ noise.toFixed(0) +' dBm');
       }
 
@@ -5686,9 +5686,9 @@ function freqset_update_ui(from)
 	vfo_update();
 	
 	// don't add to freq memory while tuning across scale except for final position
-	if (from != owrx.FSET_NOP && from != owrx.FSET_SCALE_DRAG && from != owrx.FSET_SCALE_TOUCH_DRAG && from != owrx.FSET_PB_CHANGE) {
-      //console.log('>>> freq_memory_update freq='+ freq_displayed_kHz_str_with_freq_offset);
-	   freq_memory_update(freq_displayed_kHz_str_with_freq_offset);
+	if (kiwi.fmem_auto_save && from != owrx.FSET_NOP && from != owrx.FSET_SCALE_DRAG && from != owrx.FSET_SCALE_TOUCH_DRAG && from != owrx.FSET_PB_CHANGE) {
+      //console.log('>>> freq_memory_add freq='+ freq_displayed_kHz_str_with_freq_offset);
+      freq_memory_add(freq_displayed_kHz_str_with_freq_offset);
 	}
 
 	kiwi_clearTimeout(owrx.popup_keyboard_active_timeout);
@@ -6188,23 +6188,34 @@ function freq_step_update_ui(force)
 
 function freq_memory_init()
 {
+   kiwi.fmem_auto_save = +kiwi_storeGet('fmem_auto_save', 1);
+   kiwi.fmem_mode_save = +kiwi_storeGet('fmem_mode_save', 0);
+
 	var fmem;
 	if (isNonEmptyString(owrx.override_fmem)) {
 	   fmem = owrx.override_fmem.split(',');
-	   var prec = (cfg.show_1Hz || url_1Hz)? 3:2;
-	   fmem.forEach(function(s, i) {
-	      if (isNumber(s)) s = s.toString();
-	      var f = s.parseFloatWithUnits('kM', 1e-3);
-	      if (isNumber(f))
-	         fmem[i] = w3_clamp(f, 1, cfg.max_freq? 32000 : 30000).toFixed(prec);
-	   });
 	} else {
       fmem = kiwi_JSON_parse('freq_memory_init', readCookie('freq_memory'));
+      //console.log('freq_memory_init ENTER');
+      //console.log(fmem);
 	}
+	if (isNull(fmem)) fmem = [10000];
 	
+	// clean up url param or stored memory
+   var prec = (cfg.show_1Hz || url_1Hz)? 3:2;
+   fmem.forEach(function(s, i) {
+      if (isNumber(s)) s = s.toString();
+      var as = s.split(' ');
+      var f_n = as[0].parseFloatWithUnits('kM', 1e-3);
+      fmem[i] = w3_clamp(f_n, 1, cfg.max_freq? 32000 : 30000).toFixed(prec);
+      if (as[1]) fmem[i] += ' '+ as[1];      // add back mode
+   });
+	
+	// remove any dups
 	if (fmem) {
-      owrx.freq_memory =
-         kiwi_dedup_array(fmem,
+      kiwi.freq_memory =
+         kiwi_dedup_array(fmem
+            /*
             function(v) {
                var rv = { err: false };
                v = +v;
@@ -6214,48 +6225,110 @@ function freq_memory_init()
                   rv.v = v.toString();    // in case storage has a number instead of a string
                return rv;
             }
+            */
          );
-      //console.log('freq_memory_init');
-      //console.log(owrx.freq_memory);
+      //console.log('freq_memory_init DONE');
+      //console.log(kiwi.freq_memory);
    }
+
+   kiwi.fmem_help =
+      w3_div('',
+         w3_inline_percent('w3-padding-tiny w3-bold w3-text-aqua', 'Frequency memory help'),
+         w3_inline_percent('w3-padding-tiny',
+            'The current frequency is saved in the memory list in two different ways ' +
+            'depending on the <x1>auto save</x1> setting:<br>' +
+            '<ul><li>enabled: saves occur automatically as you tune.</li>' +
+            '<li>disabled: saves are done manually, via the <x1>save</x1> menu item or ' +
+            'click-holding the memory icon until it turns green ' +
+             w3_icon('', 'fa-bars w3-text-css-lime', 20) + '</li></ul>' +
+
+            'If <x1>mode save</x1> is enabled the current mode is saved and restored along with ' +
+            'the frequency.<br><br>' +
+            
+            'These two save modes are remembered in browser storage and used when this Kiwi is ' +
+            'visited again.<br><br>' +
+            
+            'The shortcut keys ^1 thru ^9 (^ means the control key) recall the memory ' +
+            'from positions 1 thru 9 in the memory list.'
+         ),
+
+         w3_inline_percent('w3-padding-tiny w3-bold w3-text-aqua w3-margin-T-8', 'Shortcut keys'),
+         w3_inline_percent('w3-padding-tiny', 'm', 15, 'toggle frequency memory menu'),
+         w3_inline_percent('w3-padding-tiny', '^1 ^2 ...', 15, 'recall memory #1 #2 ... (^ is ctl key)'),
+         w3_inline_percent('w3-padding-tiny', 'n N', 15,
+            w3_inline('',
+               'VFO A/B, VFO A=B or click-hold VFO icon until it turns red',
+               w3_div('w3-margin-L-8 w3-text-in-circle w3-wh-20px w3-red', 'A')
+            )
+         )
+      );
 }
 
 function freq_memory_menu_init()
 {
-   w3_menu('id-freq-memory-menu', 'freq_memory_menu_cb');
+   w3_menu('id-freq-memory-menu', 'freq_memory_menu_item_cb');
 }
 
-function freq_memory_menu_show(shortcut_key)
+function freq_memory_menu_open(shortcut_key)
 {
    if (w3_isVisible('id-freq-memory-menu')) {
-      owrx.freq_memory_menu_shown = 0;
+      kiwi.freq_memory_menu_shown = 0;
       //canvas_log('FMS0');
       return;
    }
-   owrx.freq_memory_menu_shown = 1;
+   kiwi.freq_memory_menu_shown = 1;
    //canvas_log('FMS1');
 
-   //console.log('freq_memory_menu_show='+ owrx.freq_memory_menu_shown);
+   //console.log('freq_memory_menu_open='+ kiwi.freq_memory_menu_shown);
    var x = owrx.last_pageX, y = owrx.last_pageY;
    if (shortcut_key != true)
       x += ((x - 128) >= 0)? -128 : 16;
 
-   var fmem_copy = kiwi_dup_array(owrx.freq_memory);
+   var fmem_copy = kiwi_dup_array(kiwi.freq_memory);
+
+   /*
+   // add per-freq delete icon
+   fmem_copy.forEach(
+      function(s, i) {
+         //fmem_copy[i] = w3_icon('w3-margin-R-8', 'fa-times-circle', 14, '', 'freq_memory_menu_delete_cb', i) + s;
+         fmem_copy[i] = w3_icon('w3-margin-R-8', 'fa-times-circle', 14, '') + s;
+      }
+   );
+   */
+
+   // add to menu top
+   fmem_copy.unshift('<hr>');
+   var s = 'freq';
+   if (kiwi.fmem_mode_save) s += '/mode';
+   if (kiwi.fmem_auto_save) {
+      fmem_copy.unshift('!save '+ s);
+      fmem_copy.unshift('disable auto save');
+   } else {
+      fmem_copy.unshift('save '+ s);
+      fmem_copy.unshift('enable auto save');
+   }
+   
+   // add to menu bottom
+   fmem_copy.push('<hr>');
    fmem_copy.push('clear all');
+   fmem_copy.push(kiwi.fmem_mode_save? 'disable mode save' : 'enable mode save');
    fmem_copy.push('VFO A=B');
+   fmem_copy.push('help');
+
+   kiwi.fmem_arr = fmem_copy;
    w3_menu_items('id-freq-memory-menu', fmem_copy, Math.min(fmem_copy.length, 10));
    w3_menu_popup('id-freq-memory-menu',
       function(evt, first) {     // close_func(), return true to close menu
          //event_dump(evt, 'close_func');
          // if 'm' key or click on freq-menu icon, take toggle state into account
-         var close_keyup = (evt.type == 'keyup' && (evt.key != 'm' || !owrx.freq_memory_menu_shown));
+         var close_keyup = (evt.type == 'keyup' && (evt.key != 'm' || !kiwi.freq_memory_menu_shown));
          var tgt_isMenu = w3_contains(evt.target, 'w3-menu');
          var tgt_isMenuButton = w3_contains(evt.target, 'w3-menu-button');
-         var menu_shown = owrx.freq_memory_menu_shown;
+         var menu_shown = kiwi.freq_memory_menu_shown;
          var click = ((evt.type == 'click' || ((evt.type == 'mousedown' || evt.type == 'touchstart') && !tgt_isMenuButton) || evt.type == 'touchend'));
          var close_click = (click && !first && (!tgt_isMenu || !menu_shown));
          var close = (close_keyup || close_click);
-         //canvas_log(close +' first='+ first +' '+ evt.type +' ='+ (owrx.freq_memory_menu_shown? 'SH':'NS') +
+         //canvas_log(close +' first='+ first +' '+ evt.type +' ='+ (kiwi.freq_memory_menu_shown? 'SH':'NS') +
          //   (w3_contains(evt.target, 'w3-menu')? 'W3-MENU':''));
          //event_dump(evt, 'freq-memory-menu close_func='+ close, true);
          //canvas_log('menu_popup close_func='+ (close? 'T':'F') +' ev='+ evt.type +' kup='+ (close_keyup? 'T':'F') +' clk='+ (close_click? 'T':'F'));
@@ -6266,56 +6339,134 @@ function freq_memory_menu_show(shortcut_key)
       x, y);
 }
 
-function freq_memory_update(f)
+function freq_memory_menu_icon_cb(el, val, trace, ev)
 {
-   //console.log('freq_memory update');
-   //console.log(owrx.freq_memory);
-   if (!isNumber(+f)) return;
-   if (f < 1) f = '1';
-	if (f != owrx.freq_memory[0]) {
-      //canvas_log('add='+ f);
-	   owrx.freq_memory.unshift(f);
-	   owrx.freq_memory = kiwi_dedup_array(owrx.freq_memory);
-	}
-	if (owrx.freq_memory.length > 25) owrx.freq_memory.pop();
-   //canvas_log('mem2='+ owrx.freq_memory.join());
-   //console.log(owrx.freq_memory);
-	writeCookie('freq_memory', JSON.stringify(owrx.freq_memory));
+   var hold = (!kiwi.fmem_auto_save && ev && ev.type == 'hold');
+   var hold_done = (!kiwi.fmem_auto_save && ev && ev.type == 'hold-done');
+   w3_colors('id-freq-menu', 'w3-text-white', 'w3-text-css-lime', hold);
+   if (hold) {
+	   freq_memory_add(freq_displayed_kHz_str_with_freq_offset);
+      return;
+   } else
+   if (hold_done) {
+      return;
+   }
+   freq_memory_menu_open(/* shortcut_key */ false);
 }
 
-function freq_memory_menu_cb(idx, x)
+function freq_memory_at(idx)
 {
+   if (idx < 0 || idx >= kiwi.freq_memory.length) return null;
+   var as = kiwi.freq_memory[idx].split(' ');
+   return { freq:as[0], mode:as[1] };
+}
+
+function freq_memory_add(f, clear)
+{
+   //console.log('freq_memory update');
+   //console.log(kiwi.freq_memory);
+   if (!isNumber(+f)) return;
+   if (+f < 1) f = '1';
+   if (kiwi.fmem_mode_save) f += ' '+ cur_mode;
+   if (clear == true) {
+      kiwi.freq_memory = [f];
+   } else
+	if (f != kiwi.freq_memory[0]) {
+      //canvas_log('add='+ f);
+	   kiwi.freq_memory.unshift(f);
+	   kiwi.freq_memory = kiwi_dedup_array(kiwi.freq_memory);
+	}
+	if (kiwi.freq_memory.length > 25) kiwi.freq_memory.pop();
+   //canvas_log('mem2='+ kiwi.freq_memory.join());
+   //console.log('freq_memory_add WRITE COOKIE');
+   //console.log(kiwi.freq_memory);
+	writeCookie('freq_memory', JSON.stringify(kiwi.freq_memory));
+}
+
+/*
+function freq_memory_menu_delete_cb(path, val, first, cb_param)
+{
+   console.log('freq_memory_menu_delete_cb path='+ path +' val='+ val +' cbp='+ cb_param);
+   console.log(cb_param);
+}
+*/
+
+function freq_memory_menu_item_cb(idx, x, cb_param, ev)
+{
+   var rv = w3.CLOSE_MENU;
    idx = +idx;
-   //console.log('freq_memory_menu_cb idx='+ idx +' x='+ x);
-   if (idx == -1) return;
+   //console.log('freq_memory_menu_item_cb idx='+ idx +' x='+ x);
+   if (idx == -1) return rv;
+   var f_m = null;
+
+   var TOP = 3;
+   var BOT = TOP + kiwi.freq_memory.length;
+   switch (idx) {
    
-   var f, set_f = false;
-   if (idx == owrx.freq_memory.length) {
-      //console.log('CLEAR ALL');
-      f = owrx.freq_memory[0];
-      set_f = true;
-      owrx.freq_memory = [f];
-      //canvas_log('clr_all top='+ f);
-   } else
-   if (idx == owrx.freq_memory.length + 1) {
-      //console.log('VFO A=B');
-      vfo_update(true);
-   } else
-   if (idx <= owrx.freq_memory.length - 1) {
-      //canvas_log('idx='+ idx);
-      //canvas_log('M='+ owrx.freq_memory);
-      f = owrx.freq_memory[idx];
-      set_f = true;
-      //canvas_log('sel='+ f);
-      owrx.freq_memory.unshift(f);
-      owrx.freq_memory = kiwi_dedup_array(owrx.freq_memory);
-      if (owrx.freq_memory.length > 25) owrx.freq_memory.pop();
+      case 0:
+         kiwi.fmem_auto_save ^= 1;
+         kiwi_storeSet('fmem_auto_save', kiwi.fmem_auto_save);
+         break;
+      
+      case 1:
+         if (!kiwi.fmem_auto_save) {
+            //console.log('SAVE');
+            freq_memory_add(freq_displayed_kHz_str_with_freq_offset);
+         }
+         break;
+      
+      case 2:     // <hr>
+         break;
+      
+      default:
+            //canvas_log('idx='+ idx +' M='+ kiwi.freq_memory);
+            f_m = freq_memory_at(idx - TOP);
+            //canvas_log('sel='+ f);
+            if (f_m) freq_memory_add(f_m.freq);
+         break;
+      
+      case BOT:   // <hr>
+         break;
+      
+      case BOT+1:
+         //console.log('CLEAR ALL');
+         freq_memory_add(freq_displayed_kHz_str_with_freq_offset, true);
+         break;
+      
+      case BOT+2:
+         //console.log('save MODE');
+         kiwi.fmem_mode_save ^= 1;
+         kiwi_storeSet('fmem_mode_save', kiwi.fmem_mode_save);
+         break;
+      
+      case BOT+3:
+         //console.log('VFO A=B');
+         vfo_update(true);
+         break;
+      
+      case BOT+4:
+         freq_memory_help();
+         break;
    }
-   
-   if (set_f) {
-      //canvas_log('mem1='+ owrx.freq_memory.join());
-      freqmode_set_dsp_kHz(f - kiwi.freq_offset_kHz);
+      
+   if (f_m) {
+      ext_tune(f_m.freq - kiwi.freq_offset_kHz, f_m.mode, ext_zoom.CUR);
+   } else {
+      freqset_select();
    }
+
+   return rv;
+}
+
+function freq_memory_recall(idx)
+{
+   var f_m = freq_memory_at(Math.min(9, idx));
+   if (f_m) ext_tune(f_m.freq - kiwi.freq_offset_kHz, f_m.mode, ext_zoom.CUR);
+}
+
+function freq_memory_help()
+{
+   confirmation_show_content(kiwi.fmem_help, 550, 380);
 }
 
 
@@ -6355,6 +6506,7 @@ function band_svc_lookup(svc_key)
 {
    var idx = null;
    var _dxcfg = dx_cfg_db();
+   if (!_dxcfg) return null;
    _dxcfg.band_svc.forEach(function(a, i) {
       if (a.key == svc_key)
          idx = i;
@@ -6377,13 +6529,13 @@ function bands_init()
    
    var _dxcfg = dx_cfg_db();
    // already converted to saving in the appropriate configuration file
-	if (_dxcfg.bands && _dxcfg.band_svc && _dxcfg.dx_type) {
+	if (_dxcfg && _dxcfg.bands && _dxcfg.band_svc && _dxcfg.dx_type) {
 	   console.log('BANDS: using stored _dxcfg.bands db='+ dx.db +' ---------------------------------');
 	   bands_addl_info(0);
 	   dx_color_init();
 	   return;
 	}
-	
+   
 	// NB: The following ONLY applies to the stored database
 	//
 	// Should only get here if this is the first run after an update from a version prior to v1.602
@@ -6397,6 +6549,10 @@ function bands_init()
 	// an admin connection (or admin operation from a user connection) occurs that can store the
 	// converted values in kiwi.json
    console.log('BANDS: using old config.js/bands db='+ dx.db +'-------------------------------------');
+   if (dx.db != dx.DB_STORED) {
+      console.log('bands_init: DANGER! dx_cfg_db() is null but db != DB_STORED?!?');
+      return;
+   }
 
    // do this here even though it's related to the dx labels
    dxcfg.dx_type = [];
@@ -6572,8 +6728,11 @@ function bands_init()
 function dx_cfg_db()
 {
    var db = (dx.db == dx.DB_COMMUNITY)? dxcomm_cfg : dxcfg;
-   //console.log('dx_cfg_db dxcfg='+ dxcfg +' dxcomm_cfg='+ dxcomm_cfg);
-   //console.log('dx_cfg_db '+ ((dx.db == dx.DB_COMMUNITY)? 'DB_COMMUNITY' : 'DB_STORED') +' '+ db);
+   //console.log('dx_cfg_db dx.db='+ dx.db);
+   if (db == null) {
+      console.log('dx_cfg_db DANGER db=null dxcfg='+ dxcfg +' dxcomm_cfg='+ dxcomm_cfg);
+      console.log('dx_cfg_db DANGER dx.db('+ dx.db +')='+ ((dx.db == dx.DB_COMMUNITY)? 'DB_COMMUNITY' : 'DB_STORED'));
+   }
    return db;
 }
 
@@ -6602,6 +6761,7 @@ function bands_addl_info(isAdmin)
    }
    
    var _dxcfg = dx_cfg_db();
+   if (!_dxcfg) return;
    var _kiwi_bands = kiwi_bands_db(dx.INIT_BANDS_YES);
 
 	for (i=0; i < _dxcfg.bands.length; i++) {
@@ -6656,6 +6816,7 @@ function setup_band_menu()
 	var ITU_region = cfg.init.ITU_region + 1;    // cfg.init.ITU_region = 0:R1, 1:R2, 2:R3
 
    var _dxcfg = dx_cfg_db();
+   if (!_dxcfg) return '';
    var _kiwi_bands = kiwi_bands_db(dx.INIT_BANDS_NO);
 	for (i = 0; i < _dxcfg.bands.length; i++) {
 		var b1 = _dxcfg.bands[i];
@@ -6704,6 +6865,7 @@ function find_band(freq)
    //console.log('find_band f='+ freq +' ITU_region=R'+ ITU_region);
 
    var _dxcfg = dx_cfg_db();
+   if (!_dxcfg) return null;
    var _kiwi_bands = kiwi_bands_db(dx.INIT_BANDS_NO);
 	for (var i = 0; i < _dxcfg.bands.length; i++) {
 		var b1 = _dxcfg.bands[i];
@@ -6757,6 +6919,7 @@ function mk_bands_scale()
 	var ITU_region = cfg.init.ITU_region + 1;    // cfg.init.ITU_region = 0:R1, 1:R2, 2:R3
 
    var _dxcfg = dx_cfg_db();
+   if (!_dxcfg) return;
    var _kiwi_bands = kiwi_bands_db(dx.INIT_BANDS_NO);
 	for (i = 0; i < _dxcfg.bands.length; i++) {
 		var b1 = _dxcfg.bands[i];
@@ -7441,6 +7604,7 @@ function dx_color_init()
 {
    if (dx.db != dx.DB_EiBi) {
       var _dxcfg = dx_cfg_db();
+      if (!_dxcfg) return;
    
       for (var i = 0; i < _dxcfg.dx_type.length; i++) {
          var o = _dxcfg.dx_type[i];
@@ -7578,6 +7742,7 @@ function dx_label_render_cb(arr)
 	
 	var obj;
    var _dxcfg = dx_cfg_db();
+   if (!_dxcfg) return;
    var stored = (dx.db == dx.DB_STORED);
    var eibi = (dx.db == dx.DB_EiBi);
    var community = (dx.db == dx.DB_COMMUNITY);
@@ -8991,7 +9156,6 @@ var SMETER_INPUT_RANGE = (SMETER_BIAS + SMETER_INPUT_MAX);
 var SMETER_DISPLAY_MAX = -6;     // don't display all the way to SMETER_INPUT_MAX
 var SMETER_DISPLAY_RANGE = (SMETER_BIAS + SMETER_DISPLAY_MAX);
 var sMeter_ctx;
-var smeter_ovfl;
 
 // 6 dB / S-unit
 var bars = {
@@ -9014,13 +9178,13 @@ function smeter_init(force_no_agc_thresh_smeter)
 	
 	w3_innerHTML(smeter_control,
 		'<canvas id="id-smeter-scale" class="class-smeter-scale" width="0" height="0"></canvas>',
-		w3_div('id-smeter-ovfl w3-hide', 'OV'),
 		w3_div('id-smeter-dbm-value'),
-		w3_div('id-smeter-dbm-units', 'dBm')
+		w3_div('id-smeter-dbm-units', 'dBm'),
+		w3_div('id-smeter-ovfl w3-hide', 'OV'),
+		w3_div('id-smeter-attn w3-hide', 'Attn')
 	);
 
 	var sMeter_canvas = w3_el('id-smeter-scale');
-	smeter_ovfl = w3_el('smeter-ovfl');
 
    var width = divControl? divControl.activeWidth : 350;
    var canvas_LR_border_pad = html_LR_border_pad(sMeter_canvas);
@@ -9056,7 +9220,7 @@ function smeter_init(force_no_agc_thresh_smeter)
 
 var sm_px = 0, sm_timeout = 0, sm_interval = 10;
 var sm_ovfl_showing = false;
-//var audio_ext_adc_ovfl_test = 0;
+var sm_timer = 0;
 
 function update_smeter()
 {
@@ -9086,23 +9250,30 @@ function update_smeter()
 		}
 	}
 	
-	//audio_ext_adc_ovfl_test++;
-	//audio_ext_adc_ovfl = ((audio_ext_adc_ovfl_test % 32) < 16);
+	sm_timer++;
+	var attn_period = ((sm_timer & 0x1f) <= 0x07);
+	//audio_ext_adc_ovfl = ((sm_timer % 32) < 16);    // test
 	
-	if (audio_ext_adc_ovfl && !sm_ovfl_showing) {
-	   w3_hide('id-smeter-dbm-units');
-	   w3_show('id-smeter-ovfl');
-	   w3_call('S_meter_adc_ovfl', true);
-	   sm_ovfl_showing = true;
-	} else
-	if (!audio_ext_adc_ovfl && sm_ovfl_showing) {
-	   w3_hide('id-smeter-ovfl');
-	   w3_show('id-smeter-dbm-units');
-	   w3_call('S_meter_adc_ovfl', false);
-	   sm_ovfl_showing = false;
+	if (kiwi.rf_attn && attn_period) {
+      w3_show('id-smeter-attn');
+	   w3_innerHTML('id-smeter-dbm-value', (kiwi.rf_attn).toFixed(1));
+	} else {
+      w3_hide('id-smeter-attn');
+      if (audio_ext_adc_ovfl && !sm_ovfl_showing) {
+         w3_hide('id-smeter-dbm-units');
+         w3_show('id-smeter-ovfl');
+         w3_call('S_meter_adc_ovfl', true);
+         sm_ovfl_showing = true;
+      } else
+      if (!audio_ext_adc_ovfl && sm_ovfl_showing) {
+         w3_hide('id-smeter-ovfl');
+         w3_show('id-smeter-dbm-units');
+         w3_call('S_meter_adc_ovfl', false);
+         sm_ovfl_showing = false;
+      }
+	   var prec = (owrx.sMeter_dBm <= -100)? 0:1;
+	   w3_innerHTML('id-smeter-dbm-value', (owrx.sMeter_dBm).toFixed(prec));
 	}
-	
-	w3_innerHTML('id-smeter-dbm-value', (owrx.sMeter_dBm).toFixed(0));
 }
 
 
@@ -9202,12 +9373,14 @@ function ident_keyup(el, evt, which)
 // #shortcuts (keyboard)
 ////////////////////////////////
 
+// letters avail: F G K L O Q R tT U X Y
+
 // abcdefghijklmnopqrstuvwxyz `~!@#$%^&*()-_=+[]{}\|;:'"<>? 0123456789.,/kM
 // ..........F........ ......   ..F       F .     .. F  ... FFFFFFFFFFFFFFF
 // .. ..  ...  F. .  .  ..  .                               F: frequency entry keys
 // ABCDEFGHIJKLMNOPQRSTUVWXYZ
 // :space: :tab: :arrow-UDLR:
-//    .
+//    .              .
 
 var shortcut = {
    nav_off: 0,
@@ -9216,6 +9389,8 @@ var shortcut = {
    SHIFT: 1,
    CTL_ALT: 2,
    SHIFT_PLUS_CTL_ALT: 3,
+   KEYCODE_SFT: 16,
+   KEYCODE_CTL: 17,
    KEYCODE_ALT: 18
 };
 
@@ -9323,7 +9498,7 @@ function keyboard_shortcut_url_keys()
    setTimeout(keyboard_shortcut_url_keys, 200);
 }
 
-function keyboard_shortcut(key, key_mod, ctlAlt, keyCode)
+function keyboard_shortcut(key, key_mod, ctlAlt, evt)
 {
    var action = true;
    var dir = ctlAlt? -1 : 1;
@@ -9383,7 +9558,7 @@ function keyboard_shortcut(key, key_mod, ctlAlt, keyCode)
 
    // frequency entry / memory list
    case 'g': case '=': freqset_select(); break;
-   case 'm': freq_memory_menu_show(true); break;
+   case 'm': freq_memory_menu_open(/* shortcut_key */ true); break;
    case 'b': band_scroll(1); break;
    case 'B': band_scroll(-1); break;
    case 'n': freq_vfo_cb(); break;
@@ -9426,6 +9601,7 @@ function keyboard_shortcut(key, key_mod, ctlAlt, keyCode)
          freq_input_help();
       break;
 
+   // dx labels
    case '|':
       if (!ext_panel_displayed('dx')) no_step = true;
       // fall through...
@@ -9438,9 +9614,18 @@ function keyboard_shortcut(key, key_mod, ctlAlt, keyCode)
       if (key_mod == shortcut.SHIFT) opt.open = 1;
       dx_database_cb('', dx.db, false, opt, /* from_shortcut */ true);
       break;
-
+   
+   // freq memory recall
+   case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+      if (key_mod == shortcut.CTL_ALT) {
+         freq_memory_recall(key - '0' - 1);
+      }
+      break;
+   
    default:
-      if (key.length == 1 && keyCode != shortcut.KEYCODE_ALT) console.log('no shortcut key <'+ key +'>');
+      if (evt && evt.keyCode != shortcut.KEYCODE_SFT && evt.keyCode != shortcut.KEYCODE_CTL && evt.keyCode != shortcut.KEYCODE_ALT) {
+         console.log('no shortcut key: '+ key_stringify(evt) +'('+ evt.keyCode +')');
+      }
       action = false; break;
    
    }
@@ -9509,6 +9694,10 @@ function keyboard_shortcut_event(evt)
             freq_input_help();
             return cancelEvent(evt);
          }
+         if (w3_contains(el, 'id-freq-menu')) {
+            freq_memory_help();
+            return cancelEvent(evt);
+         }
       }
 
    if (evt.target.nodeName != 'INPUT' || (id == 'id-freq-input' && !field_input_key)) {
@@ -9536,7 +9725,7 @@ function keyboard_shortcut_event(evt)
       
       //console.log('keyboard_shortcut key=<'+ k +'> keyCode='+ evt.keyCode +' key_mod='+ key_mod +' ctlAlt='+ ctlAlt +' alt='+ alt);
       //if (k.startsWith('Arrow')) event_dump(evt, 'Arrow', true);
-      keyboard_shortcut(k, key_mod, ctlAlt, evt.keyCode);
+      keyboard_shortcut(k, key_mod, ctlAlt, evt);
       
       /*
       if (k != 'Shift' && k != 'Control' && evt.key != 'Alt') {
@@ -9707,9 +9896,9 @@ function panels_setup()
 	   w3_inline('w3-halign-space-between w3-margin-T-4/',
          //w3_div('id-mouse-freq w3-hide||title="frequency under cursor"', '-----.--'+ ((cfg.show_1Hz || url_1Hz)? '-' : '')),
 
-         w3_icon('id-freq-menu w3-menu-button||title="freq memory"', 'fa-bars w3-text-white', 20, '', 'freq_memory_menu_show'),
+         w3_icon('id-freq-menu w3-menu-button w3-hold w3-hold-done||title="freq memory\nclick-hold to save\ntype h or ? for help"', 'fa-bars w3-text-white', 20, '', 'freq_memory_menu_icon_cb'),
 
-         w3_button('id-freq-vfo w3-text-in-circle w3-wh-20px w3-aqua||title="VFO A&slash;B"', 'A', 'freq_vfo_cb'),
+         w3_button('id-freq-vfo w3-text-in-circle w3-wh-20px w3-aqua w3-hold w3-hold-done||title="VFO A&slash;B\nclick-hold for A=B"', 'A', 'freq_vfo_cb'),
 
          kiwi_isMobile()? null : w3_div('id-freq-link|padding-left:0px'),
 
@@ -10215,21 +10404,24 @@ function zoomCorrection()
 // rf controls
 ////////////////////////////////
 
-function rf_attn_cb(path, val, done, first)
+function rf_attn_cb(path, val, done, first, update)
 {
-   console.log('rf_attn_cb val='+ val +' done='+ done +' first='+ first +' kiwi.rf_attn='+ kiwi.rf_attn);
+   //console.log('rf_attn_cb val='+ val +' done='+ done +' first='+ first +' update='+ update +' kiwi.rf_attn='+ kiwi.rf_attn);
    //if (first) kiwi_trace();
    if (kiwi.model == kiwi.KiwiSDR_1) return;
+   
 	var attn = parseFloat(val);
    var input_attn = w3_el('id-rf-attn');
    var field_attn = w3_el('id-field-rf-attn');
+   if (!input_attn || !field_attn) return;
    kiwi.rf_attn = attn;
    input_attn.value = attn;
    field_attn.innerHTML = attn.toFixed(1) + ' dB';
-   field_attn.style.color = "white"; 
+   field_attn.style.color = "white";
+   if (update == true) return;
    
    if (!done || first) {
-      console.log('SET rf_attn='+ attn.toFixed(1));
+      //console.log('SET rf_attn='+ attn.toFixed(1));
       snd_send('SET rf_attn='+ attn.toFixed(1));
    } else {
       writeCookie('last_rf_attn', val);
@@ -11481,8 +11673,23 @@ function users_setup()
 ////////////////////////////////
 
 // icon callbacks
-function freq_vfo_cb()
+function freq_vfo_cb(el, val, trace, ev)
 {
+   if (ev) {
+      var hold = (ev.type == 'hold');
+      var hold_done = (ev.type == 'hold-done');
+      if (hold) {
+         w3_remove_then_add(el, 'w3-aqua w3-orange', 'w3-red');
+         vfo_update(true);
+         return;
+      } else
+      if (hold_done) {
+         w3_remove_then_add(el, 'w3-red', owrx.vfo_ab? 'w3-orange' : 'w3-aqua');
+         return;
+      }
+      // else regular click
+   }
+
    owrx.vfo_ab ^= 1;
    //console.log('VFO A/B ='+ owrx.vfo_ab);
    w3_flip_colors('id-freq-vfo', 'w3-aqua w3-orange', owrx.vfo_ab);
@@ -11899,8 +12106,19 @@ function owrx_msg_cb(param, ws)     // #msg-proc
 			extint_list_json(param[1]);
 			
 			// now that we have the list of extensions see if there is an override
-			if (override_ext)
-				extint_open(override_ext, 3000);
+			if (override_ext) {
+            w3_do_when_cond(
+               function() {
+                  //console.log('### '+ (waterfall_setup_done? 'GO' : 'WAIT') +' dx_update(waterfall_setup_done)');
+                  return waterfall_setup_done;
+               },
+               function() {
+				      extint_open(override_ext, 3000);
+               }, null,
+               200
+            );
+            // REMINDER: w3_do_when_cond() returns immediately
+			}
 			break;
 		case "bandwidth":
 			bandwidth = parseInt(param[1]);
@@ -11980,6 +12198,9 @@ function owrx_msg_cb(param, ws)     // #msg-proc
 			break;
 		case "last_community_download":
 		   dx.last_community_download = decodeURIComponent(param[1]);
+		   break;
+		case "rf_attn":
+         rf_attn_cb(null, +param[1], false, false, true);
 		   break;
 		default:
 		   return false;

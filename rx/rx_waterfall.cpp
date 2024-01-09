@@ -384,11 +384,15 @@ void c2s_waterfall(void *param)
                         //cprintf(conn, "WF: zoom=%d cf=%.3f start=%.3f halfSpan=%.3f\n", _zoom, cf/kHz, _start * HZperStart / kHz, halfSpan_Hz/kHz);
                         zoom_start_chg = true;
                     }
-                    
-                    conn->freqHz = cf;      // for logging purposes
                 }
             
                 if (zoom_start_chg) {
+                    conn->freqHz = cf;      // for logging purposes
+                    
+                    // changing waterfall resets inactivity timer
+                    conn_t *csnd = conn_other(conn, STREAM_SOUND);
+                    if (csnd) csnd->last_tune_time = timer_sec();
+                    
                     if (zoom != _zoom) {
                         zoom = _zoom;
                     
@@ -463,8 +467,8 @@ void c2s_waterfall(void *param)
                     
                         // We've seen cases where the wf connects, but the sound never does.
                         // So have to check for conn->other being valid.
-                        conn_t *csnd = conn->other;
-                        if (csnd && csnd->type == STREAM_SOUND && csnd->rx_channel == conn->rx_channel) {
+			            conn_t *csnd = conn_other(conn, STREAM_SOUND);
+                        if (csnd) {
                             csnd->zoom = zoom;		// set in the AUDIO conn
                         }
                         conn->zoom = zoom;      // for logging purposes
@@ -704,8 +708,8 @@ void c2s_waterfall(void *param)
 			// Ask sound task to stop (must not do while, for example, holding a lock).
 			// We've seen cases where the sound connects, then times out. But the wf has never connected.
 			// So have to check for conn->other being valid.
-			conn_t *csnd = conn->other;
-			if (csnd && csnd->type == STREAM_SOUND && csnd->rx_channel == conn->rx_channel) {
+			conn_t *csnd = conn_other(conn, STREAM_SOUND);
+			if (csnd) {
 				csnd->stop_data = TRUE;
 			} else {
 				rx_enable(rx_chan, RX_CHAN_FREE);		// there is no SND, so free rx_chan[] now
@@ -947,9 +951,9 @@ void sample_wf(int rx_chan)
         static void *IQi_state;
         static void *IQf_state;
         if (wf->new_map2) {
-            if (IQi_state != NULL) kiwi_ifree(IQi_state);
+            if (IQi_state != NULL) kiwi_ifree(IQi_state, "wf iq");
             IQi_state = NULL;
-            if (IQf_state != NULL) kiwi_ifree(IQf_state);
+            if (IQf_state != NULL) kiwi_ifree(IQf_state, "wf iq");
             IQf_state = NULL;
         }
     #endif
@@ -1305,13 +1309,13 @@ void compute_frame(int rx_chan)
         static void *dB_state;
         static void *buf_state;
         if (wf->new_map2) {
-            if (FFT_state != NULL) kiwi_ifree(FFT_state);
+            if (FFT_state != NULL) kiwi_ifree(FFT_state, "wf minmax");
             FFT_state = NULL;
-            if (pwr_state != NULL) kiwi_ifree(pwr_state);
+            if (pwr_state != NULL) kiwi_ifree(pwr_state, "wf minmax");
             pwr_state = NULL;
-            if (dB_state != NULL) kiwi_ifree(dB_state);
+            if (dB_state != NULL) kiwi_ifree(dB_state, "wf minmax");
             dB_state = NULL;
-            if (buf_state != NULL) kiwi_ifree(buf_state);
+            if (buf_state != NULL) kiwi_ifree(buf_state, "wf minmax");
             buf_state = NULL;
             wf->new_map2 = false;
         }

@@ -19,6 +19,7 @@ Boston, MA  02110-1301, USA.
 
 #include "types.h"
 #include "kiwi.h"
+#include "mode.h"
 #include "clk.h"
 #include "mem.h"
 #include "misc.h"
@@ -40,10 +41,10 @@ double ext_update_get_sample_rateHz(int rx_chan)
 {
     double adc_clk;
 
-    if (rx_chan == -1) {
+    if (rx_chan == ADC_CLK_SYS) {
         adc_clk = adc_clock_system();
     } else
-    if (rx_chan == -2) {
+    if (rx_chan == ADC_CLK_TYP) {
         adc_clk = ADC_CLOCK_TYP;
     } else {
         // FIXME XXX WRONG-WRONG-WRONG
@@ -63,6 +64,13 @@ double ext_get_displayed_freq_kHz(int rx_chan)
     conn_t *conn = rx_channels[rx_chan].conn;
     if (conn == NULL) return 0;
     return ((double) conn->freqHz / kHz + freq_offset_kHz);
+}
+
+int ext_get_mode(int rx_chan)
+{
+    conn_t *conn = rx_channels[rx_chan].conn;
+    if (conn == NULL) return MODE_AM;
+    return conn->mode;
 }
 
 ext_auth_e ext_auth(int rx_chan)
@@ -203,7 +211,7 @@ int ext_send_msg(int rx_chan, bool debug, const char *msg, ...)
 	va_end(ap);
 	if (debug) printf("ext_send_msg: RX%d(%p) <%s>\n", rx_chan, conn, s);
 	send_msg_buf(conn, s, strlen(s));
-	kiwi_ifree(s);
+	kiwi_asfree(s);
 	return 0;
 }
 
@@ -239,9 +247,9 @@ int ext_send_msg_encoded(int rx_chan, bool debug, const char *dst, const char *c
 	va_end(ap);
 	
 	char *buf = kiwi_str_encode(s);
-	kiwi_ifree(s);
+	kiwi_asfree(s);
 	ext_send_msg(rx_chan, debug, "%s %s=%s", dst, cmd, buf);
-	kiwi_ifree(buf);
+	kiwi_ifree(buf, "ext_send_msg_encoded");
 	return 0;
 }
 
@@ -412,10 +420,10 @@ void extint_c2s(void *param)
                     }
                 }
 				
-			    kiwi_ifree(client_m);
+			    kiwi_asfree(client_m);
 				continue;
 			}
-			kiwi_ifree(client_m);
+			kiwi_asfree(client_m);
 			
 			i = sscanf(cmd, "SET ext_blur=%d", &ignored_rx_chan);
 			if (i == 1) {

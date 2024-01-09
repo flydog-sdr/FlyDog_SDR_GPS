@@ -176,8 +176,10 @@ bool DRM_msgs(char *msg, int rx_chan)
     
     int run = 0;
     if (sscanf(msg, "SET run=%d", &run) == 1) {
-        printf("DRM run=%d rx_chan=%d\n", run, rx_chan);
         d->run = run;
+        d->dbgUs = kiwi.dbgUs;
+        for (int i = 0; i < 4; i++) d->p_i[i] = p_i[i];
+        printf("DRM run=%d rx_chan=%d dbgUs=%d p_i[0]=%d\n", run, rx_chan, d->dbgUs, d->p_i[0]);
         return true;
     }
 
@@ -202,6 +204,13 @@ bool DRM_msgs(char *msg, int rx_chan)
         return true;
     }
     
+    int lpf = 0;
+    if (sscanf(msg, "SET lpf=%d", &lpf) == 1) {
+        d->use_LPF = lpf;
+        rcprintf(rx_chan, "DRM lpf=%d rx_chan=%d\n", lpf);
+        return true;
+    }
+
     int svc = 0;
     if (sscanf(msg, "SET svc=%d", &svc) == 1) {
         d->audio_service = svc - 1;
@@ -382,7 +391,7 @@ void DRM_main()
         asprintf(&fn2, "%s/samples/%s", DIR_CFG, fn);
         cfg_string_free(fn);
         drm_info.s2p_start1 = drm_mmap(fn2, &words);
-        kiwi_ifree(fn2);
+        kiwi_asfree(fn2);
         if (drm_info.s2p_start1 == NULL) return;
         drm_info.s2p_end1 = drm_info.s2p_start1 + words;
         drm_info.tsamps1 = words / NIQ;
@@ -392,7 +401,7 @@ void DRM_main()
         asprintf(&fn2, "%s/samples/%s", DIR_CFG, fn);
         cfg_string_free(fn);
         drm_info.s2p_start2 = drm_mmap(fn2, &words);
-        kiwi_ifree(fn2);
+        kiwi_asfree(fn2);
         if (drm_info.s2p_start2 == NULL) return;
         drm_info.s2p_end2 = drm_info.s2p_start2 + words;
         drm_info.tsamps2 = words / NIQ;

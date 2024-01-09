@@ -204,6 +204,10 @@
 */
 
 
+var w3 = {
+   _last_: 0
+};
+
 var w3int = {
    menu_cur_id: null,
    menu_active: false,
@@ -1227,12 +1231,12 @@ function w3_background_color(el_id, color)
 	return prev;
 }
 
-// c1 = fg-color if cond true/undefined
-// c2 = bg-color (optional) if cond true/undefined
+// c1 = color if cond false
+// c2 = color (optional) if cond true/undefined
 // c[12] =
-//    'css-[fb]g-color'
-//    ['css-fg-color', 'css-bg-color']
-//    'w3-color' or 'w3-text-color'
+//    'css-color(fg)'
+//    ['css-color(fg)', 'css-color(bg)']
+//    'w3-text-color'(fg) or 'w3-color'(bg)
 // CSS color '' to revert to default color
 function w3_colors(el_id, c1, c2, cond)
 {
@@ -2156,6 +2160,11 @@ function w3_switch_set_value(path, switch_idx)
 	});
 }
 
+function w3_switch_idx(val)
+{
+   return (val? w3_SWITCH_YES_IDX : w3_SWITCH_NO_IDX);
+}
+
 
 ////////////////////////////////
 // buttons: single, clickable icon
@@ -2164,7 +2173,7 @@ function w3_switch_set_value(path, switch_idx)
 function w3int_btn_evt(ev, path, cb, cb_param)
 {
    if (!w3_contains(path, 'w3-disabled')) {
-      //console.log('w3int_btn_evt path='+ path +' cb='+ cb +' cb_param='+ cb_param);
+      //console.log('w3int_btn_evt ev.type='+ ev.type +' path='+ path +' cb='+ cb +' cb_param='+ cb_param);
       w3_check_restart_reboot(ev.currentTarget);
       
       var el = w3_el(path);
@@ -2195,6 +2204,9 @@ function w3int_btn_evt(ev, path, cb, cb_param)
                kiwi_clearTimeout(timeout);
                if (triggered) {
                   //console.log('w3int_btn_evt HOLD_PREV_TRIGGERED, IGNORE CLICK');
+                  if (w3_contains(el, 'w3-hold-done')) {
+                     w3_call(cb, path, cb_param, /* first */ false, { type: 'hold-done' });
+                  }
                   w3int_post_action();
                   //canvas_log('HOLD2');
                   return ignore(ev);
@@ -3468,6 +3480,7 @@ function w3int_menu_onclick(ev, id, cb, cb_param)
       var when = Date.now() - el.w3_realigned_time;
       if (when < 50) {
          if (w3int.menu_debug) canvas_log('XRe'+ when);
+         //console.log('w3int_menu_onclick: cancelEvent()');
          return cancelEvent(ev);
       }
       if (w3int.menu_debug) canvas_log('XOK'+ when);
@@ -3483,7 +3496,7 @@ function w3int_menu_onclick(ev, id, cb, cb_param)
       if (w3int.menu_debug)
          canvas_log('CALL: '+ idx);
       if (idx == -1) return;     // clicked/touched top/bottom border -- don't dismiss menu
-      w3_call(cb, idx, el.w3_menu_x, cb_param);
+      w3_call(cb, idx, el.w3_menu_x, cb_param, ev);
    }
 
    w3_visible(el, false);
@@ -3497,7 +3510,6 @@ function w3int_menu_onclick(ev, id, cb, cb_param)
 
    // allow right-button to select menu items
 	if (ev != null) {
-      //console.log('w3int_menu_onclick: cancelEvent()');
       if (w3int.menu_debug) canvas_log('Enull');
 	   return cancelEvent(ev);
 	}
@@ -3523,7 +3535,7 @@ function w3int_menu_event(evt)
 
 function w3_menu_close(from)
 {
-   //canvas_log('w3_menu_close '+ from +' id='+ w3int.menu_cur_id);
+   if (w3int.menu_debug) canvas_log('w3_menu_close '+ from +' id='+ w3int.menu_cur_id);
    if (!w3int.menu_cur_id) return;
    var el = w3_el(w3int.menu_cur_id);
    if (!el) return;

@@ -20,6 +20,7 @@ Boston, MA  02110-1301, USA.
 #include "types.h"
 #include "config.h"
 #include "kiwi.h"
+#include "mode.h"
 #include "rx.h"
 #include "mem.h"
 #include "misc.h"
@@ -200,7 +201,6 @@ void update_vars_from_config(bool called_at_init)
     // also if set to the previous default value
     int firmware_sel = admcfg_default_int("firmware_sel", 0, &update_admcfg);   // needed below
     int mode_20kHz = (firmware_sel == RX3_WF3)? 1:0;
-    admcfg_default_bool("anti_aliased", false, &update_admcfg);
     TYPEREAL Ioff, Ioff_20kHz, Qoff, Qoff_20kHz;
     //printf("mode_20kHz=%d\n", mode_20kHz);
 
@@ -503,7 +503,7 @@ void update_vars_from_config(bool called_at_init)
 	if (nsm) {
 	    nsm = kiwi_str_replace(nsm, "/?top=kiwi", "");  // shrinking, so nsm same memory space
 	    cfg_set_string("status_msg", nsm);
-	    if (caller_must_free) kiwi_ifree(nsm);
+	    if (caller_must_free) kiwi_ifree(nsm, "update_vars_from_config nsm");
 	    update_cfg = true;
     }
     cfg_string_free(status_msg); status_msg = NULL;
@@ -568,7 +568,7 @@ void update_vars_from_config(bool called_at_init)
     admcfg_default_bool("my_kiwi", true, &update_admcfg);
     admcfg_default_bool("onetime_password_check", false, &update_admcfg);
     admcfg_default_bool("dx_labels_converted", false, &update_admcfg);
-    admcfg_default_string("proxy_server", "p.sdrotg.com", &update_admcfg);
+    admcfg_default_string("proxy_server", PROXY_SERVER_HOST, &update_admcfg);
     admcfg_default_bool("console_local", true, &update_admcfg);
     admin_keepalive = admcfg_default_bool("admin_keepalive", true, &update_admcfg);
     log_local_ip = admcfg_default_bool("log_local_ip", true, &update_admcfg);

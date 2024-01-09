@@ -78,7 +78,7 @@ static void update_build_ctask(void *param)
 		    "git checkout . >>/root/build.log 2>&1; " \
 		);
 		status = system(cmd_p);
-		kiwi_ifree(cmd_p);
+		kiwi_asfree(cmd_p);
         child_status_exit(status);
 
         struct stat st;
@@ -88,7 +88,7 @@ static void update_build_ctask(void *param)
 		    use_git_proto? "git" : "https" \
 		);
 		status = system(cmd_p);
-		kiwi_ifree(cmd_p);
+		kiwi_asfree(cmd_p);
         status = child_status_exit(status, NO_ERROR_EXIT);
         
         // try again using github.com well-known public ip address (failure mode when ISP messes with github.com DNS)
@@ -98,7 +98,7 @@ static void update_build_ctask(void *param)
                 "git pull -v git://" GITHUB_COM_PUBLIC_IP "/" REPO_GIT " >>/root/build.log 2>&1; "
             );
             status = system(cmd_p);
-            kiwi_ifree(cmd_p);
+            kiwi_asfree(cmd_p);
             child_status_exit(status);
         }
 
@@ -141,8 +141,8 @@ static void report_result(conn_t *conn)
 	    "\"v1\":%d,\"v2\":%d,\"p1\":%d,\"p2\":%d,\"d\":\"%s\",\"t\":\"%s\"}",
 		fail_reason, update_pending, update_in_progress, rx_chans, gps_chans,
 		version_maj, version_min, pending_maj, pending_min, date_m, time_m);
-	kiwi_ifree(date_m);
-	kiwi_ifree(time_m);
+	kiwi_ifree(date_m, "date_m");
+	kiwi_ifree(time_m, "time_m");
 }
 
 static bool file_auto_download_check = false;
@@ -447,11 +447,20 @@ void schedule_update(int min)
     
     do_daily_restart = first_update_window && !update_on_startup && (kiwi.daily_restart != DAILY_RESTART_NO);
     file_auto_download_check = first_update_window && !update_on_startup;
+    int restart_update = admcfg_int("restart_update", NULL, CFG_REQUIRED);
 
-    //printf("min=%d file_auto_download_check=%d update_window=%d update_on_startup=%d\n",
-    //    timer_sec()/60, file_auto_download_check, update_window, update_on_startup);
+    //printf("UPDATE: min=%d file_auto_download_check=%d update_window=%d update_on_startup=%d restart_update=%d\n",
+    //    timer_sec()/60, file_auto_download_check, update_window, update_on_startup, restart_update);
     
-    if (update_on_startup && admcfg_int("restart_update", NULL, CFG_REQUIRED) != 0) {
+    // Don't update after restarts just after a re-flash if the control file is present.
+    // The first subsequent update window will then remove the control file 
+    if (update_on_startup && restart_update == RESTART_INSTALL_UPDATES &&
+        kiwi_file_exists("/root/" REPO_NAME "/unix_env/reflash_delay_update")) {
+		lprintf("UPDATE: due to recent re-flash, update on restart delayed until update window\n");
+		update_on_startup = false;
+    }
+
+    if (update_on_startup && restart_update == RESTART_DELAY_UPDATES) {
 		lprintf("UPDATE: update on restart delayed until update window\n");
 		update_on_startup = false;
     }
