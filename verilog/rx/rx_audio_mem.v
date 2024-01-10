@@ -101,8 +101,15 @@ module rx_audio_mem (
 		//  count:  0                   1           168(nrx-2)          169(nrx-1)            170     0
 		//  rxn:    rx0 rx1 rx2 rx3 rx4 rx0 ... rx4 rx0 rx1 rx2 rx3 rx4 rx0 rx1 rx2 rx3 rx4|3 rx3 rx4 rx0
 		//  iq3:    iq3 iq3 iq3 iq3     iq3 ...     iq3 iq3 iq3 iq3     iq3 iq3 iq3 iq3 XYZ   xxC
-		//  evts:  AT               S  AT       S  AT               S ALT               -         S  AT
-		//  A:rx_avail_A, T:transfer=1, S(stop):transfer=0, -:note_no_stop, L:ticks_latch, XYZ:ticks_A, C:buf_ctr
+		//  evts:  AT               S  AT       S  AT               S  AT               -         S  AT
+		//                                                              L
+		//  A: rx_avail_A
+		//  T: transfer=1
+		//  S(stop): transfer=0
+		//  -: note no stop
+		//  L: ticks latch, the last rx_avail_A latching ticks_A before it's copied to buffer.
+		//  XYZ: ticks_A
+		//  C: buf_ctr
 		//  NB: "rx4" is a pseudo channel number that encodes "rxn == V_RX_CHANS" to signal all channel data moved.
 		
 		if (transfer) {
@@ -257,7 +264,7 @@ module rx_audio_mem (
 	wire [15:0] rx_dout_A;
 	MUX #(.WIDTH(16), .SEL(V_RX_CHANS)) rx_mux(.in(rxn_dout_A), .sel(rxn_d[L2RX:0]), .out(rx_dout_A));
 	
-	reg  [15:0] buf_ctr;	
+	reg  [15:0] buf_ctr;
 	wire [15:0] buf_ctr_C;
 
     // continuously sync buf_ctr => buf_ctr_C
@@ -298,15 +305,9 @@ module rx_audio_mem (
 
 	wire rd = get_rx_samp_C;
 	
-	reg [47:0] ticks_latched_A;
-	
-	always @ (posedge adc_clk)
-		if (rx_avail_A)
-		    ticks_latched_A <= ticks_A;
-
 	wire [15:0] din =
 	    use_ts?
-	        ( (tsel == 0)? ticks_latched_A[15 -:16] : ( (tsel == 1)? ticks_latched_A[31 -:16] : ticks_latched_A[47 -:16]) ) :
+	        ( (tsel == 0)? ticks_A[15 -:16] : ( (tsel == 1)? ticks_A[31 -:16] : ticks_A[47 -:16]) ) :
 	        ( use_ctr? buf_ctr : rx_dout_A );
     wire [15:0] dout;
 

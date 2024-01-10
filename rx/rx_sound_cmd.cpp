@@ -21,6 +21,7 @@ Boston, MA  02110-1301, USA.
 #include "options.h"
 #include "config.h"
 #include "kiwi.h"
+#include "mode.h"
 #include "printf.h"
 #include "rx.h"
 #include "rx_util.h"
@@ -76,15 +77,40 @@ Boston, MA  02110-1301, USA.
 
 #include <algorithm>
 
+void rx_sound_set_freq(conn_t *conn, snd_t *s)
+{
+    int rx_chan = conn->rx_channel;
+    double freq_kHz = s->freq * kHz;
+    double freq_inv_kHz = ui_srate - freq_kHz;
+    double f_phase = (s->spectral_inversion? freq_inv_kHz : freq_kHz) / conn->adc_clock_corrected;
+    u64_t i_phase = (u64_t) round(f_phase * pow(2,48));
+    //cprintf(conn, "SND UPD freq %.3f kHz i_phase 0x%08x|%08x clk %.6f(%d)\n",
+    //    s->freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected, clk.adc_clk_corrections);
+    if (do_sdr) spi_set3(CmdSetRXFreq, rx_chan, (u4_t) ((i_phase >> 16) & 0xffffffff), (u2_t) (i_phase & 0xffff));
+}
+
+void rx_gen_set_freq(conn_t *conn, snd_t *s)
+{
+    int rx_chan = conn->rx_channel;
+    if (rx_chan != 0 || !s->gen_enable) return;
+    u4_t self_test = (s->gen < 0 && !kiwi.ext_clk)? CTRL_STEN : 0;
+    s->gen = fabs(s->gen);
+    double f_phase = s->gen * kHz / conn->adc_clock_corrected;
+    u64_t i_phase = (u64_t) round(f_phase * pow(2,48));
+    //cprintf(conn, "%s %.3f kHz phase %.3f 0x%012llx self_test=%d\n", s->gen? "GEN_ON":"GEN_OFF", s->gen, f_phase, i_phase, self_test? 1:0);
+    if (do_sdr) {
+        spi_set3(CmdSetGenFreq, rx_chan, (u4_t) ((i_phase >> 16) & 0xffffffff), (u2_t) (i_phase & 0xffff));
+        ctrl_clr_set(CTRL_USE_GEN | CTRL_STEN, s->gen? (CTRL_USE_GEN | self_test):0);
+    }
+    g_genfreq = s->gen * kHz / ui_srate;
+}
+
 void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
 {
     int j, k;
 	int rx_chan = conn->rx_channel;
 	snd_t *s = &snd_inst[rx_chan];
 	wf_inst_t *wf = &WF_SHMEM->wf_inst[rx_chan];
-
-    double f_phase;
-    u64_t i_phase;
 
     cmd[n] = 0;		// okay to do this -- see nbuf.c:nbuf_allocq()
 
@@ -141,15 +167,8 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
             bool new_freq = false;
             if (s->freq != _freq) {
                 s->freq = _freq;
-                double freq_kHz = s->freq * kHz;
-                double freq_inv_kHz = ui_srate - freq_kHz;
-                f_phase = (s->spectral_inversion? freq_inv_kHz : freq_kHz) / conn->adc_clock_corrected;
-                i_phase = (u64_t) round(f_phase * pow(2,48));
-                //cprintf(conn, "SND SET freq %.3f kHz i_phase 0x%08x|%08x clk %.6f rx_chan=%d\n",
-                //    s->freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected, rx_chan);
+                rx_sound_set_freq(conn, s);
                 if (do_sdr) {
-                    spi_set3(CmdSetRXFreq, rx_chan, (u4_t) ((i_phase >> 16) & 0xffffffff), (u2_t) (i_phase & 0xffff));
-                    
                     #ifdef SND_FREQ_SET_IQ_ROTATION_BUG_WORKAROUND
                         if (first_freq_trig) {
                             first_freq_set = true;
@@ -183,15 +202,16 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
                 if (s->mode != _mode || n == 5) {
 
                     // when switching out of IQ or DRM modes: reset AGC, compression state
-                    bool IQ_or_DRM_or_stereo = (s->mode == MODE_IQ || s->mode == MODE_DRM || s->mode == MODE_SAS || s->mode == MODE_QAM);
-                    bool new_IQ_or_DRM_or_stereo = (_mode == MODE_IQ || _mode == MODE_DRM || _mode == MODE_SAS || _mode == MODE_QAM);
+                    bool IQ_or_DRM_or_stereo = (mode_flags[s->mode] & IS_STEREO);
+                    bool new_IQ_or_DRM_or_stereo = (mode_flags[_mode] & IS_STEREO);
+            
                     if (IQ_or_DRM_or_stereo && !new_IQ_or_DRM_or_stereo && (s->cmd_recv & CMD_AGC)) {
                         //cprintf(conn, "SND out IQ mode -> reset AGC, compression\n");
                         m_Agc[rx_chan].SetParameters(s->agc, s->hang, s->thresh, s->manGain, s->slope, s->decay, frate);
                         memset(&s->adpcm_snd, 0, sizeof(ima_adpcm_state_t));
                     }
             
-                    s->isSAM = (_mode >= MODE_SAM && _mode <= MODE_QAM);
+                    s->isSAM = mode_flags[_mode] & IS_SAM;
                     if (s->isSAM && n == 5) {
                         s->SAM_mparam = s->mparam & MODE_FLAGS_SAM;
                         //cprintf(conn, "SAM DC_block=%d fade_leveler=%d chan_null=%d\n",
@@ -199,7 +219,7 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
                     }
 
                     // reset SAM demod on non-SAM to SAM transition
-                    if (s->isSAM && !(s->mode >= MODE_SAM && s->mode <= MODE_QAM)) {
+                    if (s->isSAM && ((mode_flags[s->mode] & IS_SAM) == 0)) {
                         //cprintf(conn, "SAM_PLL_RESET\n");
                         wdsp_SAM_PLL(rx_chan, PLL_RESET);
                     }
@@ -208,13 +228,13 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
                     s->specAF_instance = SND_INSTANCE_FFT_PASSBAND;
 
                     s->mode = _mode;
-                    if (s->mode == MODE_NBFM || s->mode == MODE_NNFM)
+                    if (mode_flags[s->mode] & IS_NBFM)
                         new_nbfm = true;
                     s->change_freq_mode = true;
                     //cprintf(conn, "SND mode %s\n", mode_m);
                 }
 
-                if ((s->mode == MODE_NBFM || s->mode == MODE_NNFM) && (new_freq || new_nbfm)) {
+                if ((mode_flags[s->mode] & IS_NBFM) && (new_freq || new_nbfm)) {
                     m_Squelch[rx_chan].Reset();
                     conn->last_sample.re = conn->last_sample.im = 0;
                 }
@@ -233,6 +253,7 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
                 if (s->locut <= 0 && s->hicut >= 0) {     // straddles carrier
                     s->norm_locut = 0.0;
                     s->norm_hicut = MAX(-s->locut, s->hicut);
+                    s->norm_pbc = 0;
                 } else {
                     if (s->locut > 0) {
                         s->norm_locut = s->locut;
@@ -241,6 +262,7 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
                         s->norm_hicut = -s->locut;
                         s->norm_locut = -s->hicut;
                     }
+                    s->norm_pbc = s->norm_locut + (s->norm_hicut - s->norm_locut);
                 }
             
                 // hbw for post AM det is max of hi/lo filter cuts
@@ -270,14 +292,17 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
             conn->freqHz = round(nomfreq/10.0)*10;	// round 10 Hz
             if (!no_mode_change) conn->mode = s->mode;
         }
-        kiwi_ifree(mode_m);
+        kiwi_asfree(mode_m);
         break;
     }
     
     case CMD_RF_ATTN:
 	    float rf_attn_dB;
         if (sscanf(cmd, "SET rf_attn=%f", &rf_attn_dB) == 1) {
-            //cprintf(conn, "rf_attn=%.1f\n", rf_attn_dB);
+            //cprintf(conn, "SET rf_attn=%.1f\n", rf_attn_dB);
+            
+            // update s->rf_attn_dB here so we don't send UI update to ourselves
+            kiwi.rf_attn_dB = s->rf_attn_dB = rf_attn_dB;
             rf_attn_set(rf_attn_dB);
             did_cmd = true;                
         }
@@ -339,25 +364,19 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
 
     case CMD_GEN_FREQ:
         n = sscanf(cmd, "SET gen=%lf", &s->gen);
-        if (n == 1) {
+        if (n == 1 && rx_chan == 0) {
+            //cprintf(conn, "SET gen=%lf\n", &s->gen);
             did_cmd = true;
-            u4_t self_test = (s->gen < 0 && !kiwi.ext_clk)? CTRL_STEN : 0;
-            s->gen = fabs(s->gen);
-            f_phase = s->gen * kHz / conn->adc_clock_corrected;
-            i_phase = (u64_t) round(f_phase * pow(2,48));
-            //cprintf(conn, "%s %.3f kHz phase %.3f 0x%012llx self_test=%d\n", s->gen? "GEN_ON":"GEN_OFF", s->gen, f_phase, i_phase, self_test? 1:0);
-            if (do_sdr) {
-                spi_set3(CmdSetGenFreq, rx_chan, (u4_t) ((i_phase >> 16) & 0xffffffff), (u2_t) (i_phase & 0xffff));
-                ctrl_clr_set(CTRL_USE_GEN | CTRL_STEN, s->gen? (CTRL_USE_GEN | self_test):0);
-            }
-            if (rx_chan == 0) g_genfreq = s->gen * kHz / ui_srate;
+            if (s->gen != 0 && !s->gen_enable) s->gen_enable = true;
+            rx_gen_set_freq(conn, s);
+            if (s->gen == 0 && s->gen_enable) s->gen_enable = false;
         }
         break;
 
     case CMD_GEN_ATTN:
         int _genattn;
         n = sscanf(cmd, "SET genattn=%d", &_genattn);
-        if (n == 1) {
+        if (n == 1 && rx_chan == 0) {
             did_cmd = true;
             if (1 || s->genattn != _genattn) {
                 s->genattn = _genattn;
@@ -396,7 +415,7 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
                 s->squelch = _squelch;
                 s->squelched = false;
                 //cprintf(conn, "SND SET squelch=%d param=%.2f %s\n", s->squelch, _squelch_param, mode_lc[s->mode]);
-                if (s->mode == MODE_NBFM || s->mode == MODE_NNFM) {
+                if (mode_flags[s->mode] & IS_NBFM) {
                     m_Squelch[rx_chan].SetSquelch(s->squelch, _squelch_param);
                 } else {
                     float squelch_tail = _squelch_param;
@@ -516,7 +535,7 @@ void rx_sound_cmd(conn_t *conn, double frate, int n, char *cmd)
         if (n == 1 || n == 2) {
             did_cmd = true;
             if (n == 1) {
-                _nfm = (s->mode == MODE_NBFM || s->mode == MODE_NNFM);
+                _nfm = (mode_flags[s->mode] & IS_NBFM);
                 //cprintf(conn, "DEEMP: _de_emp=%d mode=%d _nfm=%d (old kiwiclient API)\n", _de_emp, s->mode, _nfm);
             } else {
                 //cprintf(conn, "DEEMP: _de_emp=%d _nfm=%d\n", _de_emp, _nfm);

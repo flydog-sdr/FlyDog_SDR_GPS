@@ -16,11 +16,13 @@ Boston, MA  02110-1301, USA.
 */
 
 // Copyright (c) 2014-2023 John Seamons, ZL4VO/KF6VO
+// Copyright (c) 2018-2023 Christoph Mayer, DL1CH
 
 #include "types.h"
 #include "options.h"
 #include "config.h"
 #include "kiwi.h"
+#include "mode.h"
 #include "printf.h"
 #include "rx.h"
 #include "rx_util.h"
@@ -60,6 +62,7 @@ Boston, MA  02110-1301, USA.
 #include "wdsp.h"
 #include "fpga.h"
 #include "rf_attn.h"
+#include "rsid.h"
 
 #ifdef DRM
  #include "DRM.h"
@@ -88,14 +91,6 @@ snd_t snd_inst[MAX_RX_CHANS];
 // 1st estimate of processing delay
 const double gps_delay    = 28926.838e-6;
 const double gps_week_sec = 7*24*3600.0;
-
-struct gps_timestamp_t {
-    bool   init;
-	double gpssec;       // current gps timestamp
-	double last_gpssec;  // last gps timestamp
-};
-
-gps_timestamp_t gps_ts[MAX_RX_CHANS];
 
 float g_genfreq, g_genampl, g_mixfreq;
 
@@ -157,10 +152,6 @@ CFastFIR m_chan_null_FIR[MAX_RX_CHANS];
 
 CFir m_AM_FIR[MAX_RX_CHANS];
 
-#ifdef OPTION_EXPERIMENT_CICF
-    CFir m_CICF_FIR[MAX_RX_CHANS];
-#endif
-
 CFir m_nfm_deemp_FIR[MAX_RX_CHANS];     // see: tools/FIR.m
 CFir m_am_ssb_deemp_FIR[MAX_RX_CHANS];
 
@@ -170,7 +161,7 @@ void c2s_sound_setup(void *param)
 {
 	conn_t *conn = (conn_t *) param;
 
-	double frate = ext_update_get_sample_rateHz(-1);
+	double frate = ext_update_get_sample_rateHz(ADC_CLK_SYS);
 	wdsp_SAM_demod_init();
 
     //cprintf(conn, "rx%d c2s_sound_setup\n", conn->rx_channel);
@@ -243,10 +234,12 @@ void c2s_sound(void *param)
 	int j, k, n;
 
 	memset(s, 0, sizeof(snd_t));
-	s->freq = s->mode = s->gen = s->squelch_on_seq = -1;
+	s->freq = s->mode = s->squelch_on_seq = -1;
 	s->agc = 1; s->thresh = -90; s->decay = 50;
 	s->compression = 1;
 	s->nb_algo = NB_OFF; s->nr_algo = NR_OFF_;
+	
+	m_RsId[rx_chan].init(rx_chan, FASTFIR_OUTBUF_SIZE);
 	
 	double z1 = 0;
 
@@ -309,14 +302,13 @@ void c2s_sound(void *param)
 	wdsp_SAM_PLL(rx_chan, PLL_MED);
 	wdsp_SAM_PLL(rx_chan, PLL_RESET);
 
-	gps_timestamp_t *gps_tsp = &gps_ts[rx_chan];
-	memset(gps_tsp, 0, sizeof(gps_timestamp_t));
-
-    // Compensate for audio sample buffer size in FPGA. Normalize to buffer size used for FW_SEL_SDR_RX4_WF4 mode.
+    // Compensate for audio sample buffer size in FPGA. Normalize to buffer size used for FW_SEL_SDR_RX8_WF2 mode.
 	int ref_nrx_samps = NRX_SAMPS_CHANS(8);     // 8-ch mode has the smallest FPGA buffer size
     int norm_nrx_samps;
     double gps_delay2 = 0;
 	switch (fw_sel) {
+	    // nrx_samps = 680/nch (config.h)
+	    // norm_nrx_samps typ: rx8:85 rx4:(170-85)=85 rx14:48 rx3:323.207
 	    case FW_SEL_SDR_RX4_WF4: norm_nrx_samps = nrx_samps - ref_nrx_samps; break;
 	    case FW_SEL_SDR_RX8_WF2: norm_nrx_samps = nrx_samps; break;
 	    case FW_SEL_SDR_RX14_WF0: norm_nrx_samps = nrx_samps; break;    // FIXME: this is now the smallest buffer size
@@ -325,8 +317,7 @@ void c2s_sound(void *param)
 	                             gps_delay2 = target - (double) norm_nrx_samps / SND_RATE_3CH; // fractional part of target delay
 	                             break;
 	}
-	//printf("rx_chans=%d norm_nrx_samps=%d nrx_samps=%d ref_nrx_samps=%d gps_delay2=%e\n",
-	//    rx_chans, norm_nrx_samps, nrx_samps, ref_nrx_samps, gps_delay2);
+	//printf("rx_chans=%d norm_nrx_samps=%d nrx_samps=%d ref_nrx_samps=%d gps_delay2=%e\n", rx_chans, norm_nrx_samps, nrx_samps, ref_nrx_samps, gps_delay2);
 	
 	//clprintf(conn, "SND INIT conn: %p mc: %p %s:%d %s\n",
 	//	conn, conn->mc, conn->remote_ip, conn->remote_port, conn->mc->uri);
@@ -340,25 +331,16 @@ void c2s_sound(void *param)
 	nbuf_t *nb = NULL;
 
 	while (TRUE) {
-		double f_phase;
-		u64_t i_phase;
-		
 		// reload freq NCO if adc clock has been corrected
 		// reload freq NCO if spectral inversion changed
 		if (s->freq >= 0 && (adc_clock_corrected != conn->adc_clock_corrected || s->spectral_inversion != kiwi.spectral_inversion)) {
 		    //cprintf(conn, "SND UPD adc_clock_corrected=%lf conn->adc_clock_corrected=%lf\n", adc_clock_corrected, conn->adc_clock_corrected);
 			adc_clock_corrected = conn->adc_clock_corrected;
             s->spectral_inversion = kiwi.spectral_inversion;
-
-			double freq_kHz = s->freq * kHz;
-			double freq_inv_kHz = ui_srate - freq_kHz;
-			f_phase = (s->spectral_inversion? freq_inv_kHz : freq_kHz) / conn->adc_clock_corrected;
-            i_phase = (u64_t) round(f_phase * pow(2,48));
-            //cprintf(conn, "SND UPD freq %.3f kHz i_phase 0x%08x|%08x clk %.6f(%d)\n",
-            //    s->freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected, clk.adc_clk_corrections);
-            if (do_sdr) spi_set3(CmdSetRXFreq, rx_chan, (u4_t) ((i_phase >> 16) & 0xffffffff), (u2_t) (i_phase & 0xffff));
-
+            rx_sound_set_freq(conn, s);
 		    //cprintf(conn, "SND freq updated due to ADC clock correction\n");
+		    
+            rx_gen_set_freq(conn, s);
 		}
 
         #ifdef SND_FREQ_SET_IQ_ROTATION_BUG_WORKAROUND
@@ -366,13 +348,7 @@ void c2s_sound(void *param)
                 //#define DOUBLE_SET_DELAY 500        // only 90% reliable!
                 #define DOUBLE_SET_DELAY 1500
                 if (timer_ms() > first_freq_time + DOUBLE_SET_DELAY) {
-                    double freq_kHz = s->freq * kHz;
-                    double freq_inv_kHz = ui_srate - freq_kHz;
-                    f_phase = (s->spectral_inversion? freq_inv_kHz : freq_kHz) / conn->adc_clock_corrected;
-                    i_phase = (u64_t) round(f_phase * pow(2,48));
-                    //cprintf(conn, "SND DOUBLE-SET freq %.3f kHz i_phase 0x%08x|%08x clk %.6f rx_chan=%d\n",
-                    //    s->freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected, rx_chan);
-                    spi_set3(CmdSetRXFreq, rx_chan, (u4_t) ((i_phase >> 16) & 0xffffffff), (u2_t) (i_phase & 0xffff));
+                    rx_sound_set_freq(conn, s);
                     first_freq_set = false;
                 }
             }
@@ -422,8 +398,8 @@ void c2s_sound(void *param)
 			// Ask waterfall task to stop (must not do while, for example, holding a lock).
 			// We've seen cases where the sound connects, then times out. But the w/f has never connected.
 			// So have to check for conn->other being valid.
-			conn_t *cwf = conn->other;
-			if (cwf && cwf->type == STREAM_WATERFALL && cwf->rx_channel == conn->rx_channel) {
+            conn_t *cwf = conn_other(conn, STREAM_WATERFALL);
+			if (cwf) {
 				cwf->stop_data = TRUE;
 				
 				// do this only in sound task: disable data pump channel
@@ -482,19 +458,6 @@ void c2s_sound(void *param)
 		    dx_update_seq = dx.update_seq;
         }
 
-        #ifdef OPTION_EXPERIMENT_CICF
-            if (s->cicf_setup) {
-                // defaults should give ntaps=17
-                float pass = 1800;
-                float stop = 6000;
-                float attn = 90;
-                int ntaps = m_CICF_FIR[rx_chan].InitLPFilter(0, 1.0, attn, pass, stop, frate, true);
-                printf("m_CICF_FIR pass=%.0f stop=%.0f attn=%.0f, ntaps=%d\n", pass, stop, attn, ntaps);
-                s->cicf_run = true;
-                s->cicf_setup = false;
-            }
-        #endif
-		
 		#define	SND_FLAG_LPF		    0x01
 		#define	SND_FLAG_ADC_OVFL	    0x02
 		#define	SND_FLAG_NEW_FREQ	    0x04
@@ -504,8 +467,9 @@ void c2s_sound(void *param)
 		#define SND_FLAG_SQUELCH_UI     0x40
 		#define SND_FLAG_LITTLE_ENDIAN  0x80
 		
-		bool isNBFM = (s->mode == MODE_NBFM || s->mode == MODE_NNFM);
-		bool IQ_or_DRM_or_stereo = (s->mode == MODE_IQ || s->mode == MODE_DRM || s->mode == MODE_SAS || s->mode == MODE_QAM);
+		bool isNBFM = (mode_flags[s->mode] & IS_NBFM);
+		bool isDRM = (s->mode == MODE_DRM);
+		bool IQ_or_DRM_or_stereo = (mode_flags[s->mode] & IS_STEREO);
 
 		u1_t *bp_real_u1  = s->out_pkt_real.u1;
 		s2_t *bp_real_s2  = s->out_pkt_real.s2;
@@ -566,30 +530,31 @@ void c2s_sound(void *param)
 			
         	TaskStat2(TSTAT_INCR|TSTAT_ZERO, 0, "aud");
 
-			TYPECPX *i_samps_c = rx->in_samps[rx->rd_pos];
+			TYPECPX *in_samps_c = rx->in_samps[rx->rd_pos];
 
 			// check 48-bit ticks counter timestamp in audio IQ stream
 			const u64_t ticks   = rx->ticks[rx->rd_pos];
-			const u64_t dt      = time_diff48(ticks, clk.ticks);  // time difference to last GPS solution
+			const u64_t dticks  = time_diff48(ticks, clk.ticks);  // time difference to last GPS solution
 #if 0
 			static u64_t last_ticks[MAX_RX_CHANS] = {0};
 			static u4_t  tick_seq[MAX_RX_CHANS]   = {0};
-			const u64_t diff_ticks = time_diff48(ticks, last_ticks[rx_chan]); // time difference to last buffer
+			const u64_t delta_ticks = time_diff48(ticks, last_ticks[rx_chan]); // time difference to last buffer
 			
-			if ((tick_seq[rx_chan] % 32) == 0) printf("ticks %08x|%08x %08x|%08x // %08x|%08x %08x|%08x #%d,%d GPST %f\n",
-											 PRINTF_U64_ARG(ticks), PRINTF_U64_ARG(diff_ticks),
-											 PRINTF_U64_ARG(dt), PRINTF_U64_ARG(clk.ticks),
-											 clk.adc_gps_clk_corrections, clk.adc_clk_corrections, clk.gps_secs);
-			if (diff_ticks != rx_decim * nrx_samps)
-				printf("ticks %08x|%08x %08x|%08x // %08x|%08x %08x|%08x #%d,%d GPST %f (%d) *****\n",
-					   PRINTF_U64_ARG(ticks), PRINTF_U64_ARG(diff_ticks),
-					   PRINTF_U64_ARG(dt), PRINTF_U64_ARG(clk.ticks),
-					   clk.adc_gps_clk_corrections, clk.adc_clk_corrections, clk.gps_secs,
-					   tick_seq[rx_chan]);
+			if ((tick_seq[rx_chan] % 32) == 0)
+			    printf("ticks %08x|%08x delta %08x|%08x // clk.ticks %08x|%08x dticks %08x|%08x #%d,%d GPST %f\n",
+                    PRINTF_U64_ARG(ticks), PRINTF_U64_ARG(delta_ticks),
+                    PRINTF_U64_ARG(clk.ticks), PRINTF_U64_ARG(dticks),
+                    clk.adc_gps_clk_corrections, clk.adc_clk_corrections, clk.gps_secs);
+			if (delta_ticks != rx_decim * nrx_samps)
+				printf("ticks %08x|%08x delta %08x|%08x // clk.ticks %08x|%08x dticks %08x|%08x #%d,%d GPST %f (%d) UNEXPECTED DELTA *****\n",
+                    PRINTF_U64_ARG(ticks), PRINTF_U64_ARG(delta_ticks),
+                    PRINTF_U64_ARG(clk.ticks), PRINTF_U64_ARG(dticks),
+                    clk.adc_gps_clk_corrections, clk.adc_clk_corrections, clk.gps_secs,
+                    tick_seq[rx_chan]);
 			last_ticks[rx_chan] = ticks;
 			tick_seq[rx_chan]++;
 #endif
-			gps_tsp->gpssec = fmod(gps_week_sec + clk.gps_secs + dt/clk.adc_clock_base - gps_delay + gps_delay2, gps_week_sec);
+			s->gpssec = fmod(gps_week_sec + clk.gps_secs + (dticks/clk.adc_clock_base) - gps_delay + gps_delay2, gps_week_sec);
 
 		    #ifdef SND_SEQ_CHECK
 		        if (rx->in_seq[rx->rd_pos] != s->snd_seq_ck) {
@@ -610,17 +575,16 @@ void c2s_sound(void *param)
             // Forward IQ samples if requested.
             // Remember that receive_iq_*() is used by some extensions to pushback test data, e.g. DRM
             if (receive_iq_pre_fir != NULL)
-                receive_iq_pre_fir(rx_chan, 0, ns_in, i_samps_c);
+                receive_iq_pre_fir(rx_chan, 0, ns_in, in_samps_c);
 
-			
             if (s->nb_enable[NB_CLICK] == NB_PRE_FILTER) {
                 u4_t now = timer_sec();
                 if (now != noise_pulse_last) {
                     noise_pulse_last = now;
                     TYPEREAL pulse = s->nb_param[NB_CLICK][NB_PULSE_GAIN] * (K_AMPMAX - 16);
                     for (int i=0; i < s->nb_param[NB_CLICK][NB_PULSE_SAMPLES]; i++) {
-                        i_samps_c[i].re = pulse;
-                        i_samps_c[i].im = 0;
+                        in_samps_c[i].re = pulse;
+                        in_samps_c[i].im = 0;
                     }
                     //real_printf("[CLICK-PRE]"); fflush(stdout);
                 }
@@ -630,18 +594,11 @@ void c2s_sound(void *param)
             #ifdef NB_STD_POST_FILTER
             #else
                 if (s->nb_enable[NB_BLANKER] && s->nb_algo == NB_STD)
-		            m_NoiseProc_snd[rx_chan].ProcessBlanker(ns_in, i_samps_c, i_samps_c);
+		            m_NoiseProc_snd[rx_chan].ProcessBlanker(ns_in, in_samps_c, in_samps_c);
 		    #endif
 		    
-		    #ifdef OPTION_EXPERIMENT_CICF
-		        if (s->cicf_run) {
-                    m_CICF_FIR[rx_chan].ProcessFilter(ns_in, i_samps_c, i_samps_c);
-                    //real_printf("."); fflush(stdout);
-		        }
-		    #endif
-
-            TYPECPX *f_samps_c = &iq->iq_samples[iq->iq_wr_pos][0];
-            ns_out  = m_PassbandFIR[rx_chan].ProcessData(rx_chan, ns_in, i_samps_c, f_samps_c);
+            TYPECPX *fir_samps_c = &iq->iq_samples[iq->iq_wr_pos][0];
+            ns_out  = m_PassbandFIR[rx_chan].ProcessData(rx_chan, ns_in, in_samps_c, fir_samps_c);
             fir_pos = m_PassbandFIR[rx_chan].FirPos();
 
 			// FIR has a pipeline delay:
@@ -659,13 +616,13 @@ void c2s_sound(void *param)
 
             #if 0
                 for (int i=0; i < ns_in; i++) {
-                    TYPECPX *in = &i_samps_c[i];
+                    TYPECPX *in = &in_samps_c[i];
                     if (in->re > 32767.0f) { real_printf("FIR-in %.1f ", in->re); fflush(stdout); }
                     static TYPEREAL max_in;
                     if (in->re > max_in) { max_in = in->re; real_printf("MAX-IN %.1f ", max_in); fflush(stdout); }
                 }
                 if (ns_out) for (int i=0; i < ns_out; i++) {
-                    TYPECPX *out = &f_samps_c[i];
+                    TYPECPX *out = &fir_samps_c[i];
                     if (out->re > 32767.0f) { real_printf("FIR-o%d re %.1f ", i, out->re); fflush(stdout); }
                     if (out->im > 32767.0f) { real_printf("FIR-o%d im %.1f ", i, out->im); fflush(stdout); }
                     static TYPEREAL max_out;
@@ -682,18 +639,26 @@ void c2s_sound(void *param)
             //  (2) delay in AGC (if on)
             if (s->agc)
                 sample_filter_delays -= m_Agc[rx_chan].GetDelaySamples();
-            gps_tsp->gpssec = fmod(gps_week_sec + gps_tsp->gpssec + rx_decim * sample_filter_delays / clk.adc_clock_base,
-                                          gps_week_sec);
+
+            #ifdef OPTION_GPS_TUNE
+                static double gps_tune;
+                static int gps_dly;
+                if (p_f[0] != gps_tune || p_i[1] != gps_dly) {
+                    cprintf(conn, "GPS: gps_tune=%.9g gps_dly=%d\n", p_f[0], p_i[1]);
+                }
+                gps_tune = p_f[0]; gps_dly = p_i[1];
+                s->gpssec += gps_tune; sample_filter_delays += gps_dly;
+            #endif
+            s->gpssec = fmod(gps_week_sec + s->gpssec + (rx_decim * sample_filter_delays / clk.adc_clock_base), gps_week_sec);
     
-            // FIXME: could this block be moved outside the loop since it only effects the header?
-            s->out_pkt_iq.h.gpssec  = u4_t(gps_tsp->last_gpssec);
-            s->out_pkt_iq.h.gpsnsec = gps_tsp->init? u4_t(1e9*(gps_tsp->last_gpssec - s->out_pkt_iq.h.gpssec)) : 0;
-            // real_printf("__GPS__ gpssec=%.9f diff=%.9f\n",  gps_tsp->gpssec, gps_tsp->gpssec - gps_tsp->last_gpssec);
-            const double dt_to_pos_sol = gps_tsp->last_gpssec - clk.gps_secs;
-            s->out_pkt_iq.h.last_gps_solution = gps_tsp->init? ((clk.ticks == 0)? 255 : u1_t(std::min(254.0, dt_to_pos_sol))) : 0;
-            if (!gps_tsp->init) gps_tsp->init = true;
+            s->out_pkt_iq.h.gpssec  = u4_t(s->last_gpssec);
+            s->out_pkt_iq.h.gpsnsec = s->gps_init? u4_t(1e9*(s->last_gpssec - s->out_pkt_iq.h.gpssec)) : 0;
+            const double dt_to_pos_sol = s->last_gpssec - clk.gps_secs;
+            //real_printf("__GPS__ gpssec=%.9f diff=%.9f dt_to_pos_sol=%.9f %08x|%08x\n", s->gpssec, s->gpssec - s->last_gpssec, dt_to_pos_sol, s->out_pkt_iq.h.gpssec, s->out_pkt_iq.h.gpsnsec);
+            s->out_pkt_iq.h.last_gps_solution = s->gps_init? ((clk.ticks == 0)? 255 : u1_t(std::min(252.0, dt_to_pos_sol))) : 0;      // 253-254 used for error messages in Octave code
+            if (!s->gps_init) s->gps_init = true;
             s->out_pkt_iq.h.dummy = 0;
-            gps_tsp->last_gpssec = gps_tsp->gpssec;
+            s->last_gpssec = s->gpssec;
     
 			iq->iq_seqnum[iq->iq_wr_pos] = iq->iq_seq;
 			iq->iq_seq++;
@@ -701,14 +666,14 @@ void c2s_sound(void *param)
             // Forward IQ samples if requested.
             // Remember that receive_iq_*() is used by some extensions to pushback test data, e.g. DRM
             if (receive_iq_pre_agc != NULL)
-                receive_iq_pre_agc(rx_chan, 0, ns_out, f_samps_c);
+                receive_iq_pre_agc(rx_chan, 0, ns_out, fir_samps_c);
             
             if (receive_iq_pre_agc_tid != (tid_t) NULL)
                 TaskWakeupFP(receive_iq_pre_agc_tid, TWF_CHECK_WAKING, TO_VOID_PARAM(rx_chan));
     
             // delay updating iq_wr_pos until after AGC applied below
             
-            TYPECPX *s_samps_c = f_samps_c;
+            TYPECPX *s_samps_c = fir_samps_c;
             for (j=0; j<ns_out; j++) {
     
                 // S-meter from CuteSDR
@@ -730,10 +695,10 @@ void c2s_sound(void *param)
             }
             sMeter_dBm = sMeterAvg_dB + S_meter_cal;
             
-            TYPEMONO16 *r_samps_r;
+            TYPEMONO16 *out_samps_s2;
             
             if (!IQ_or_DRM_or_stereo) {
-                r_samps_r = &rx->real_samples[rx->real_wr_pos][0];
+                out_samps_s2 = &rx->real_samples_s2[rx->real_wr_pos][0];
                 rx->freqHz[rx->real_wr_pos] = conn->freqHz;
                 rx->real_seqnum[rx->real_wr_pos] = rx->real_seq;
                 rx->real_seq++;
@@ -741,50 +706,50 @@ void c2s_sound(void *param)
             
             /*  Signal path:
             
-                rx->in_samps => TYPECPX *i_samps_c
-                m_PassbandFIR(i_samps_c, => TYPECPX *f_samps_c)
-                s_meter(f_samps_c(s_samps_c))
+                rx->in_samps => TYPECPX *in_samps_c
+                m_PassbandFIR(in_samps_c, => TYPECPX *fir_samps_c)
+                s_meter(fir_samps_c(s_samps_c))
             
-                if (!IQ_or_DRM_or_stereo) rx->real_samples => TYPEMONO16 *r_samps_r     // output buf
+                if (!IQ_or_DRM_or_stereo) rx->real_samples_s2 => TYPEMONO16 *out_samps_s2   // output buf
             
-                switch (mode) {     // f_samps_c => r_samps_r
+                switch (mode) {     // fir_samps_c => out_samps_s2
                     MODE_AMx
-                        m_Agc(f_samps_c, => TYPECPX *a_samps_c)
-                        demod(a_samps_c) => TYPEREAL *d_samps_r
-                        m_AM_FIR(d_samps_r, => r_samps_r)
+                        m_Agc(fir_samps_c, => TYPECPX *agc_samps_c)
+                        demod(agc_samps_c) => TYPEREAL *demod_samps_r
+                        m_AM_FIR(demod_samps_r, => out_samps_s2)
             
                     MODE_SAMx/QAM
-                        m_Agc(f_samps_c, => TYPECPX *a_samps_c)
-                        wdsp_SAM_demod(a_samps_c, => r_samps_r)
-                            m_chan_null_FIR(a_samps_c, NULL)        // has side-effect internal output
+                        m_Agc(fir_samps_c, => TYPECPX *agc_samps_c)
+                        wdsp_SAM_demod(agc_samps_c, => out_samps_s2)
+                            m_chan_null_FIR(agc_samps_c, NULL)        // has side-effect internal output
             
-                    MODE NxFM
-                        m_Agc(f_samps_c, => TYPECPX *a_samps_c)
-                        demod(a_samps_c) => TYPEREAL *d_samps_r
-                        m_Squelch(d_samps_r, => r_samps_r)
+                    MODE_NxFM
+                        m_Agc(fir_samps_c, => TYPECPX *agc_samps_c)
+                        demod(agc_samps_c) => TYPEREAL *demod_samps_r
+                        m_Squelch(demod_samps_r, => out_samps_s2)
             
                     MODE_IQ/DRM
-                        (f_samps_c used later)
+                        (fir_samps_c used later)
             
                     MODE_SSB
-                        m_Agc(f_samps_c, => TYPEREAL *r_samps_r)
+                        m_Agc(fir_samps_c, => TYPEMONO16 *out_samps_s2)
                 }
             
-                do_de_emp: m_nfm_deemp_FIR/m_am_ssb_deemp_FIR(r_samps_r, => r_samps_r)
-                !IQ_or_DRM_or_stereo: <noise_blankers>(r_samps_r, => r_samps_r)     // algos are non-IQ only
+                do_de_emp: m_nfm_deemp_FIR/m_am_ssb_deemp_FIR(out_samps_s2, => out_samps_s2)
+                !IQ_or_DRM_or_stereo: <noise_blankers>(out_samps_s2, => out_samps_s2)   // algos are non-IQ only
                 non_NBFM_squelch()
             
                 switch (output_mode) {
                     IQ SAS QAM DRM-monitor-mode     // i.e. 2ch modes
                         SAS QAM
-                            r_samps_r(rx->agc_samples) => TYPECPX *cs_c
+                            rx->agc_samples_c => TYPECPX *out_samps_c
                         IQ DRM-monitor-mode
-                            f_samps_c => TYPECPX *cs_c
-                            m_Agc(cs_c, cs_c)
-                        cs_c => OUT
+                            fir_samps_c => TYPECPX *out_samps_c
+                            m_Agc(out_samps_c, out_samps_c)
+                        out_samps_c => OUT
                 
                     other-non-DRM
-                        r_samps_r => OUT
+                        out_samps_s2 => OUT
                 
                     DRM
                         drm_buf->out_samples => OUT
@@ -797,29 +762,29 @@ void c2s_sound(void *param)
             case MODE_AM:
             case MODE_AMN: {
                 // AM detector from CuteSDR
-                TYPECPX *a_samps_c = rx->agc_samples;
-                m_Agc[rx_chan].ProcessData(ns_out, f_samps_c, a_samps_c);
+                TYPECPX *agc_samps_c = rx->agc_samples_c;
+                m_Agc[rx_chan].ProcessData(ns_out, fir_samps_c, agc_samps_c);
     
-                TYPEREAL *d_samps_r = rx->demod_samples;
+                TYPEREAL *demod_samps_r = rx->demod_samples_r;
     
                 for (j=0; j<ns_out; j++) {
-                    float pwr = a_samps_c->re*a_samps_c->re + a_samps_c->im*a_samps_c->im;
+                    float pwr = agc_samps_c->re*agc_samps_c->re + agc_samps_c->im*agc_samps_c->im;
                     float mag = sqrt(pwr);
 
                     // high pass filter (DC removal) with IIR filter
                     // H(z) = (1 - z^-1) / (1 - DC_ALPHA*z^-1)
                     #define DC_ALPHA 0.99f
                     float z0 = mag + (z1 * DC_ALPHA);
-                    *d_samps_r = z0-z1;
+                    *demod_samps_r = z0-z1;
                     z1 = z0;
-                    d_samps_r++;
-                    a_samps_c++;
+                    demod_samps_r++;
+                    agc_samps_c++;
                 }
                 
                 // clean up residual noise left by detector
                 // the non-FFT FIR has no pipeline delay issues
-                d_samps_r = rx->demod_samples;
-                m_AM_FIR[rx_chan].ProcessFilter(ns_out, d_samps_r, r_samps_r);
+                demod_samps_r = rx->demod_samples_r;
+                m_AM_FIR[rx_chan].ProcessFilter(ns_out, demod_samps_r, out_samps_s2);
                 break;
             }
             
@@ -828,34 +793,34 @@ void c2s_sound(void *param)
             case MODE_SAU:
             case MODE_SAS:
             case MODE_QAM: {
-                TYPECPX *a_samps_c = rx->agc_samples;
-                m_Agc[rx_chan].ProcessData(ns_out, f_samps_c, a_samps_c);
+                TYPECPX *agc_samps_c = rx->agc_samples_c;
+                m_Agc[rx_chan].ProcessData(ns_out, fir_samps_c, agc_samps_c);
 
                 // NB:
-                //      MODE_SAS/QAM stereo mode: output samples put back into a_samps_c
-                //      chan null mode: in addition to r_samps_r output, compute FFT of nulled a_samps_c
-                s->isChanNull = wdsp_SAM_demod(rx_chan, s->mode, s->SAM_mparam, ns_out, a_samps_c, r_samps_r);
+                //      MODE_SAS/QAM stereo mode: output samples put back into agc_samps_c
+                //      chan null mode: in addition to out_samps_s2 output, compute FFT of nulled agc_samps_c
+                s->isChanNull = wdsp_SAM_demod(rx_chan, s->mode, s->SAM_mparam, ns_out, agc_samps_c, out_samps_s2);
                 s->specAF_instance = s->isChanNull? SND_INSTANCE_FFT_CHAN_NULL : SND_INSTANCE_FFT_PASSBAND;
-                if (s->isChanNull) m_chan_null_FIR[rx_chan].ProcessData(rx_chan, ns_out, a_samps_c, NULL);
+                if (s->isChanNull) m_chan_null_FIR[rx_chan].ProcessData(rx_chan, ns_out, agc_samps_c, NULL);
                 break;
             }
             
             case MODE_NBFM:
             case MODE_NNFM: {
-                TYPEREAL *d_samps_r = rx->demod_samples;
-                TYPECPX *a_samps_c = rx->agc_samples;
-                m_Agc[rx_chan].ProcessData(ns_out, f_samps_c, a_samps_c);
+                TYPEREAL *demod_samps_r = rx->demod_samples_r;
+                TYPECPX *agc_samps_c = rx->agc_samples_c;
+                m_Agc[rx_chan].ProcessData(ns_out, fir_samps_c, agc_samps_c);
                 
                 //#define PN_F_DEBUG
                 #ifdef PN_F_DEBUG
                     if (p_f[0]) {
                         TYPEREAL fm_scale = p_f[0];
                         for (j=0; j < ns_out; j++) {
-                            a_samps_c[j].re /= fm_scale; a_samps_c[j].im /= fm_scale;
+                            agc_samps_c[j].re /= fm_scale; agc_samps_c[j].im /= fm_scale;
                             #define SHOW_MAX_MIN_FM_IN
                             #ifdef SHOW_MAX_MIN_FM_IN
                                 static void *FM_in_state;
-                                print_max_min_stream_f(&FM_in_state, P_MAX_MIN_RANGE, "FM_IN", j, 2, (double) a_samps_c[j].re, (double) a_samps_c[j].im);
+                                print_max_min_stream_f(&FM_in_state, P_MAX_MIN_RANGE, "FM_IN", j, 2, (double) agc_samps_c[j].re, (double) agc_samps_c[j].im);
                             #endif
                         }
                     }
@@ -878,17 +843,17 @@ void c2s_sound(void *param)
                 #endif
 
                 #define FMDEMOD_QUADRI_K 0.340447550238101026565118445432744920253753662109375
-                float i = a_samps_c->re, q = a_samps_c->im, out;
+                float i = agc_samps_c->re, q = agc_samps_c->im, out;
                 float iL = conn->last_sample.re, qL = conn->last_sample.im;
                 float pwr = i*i + q*q;
                 out = pwr? (max_val * FMDEMOD_QUADRI_K * (i*(q-qL) - q*(i-iL)) / pwr) : 0;
                 if (clipper_val > 0) out = PN_CLAMP(out, clipper_val);
-                *d_samps_r = out;
-                a_samps_c++; d_samps_r++;
+                *demod_samps_r = out;
+                agc_samps_c++; demod_samps_r++;
                 
                 for (j=1; j < ns_out; j++) {
-                    i = a_samps_c->re, q = a_samps_c->im;
-                    iL = a_samps_c[-1].re, qL = a_samps_c[-1].im;
+                    i = agc_samps_c->re, q = agc_samps_c->im;
+                    iL = agc_samps_c[-1].re, qL = agc_samps_c[-1].im;
                     pwr = i*i + q*q;
                     out = pwr? (max_val * FMDEMOD_QUADRI_K * (i*(q-qL) - q*(i-iL)) / pwr) : 0;
                     if (clipper_val > 0) out = PN_CLAMP(out, clipper_val);
@@ -899,16 +864,16 @@ void c2s_sound(void *param)
                         print_max_min_stream_f(&FM_out_state, (p_f[1] < 0)? P_MAX_MIN_RESET : P_MAX_MIN_RANGE, "FM_OUT", j-1, 1, (double) out);
                     #endif
 
-                    *d_samps_r = out;
-                    a_samps_c++; d_samps_r++;
+                    *demod_samps_r = out;
+                    agc_samps_c++; demod_samps_r++;
                 }
                 
-                conn->last_sample = a_samps_c[-1];
-                d_samps_r = rx->demod_samples;
+                conn->last_sample = agc_samps_c[-1];
+                demod_samps_r = rx->demod_samples_r;
     
                 // use the noise squelch from CuteSDR
                 // nsq_nc_sq = -1_0_+1
-                int nsq_nc_sq = m_Squelch[rx_chan].PerformFMSquelch(ns_out, d_samps_r, r_samps_r);
+                int nsq_nc_sq = m_Squelch[rx_chan].PerformFMSquelch(ns_out, demod_samps_r, out_samps_s2);
                 if (nsq_nc_sq != 0) s->squelched = (nsq_nc_sq == 1)? true:false;
                 break;
             }
@@ -923,7 +888,7 @@ void c2s_sound(void *param)
             case MODE_LSN:
             case MODE_CW:
             case MODE_CWN:
-                m_Agc[rx_chan].ProcessData(ns_out, f_samps_c, r_samps_r);
+                m_Agc[rx_chan].ProcessData(ns_out, fir_samps_c, out_samps_s2);
                 break;
     
             default:
@@ -932,12 +897,12 @@ void c2s_sound(void *param)
     
             if (do_de_emp) {    // !IQ_or_DRM_or_stereo
                 if (isNBFM) {
-                    m_nfm_deemp_FIR[rx_chan].ProcessFilter(ns_out, r_samps_r, r_samps_r);
+                    m_nfm_deemp_FIR[rx_chan].ProcessFilter(ns_out, out_samps_s2, out_samps_s2);
                 } else {
                     #ifdef TEST_AM_SSB_BIQUAD
-                        m_deemp_Biquad[rx_chan].ProcessFilter(ns_out, r_samps_r, r_samps_r);
+                        m_deemp_Biquad[rx_chan].ProcessFilter(ns_out, out_samps_s2, out_samps_s2);
                     #else
-                        m_am_ssb_deemp_FIR[rx_chan].ProcessFilter(ns_out, r_samps_r, r_samps_r);
+                        m_am_ssb_deemp_FIR[rx_chan].ProcessFilter(ns_out, out_samps_s2, out_samps_s2);
                     #endif
                 }
             }
@@ -948,7 +913,7 @@ void c2s_sound(void *param)
                     noise_pulse_last = now;
                     TYPEMONO16 pulse = s->nb_param[NB_CLICK][NB_PULSE_GAIN] * (K_AMPMAX - 16);
                     for (int i=0; i < s->nb_param[NB_CLICK][NB_PULSE_SAMPLES]; i++) {
-                        r_samps_r[i] = pulse;
+                        out_samps_s2[i] = pulse;
                     }
                     //real_printf("[CLICK-POST]"); fflush(stdout);
                 }
@@ -959,32 +924,32 @@ void c2s_sound(void *param)
                 if (s->nb_enable[NB_BLANKER]) {
                     switch (s->nb_algo) {
                         #ifdef NB_STD_POST_FILTER
-                            case NB_STD: m_NoiseProc_snd[rx_chan].ProcessBlanker(ns_out, r_samps_r, r_samps_r); break;
+                            case NB_STD: m_NoiseProc_snd[rx_chan].ProcessBlanker(ns_out, out_samps_s2, out_samps_s2); break;
                         #endif
-                        case NB_WILD: nb_Wild_process(rx_chan, ns_out, r_samps_r, r_samps_r); break;
+                        case NB_WILD: nb_Wild_process(rx_chan, ns_out, out_samps_s2, out_samps_s2); break;
                     }
                 }
                 
                 // ordered so denoiser can cleanup residual noise from autonotch
                 switch (s->nr_algo) {
                     case NR_WDSP:
-                        if (s->nr_enable[NR_AUTONOTCH]) wdsp_ANR_filter(rx_chan, NR_AUTONOTCH, ns_out, r_samps_r, r_samps_r);
-                        if (s->nr_enable[NR_DENOISE]) wdsp_ANR_filter(rx_chan, NR_DENOISE, ns_out, r_samps_r, r_samps_r);
+                        if (s->nr_enable[NR_AUTONOTCH]) wdsp_ANR_filter(rx_chan, NR_AUTONOTCH, ns_out, out_samps_s2, out_samps_s2);
+                        if (s->nr_enable[NR_DENOISE]) wdsp_ANR_filter(rx_chan, NR_DENOISE, ns_out, out_samps_s2, out_samps_s2);
                         break;
 
                     case NR_ORIG:
-                        if (s->nr_enable[NR_AUTONOTCH]) m_LMS[rx_chan][NR_AUTONOTCH].ProcessFilter(ns_out, r_samps_r, r_samps_r);
-                        if (s->nr_enable[NR_DENOISE]) m_LMS[rx_chan][NR_DENOISE].ProcessFilter(ns_out, r_samps_r, r_samps_r);
+                        if (s->nr_enable[NR_AUTONOTCH]) m_LMS[rx_chan][NR_AUTONOTCH].ProcessFilter(ns_out, out_samps_s2, out_samps_s2);
+                        if (s->nr_enable[NR_DENOISE]) m_LMS[rx_chan][NR_DENOISE].ProcessFilter(ns_out, out_samps_s2, out_samps_s2);
                         break;
 
                     case NR_SPECTRAL:
-                        nr_spectral_process(rx_chan, ns_out, r_samps_r, r_samps_r);
+                        nr_spectral_process(rx_chan, ns_out, out_samps_s2, out_samps_s2);
                         break;
                 }
             }
             
             // non-NBFM squelch
-            if ((s->squelch || s->sq_changed) && !isNBFM && s->mode != MODE_DRM) {
+            if ((s->squelch || s->sq_changed) && !isNBFM && !isDRM) {
                 if (!rssi_filled || s->squelch_on_seq == -1) {
                     rssi_q[rssi_p++] = sMeter_dBm;
                     if (rssi_p >= N_RSSI) { rssi_p = 0; rssi_filled = true; }
@@ -1055,6 +1020,14 @@ void c2s_sound(void *param)
                 last_max_thr = max_thr_t;
             }
 
+            // update UI with changes to RF attn from elsewhere
+            if (kiwi.rf_attn_dB != s->rf_attn_dB) {
+                send_msg(conn, false, "MSG rf_attn=%.1f", kiwi.rf_attn_dB);
+                //cprintf(conn, "UPD rf_attn=%.1f\n", kiwi.rf_attn_dB);
+                s->rf_attn_dB = kiwi.rf_attn_dB;
+            }
+
+
             ////////////////////////////////
             // copy to output buffer and send to client
             ////////////////////////////////
@@ -1064,24 +1037,24 @@ void c2s_sound(void *param)
             bool send_silence = masked;     // enforced on server side to prevent clients from cheating
 
             // IQ/stereo output modes (except non-monitor mode DRM)
-            if (s->mode == MODE_IQ || s->mode == MODE_SAS || s->mode == MODE_QAM
+            if ((IQ_or_DRM_or_stereo && !isDRM)
             #ifdef DRM
                 // DRM monitor mode is effectively the same as MODE_IQ
-                || (s->mode == MODE_DRM && (drm->monitor || rx_chan >= DRM_MAX_RX))
+                || (isDRM && (drm->monitor || rx_chan >= DRM_MAX_RX))
             #endif
             ) {
-                TYPECPX *cs_c;
+                TYPECPX *out_samps_c;
                 if (s->mode == MODE_SAS || s->mode == MODE_QAM) {
-                    cs_c = rx->agc_samples;
+                    out_samps_c = rx->agc_samples_c;
                 } else {
-                    cs_c = f_samps_c;
+                    out_samps_c = fir_samps_c;
                     if (!send_silence)
-                        m_Agc[rx_chan].ProcessData(ns_out, cs_c, cs_c);
+                        m_Agc[rx_chan].ProcessData(ns_out, out_samps_c, out_samps_c);
 
                     // Forward IQ samples if requested.
                     // Remember that receive_iq_*() is used by some extensions to pushback test data, e.g. DRM
                     if (receive_iq_post_agc != NULL)
-                        receive_iq_post_agc(rx_chan, 0, ns_out, cs_c);
+                        receive_iq_post_agc(rx_chan, 0, ns_out, out_samps_c);
             
                     if (receive_iq_post_agc_tid != (tid_t) NULL)
                         TaskWakeupFP(receive_iq_post_agc_tid, TWF_CHECK_WAKING, TO_VOID_PARAM(rx_chan));
@@ -1091,13 +1064,13 @@ void c2s_sound(void *param)
 
                 #if 0
                     if (ns_out) for (int i=0; i < ns_out; i++) {
-                        TYPECPX *out = &cs_c[i];
+                        TYPECPX *out = &out_samps_c[i];
                         if (out->re > 32767.0) real_printf("IQ-out %.1f\n", out->re);
                     }
                 #endif
                 
                 if (send_silence) {
-                    TYPECPX *sp = cs_c;
+                    TYPECPX *sp = out_samps_c;
                     for (int i = 0; i < ns_out; i++) { sp->re = sp->im = SILENCE_VALUE; sp++; }
                 }
                 
@@ -1105,45 +1078,48 @@ void c2s_sound(void *param)
                     bc = ns_out * NIQ * sizeof(s2_t);
                     for (j=0; j < ns_out; j++) {
                         // can cast TYPEREAL directly to s2_t due to choice of CUTESDR_SCALE
-                        s2_t re = (s2_t) cs_c->re, im = (s2_t) cs_c->im;
+                        s2_t re = (s2_t) out_samps_c->re, im = (s2_t) out_samps_c->im;
                         *bp_iq_s2++ = re;      // arm native little-endian (put any swap burden on client)
                         *bp_iq_s2++ = im;
-                        cs_c++;
+                        out_samps_c++;
                     }
                 } else {
                     for (j=0; j < ns_out; j++) {
                         // can cast TYPEREAL directly to s2_t due to choice of CUTESDR_SCALE
-                        s2_t re = (s2_t) cs_c->re, im = (s2_t) cs_c->im;
+                        s2_t re = (s2_t) out_samps_c->re, im = (s2_t) out_samps_c->im;
                         *bp_iq_u1++ = (re >> 8) & 0xff; bc++;  // choose a network byte-order (big-endian)
                         *bp_iq_u1++ = (re >> 0) & 0xff; bc++;
                         *bp_iq_u1++ = (im >> 8) & 0xff; bc++;
                         *bp_iq_u1++ = (im >> 0) & 0xff; bc++;
-                        cs_c++;
+                        out_samps_c++;
                     }
                 }
             } else
             
             // all other modes (except DRM)
-            if (s->mode != MODE_DRM) {
+            if (!isDRM) {
                 iq->iq_wr_pos = (iq->iq_wr_pos+1) & (N_DPBUF-1);
                 int freqHz = rx->freqHz[rx->real_wr_pos];
                 rx->real_wr_pos = (rx->real_wr_pos+1) & (N_DPBUF-1);
     
-                // Forward real samples if requested.
+                // Forward real (not IQ) samples if requested.
                 // Remember that receive_real() is used by some extensions to pushback test data.
                 if (receive_real != NULL)
-                    receive_real(rx_chan, 0, ns_out, r_samps_r, freqHz);
+                    receive_real(rx_chan, 0, ns_out, out_samps_s2, freqHz);
                 
                 if (receive_real_tid != (tid_t) NULL)
                     TaskWakeupFP(receive_real_tid, TWF_CHECK_WAKING, TO_VOID_PARAM(rx_chan));
     
+                if (kiwi.dbgUs)
+			        m_RsId[rx_chan].receive(ns_out, out_samps_s2);
+
                 if (send_silence) {
-                    TYPEMONO16 *rs_r = r_samps_r;
+                    TYPEMONO16 *rs_r = out_samps_s2;
                     for (int i = 0; i < ns_out; i++) *rs_r++ = SILENCE_VALUE;
                 }
                 
                 if (s->compression) {
-                    encode_ima_adpcm_i16_e8(r_samps_r, bp_real_u1, ns_out, &s->adpcm_snd);
+                    encode_ima_adpcm_i16_e8(out_samps_s2, bp_real_u1, ns_out, &s->adpcm_snd);
                     bp_real_u1 += ns_out/2;		// fixed 4:1 compression
                     bc += ns_out/2;
                 } else {
@@ -1151,13 +1127,13 @@ void c2s_sound(void *param)
                     if (s->little_endian) {
                         bc += ns_out * sizeof(s2_t);
                         for (j=0; j < ns_out; j++) {
-                            *bp_real_s2++ = *r_samps_r++;    // arm native little-endian (put any swap burden on client)
+                            *bp_real_s2++ = *out_samps_s2++;    // arm native little-endian (put any swap burden on client)
                         }
                     } else {
                         for (j=0; j < ns_out; j++) {
-                            *bp_real_u1++ = (*r_samps_r >> 8) & 0xff; bc++;	// choose a network byte-order (big-endian)
-                            *bp_real_u1++ = (*r_samps_r >> 0) & 0xff; bc++;
-                            r_samps_r++;
+                            *bp_real_u1++ = (*out_samps_s2 >> 8) & 0xff; bc++;	// choose a network byte-order (big-endian)
+                            *bp_real_u1++ = (*out_samps_s2 >> 0) & 0xff; bc++;
+                            out_samps_s2++;
                         }
                     }
                 }
@@ -1169,8 +1145,8 @@ void c2s_sound(void *param)
                 // Send silence if buffers are not updated in time.
                 
                 else
-                if (s->mode == MODE_DRM) {
-                    m_Agc[rx_chan].ProcessData(ns_out, f_samps_c, f_samps_c);
+                if (isDRM) {
+                    m_Agc[rx_chan].ProcessData(ns_out, fir_samps_c, fir_samps_c);
                     iq->iq_wr_pos = (iq->iq_wr_pos+1) & (N_DPBUF-1);    // after AGC above
 
                     drm_buf_t *drm_buf = &DRM_SHMEM->drm_buf[rx_chan];
@@ -1332,7 +1308,7 @@ int c2s_sound_camp(rx_chan_t *rxc, conn_t *conn, u1_t flags, char *bp, int bytes
 
         if (!conn_mon->camp_init) {
             //cprintf(conn_mon, ">>> CAMP init rx%d slot=%d/%d\n", rx_chan, i+1, n_camp);
-            double frate = ext_update_get_sample_rateHz(-1);
+            double frate = ext_update_get_sample_rateHz(ADC_CLK_SYS);
             send_msg(conn_mon, SM_SND_DEBUG, "MSG center_freq=%d bandwidth=%d adc_clk_nom=%.0f", (int) ui_srate/2, (int) ui_srate, ADC_CLOCK_NOM);
             send_msg(conn_mon, SM_SND_DEBUG, "MSG audio_camp=0,%d audio_rate=%d sample_rate=%.6f", conn->isLocal, snd_rate, frate);
             send_msg(conn_mon, SM_SND_DEBUG, "MSG audio_adpcm_state=%d,%d", s->adpcm_snd.index, s->adpcm_snd.previousValue);

@@ -131,10 +131,6 @@ function mode_html()
 	w3_div('id-mode w3-hide',
 		'<hr>',
 		w3_div('w3-container',
-		   dbgUs?
-            w3_switch_label('w3-restart w3-margin-B-32 w3-text-teal/w3-label-left w3-label-inline/', 'Use anti-aliased versions?', 'Yes', 'No', 'adm.anti_aliased', adm.anti_aliased, 'admin_radio_YN_cb')
-            : '',
-
          w3_div('w3-flex w3-margin-B-8',
             w3_div('w3-text-teal|width:'+ pwpx, ' '),
             w3_div('w3-text-teal w3-center w3-bold|width:'+ bwpx, 'select FPGA mode'),
@@ -521,7 +517,7 @@ function connect_html()
 			'<header class="w3-container w3-yellow"><h5>' +
 			'If you are not able to make an incoming connection from the Internet to your Kiwi because ' +
 			'of problems <br> with your router or Internet Service Provider (ISP) then please consider using the KiwiSDR ' +
-			'<a href="http://p.sdrotg.com" target="_blank">reverse proxy service</a>.' +
+			'<a href='+ dq('http://'+ admin.proxy_host) +' target="_blank">reverse proxy service</a>.' +
 			'</h5></header>'
 		) +
 		
@@ -624,11 +620,11 @@ function connect_html()
 
    var s4 =
       '<hr>' +
-      w3_divs('/w3-tspace-8',
+      w3_divs('/w3-tspace-16',
          w3_div('w3-container w3-valign',
             '<header class="w3-container w3-yellow"><h6>' +
             'Please read these instructions before use: ' +
-            '<a href="http://p.sdrotg.com" target="_blank">reverse proxy service</a>' +
+            '<a href='+ dq('http://'+ admin.proxy_host) +' target="_blank">reverse proxy service</a>' +
             '</h6></header>'
          ),
 
@@ -640,48 +636,70 @@ function connect_html()
 
 			w3_col_percent('w3-text-teal/w3-container',
 			   w3_div('w3-text-teal w3-bold', 'Reverse proxy configuration'), 50,
-				w3_div('id-proxy-hdr w3-text-teal w3-bold w3-center w3-light-grey', 'Proxy information for p.sdrotg.com'), 50
+				w3_div('id-proxy-hdr w3-text-teal w3-bold w3-center w3-light-grey',
+				   'Proxy information for '+ admin.proxy_host), 50
 			),
-			
-			w3_col_percent('w3-text-teal/w3-container',
-				w3_div(), 50,
-				w3_input_get('', 'User key (see instructions)', 'adm.rev_user', 'connect_rev_user_cb', '', 'required'
-				), 50
-			),
-			
-			w3_col_percent('w3-text-teal/w3-container',
-				w3_div('w3-center w3-tspace-8',
-					w3_button('w3-aqua', 'Click to (re)register', 'connect_rev_register_cb'),
-					w3_div('w3-text-black',
-						'After changing user key or<br>host name click to register proxy.'
-					)
-				), 50,
-				
-			w3_div('',
-               w3_div('w3-show-inline-block|width:60%;',
-                  w3_input_get('', "Host name: a-z, 0-9, -, _<br>(all lower case, see instructions)",
-                     'adm.rev_host', 'connect_rev_host_cb', '', 'required'
+		
+			w3_half('w3-text-teal', 'w3-container',
+			   w3_half('', '',
+               w3_div('w3-center w3-tspace-8',
+                  w3_button('w3-aqua', 'Click to (re)register', 'connect_rev_register_cb'),
+                  w3_div('w3-text-black',
+                     'After changing user key or<br>host name click to register proxy.'
                   )
-               ) +
-               w3_div('id-connect-proxy_server w3-margin-L-8 w3-show-inline-block')
-            ), 50
-			),
-			
-			w3_div('w3-container',
-            w3_label('w3-show-inline-block w3-margin-R-16 w3-text-teal', 'Status:') +
-				w3_div('id-connect-rev-status w3-show-inline-block w3-text-black w3-background-pale-aqua', '')
-			),
+               ),
+               
+               (isString(adm.rev_auto_user))?
+                  w3_div('w3-center w3-tspace-8',
+                     w3_switch_label('w3-center', 'Automatic configuration?', 'Yes', 'No', 'adm.rev_auto', adm.rev_auto, 'connect_auto_proxy_cb'),
+                     w3_div('w3-text-black',
+                        '...<br>...'
+                     )
+                  ) : ''
+			   ),
+			   
+            w3_divs('/w3-tspace-16',
+            
+               // user key
+               w3_input_get('id-proxy-user//|width:70%', 'User key: (see instructions)', 'adm.rev_user', 'connect_rev_user_cb', '', 'required'),
+               w3_div('id-proxy-auto-user w3-hide',
+                  w3_text('w3-bold w3-text-teal', 'User key:'),
+                  w3_text('w3-text-teal', '(automatically generated)')
+               ),
 
+               // host name
+               w3_inline('id-proxy-host w3-valign-end/',
+                  w3_input_get('|width:70%/', "Host name: a-z, 0-9, -, _<br>(all lower case, no leading '-' or digit, see instructions)",
+                     'adm.rev_host', 'connect_rev_host_cb', '', 'required'
+                  ),
+                  w3_div('id-connect-proxy_server w3-margin-L-8 w3-show-inline-block')
+               ),
+
+               w3_inline('id-proxy-auto-host w3-valign-end w3-hide/',
+                  w3_text('w3-bold w3-text-teal', 'Host name:'),
+                  w3_div('',
+                     w3_text('id-proxy-auto-host-name w3-text-teal w3-padding-0', adm.rev_auto_host),
+                     w3_text('id-connect-proxy_server2 w3-text-teal'),
+                     w3_text('w3-text-teal', '(automatically generated)')
+                  )
+               )
+            )
+			),
+		
          w3_half('w3-margin-top w3-margin-bottom w3-text-teal', 'w3-container',
-            w3_div('w3-restart',
+			//w3_div('w3-container',
+            w3_label('w3-show-inline-block w3-margin-R-16 w3-text-teal', 'Status:') +
+				w3_div('id-connect-rev-status w3-show-inline-block w3-text-black w3-background-pale-aqua', ''),
+				
+            w3_div('w3-restart|width:70%;',
                w3_input_get('id-proxy-server', 'Proxy server hostname', 'adm.proxy_server', 'connect_proxy_server_cb'),
                w3_div('w3-text-black',
                   'Change <b>only</b> if you have implemented a private proxy server. <br>' +
-                  'Set to "p.sdrotg.com" for the default proxy service.'
+                  'Set to '+ dq(admin.proxy_host) +' for the default proxy service.'
                )
-            ),
-            w3_div()
-         )
+            )
+			)
+
 		) +
 		'<hr>';
 
@@ -698,11 +716,28 @@ function connect_focus()
    w3_hide('id-proxy-menu');
 	if (cfg.sdr_hu_dom_sel == connect_dom_sel.REV)
 	   ext_send('SET rev_status_query');
+	
+	connect_auto_proxy_cb('id-adm.rev_auto', adm.rev_auto? w3_SWITCH_YES_IDX : w3_SWITCH_NO_IDX);
 }
 
 function connect_blur()
 {
    connect.focus = 0;
+}
+
+function connect_auto_proxy_cb(path, idx, first)
+{
+	idx = +idx;
+	var enabled = (idx == w3_SWITCH_YES_IDX);
+	//console.log('connect_auto_proxy_cb: first='+ first +' enabled='+ enabled);
+	admin_bool_cb(path, enabled, first);
+	
+	w3_hide2('id-proxy-user', enabled);
+	w3_hide2('id-proxy-auto-user', !enabled);
+	w3_hide2('id-proxy-host', enabled);
+	w3_hide2('id-proxy-auto-host', !enabled);
+	
+	connect_rev_register_cb();
 }
 
 function connect_update_url()
@@ -720,6 +755,7 @@ function connect_update_url()
 	w3_el('id-connect-rev-dom').innerHTML = 'Use domain name from reverse proxy configuration below: ' +
 	   w3_div('w3-show-inline-block w3-text-black '+ ok_color, rev_host_fqdn);
 	w3_el('id-connect-proxy_server').innerHTML = '.'+ adm.proxy_server;
+	w3_el('id-connect-proxy_server2').innerHTML = '.'+ adm.proxy_server;
 
    ok = config_net.pub_ip;
    ok_color = ok? 'w3-background-pale-aqua' : 'w3-override-yellow';
@@ -735,9 +771,12 @@ function connect_update_url()
       host_and_port += ':'+ adm.port_ext;
       w3_set_label('Based on above selection, and external port from Network tab, the URL to connect to your Kiwi is:', 'connect-url-text');
    } else {
-      //host_and_port += ':8073';
-      if (adm.port_ext != 8073)
-         host_and_port += ' (proxy always uses port 80 even though your external port is '+ adm.port_ext +')';
+      // using proxy
+      if (admin.proxy_port != 80) {
+         host_and_port += ':'+ admin.proxy_port;
+         if (adm.port_ext != admin.proxy_port)
+            host_and_port += ' (proxy always uses port '+ admin.proxy_port +' even though your external port is '+ adm.port_ext +')';
+      }
       w3_set_label('Based on the above selection the URL to connect to your Kiwi is:', 'connect-url-text');
    }
    
@@ -1662,11 +1701,11 @@ function network_ethernet_mtu(path, idx, first)
 
 function network_port_open_init()
 {
-   // proxy always uses port 80
+   // proxy always uses a fixed port number
    w3_do_when_rendered('id-net-check-port-dom-q',
       function() {
          var el = w3_el('id-net-check-port-dom-q');
-         var port = (cfg.sdr_hu_dom_sel == connect_dom_sel.REV)? 80 : adm.port_ext;
+         var port = (cfg.sdr_hu_dom_sel == connect_dom_sel.REV)? admin.proxy_port : adm.port_ext;
          el.innerHTML =
             (cfg.server_url != '')?
                'http://'+ cfg.server_url +':'+ port +' :' :
@@ -3776,6 +3815,13 @@ function admin_recv(data)
 			case "admin_sdr_mode":
 				admin_sdr_mode = (+param[1])? 1:0;
 				break;
+			
+			case "proxy_url":
+			   var s = kiwi_remove_protocol(decodeURIComponent(param[1])).split(':');
+			   admin.proxy_host = s[0];
+			   admin.proxy_port = s[1];
+			   console.log('PROXY '+ admin.proxy_host +':'+ admin.proxy_port);
+			   break;
 
 			case "is_multi_core":
 				admin.is_multi_core = true;

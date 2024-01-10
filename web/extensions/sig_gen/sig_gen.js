@@ -24,19 +24,13 @@ var gen = {
    RF_TONE: 0x01,
    AF_NOISE: 0x02,
    STEST: 0x04,
-   CICF_SW: 0x08,
-   CICF_HF: 0x10,
-   CICF_FW: 0x20,
    
 	rf_enable: true,
 	sweeping: 0,
-	cicf: 0,
-	cich: 0,
-	cicw: 0,
 
-	attn_offset_val: 0,
-	attn_offset: 1,
-	attn_offset_s: [ 'no offset', 'waterfall' ]
+	attn_offset_val: 11.6,
+	//attn_offset: 1,
+	//attn_offset_s: [ 'no offset', 'S-meter' ]
 };
 
 function sig_gen_main()
@@ -96,7 +90,7 @@ function gen_auth()
 
 function gen_controls_setup()
 {
-	gen.attn_offset_s[1] = 'waterfall cal '+ wf.cal +' dB';
+	//gen.attn_offset_s[1] = 'S-meter cal '+ cfg.S_meter_cal +' dB';
    gen.save_freq = gen.freq;
    var do_sweep = 0, do_help = false;
    
@@ -150,6 +144,8 @@ function gen_controls_setup()
       });
    }
    
+   gen.attn_offset_val = +kiwi_storeGet('sig_gen_offset', 11.6);
+   
 	var controls_html =
 		w3_div('id-test-controls w3-text-white',
 			w3_divs('/w3-tspace-8',
@@ -165,17 +161,15 @@ function gen_controls_setup()
                w3_select('id-gen-mode w3-text-red', 'Mode', '', 'gen.mode', gen.mode, gen.mode_s, 'gen_mode_cb'),
 				   w3_button('w3-red', '-Step', 'gen_step_up_down_cb', -1),
 				   w3_button('w3-green', '+Step', 'gen_step_up_down_cb', +1),
-				   w3_button('id-gen-sweep w3-css-yellow', 'Sweep', 'gen_sweep_cb'),
-               dbgUs? w3_checkbox('w3-label-inline w3-label-not-bold', 'CICF<br>filter', 'gen.cicf', gen.cicf, 'gen_cicf_cb'):'',
-               dbgUs? w3_checkbox('w3-label-inline w3-label-not-bold', 'HW<br>filter', 'gen.cich', gen.cich, 'gen_cich_cb'):'',
-               dbgUs? w3_checkbox('w3-label-inline w3-label-not-bold', 'FW<br>filter', 'gen.cicw', gen.cicw, 'gen_cicw_cb'):''
+				   w3_button('id-gen-sweep w3-css-yellow', 'Sweep', 'gen_sweep_cb')
 				),
 				w3_col_percent('w3-margin-top',
                w3_slider('id-gen-attn//', 'Attenuation', 'gen.attn_dB', gen.attn_dB, 0, gen.attn_dB_max, 5, 'gen_attn_cb'), 35,
                w3_div(''), 10,
                w3_div('',
-				      w3_div('', 'Offset attenuation by:'),
-                  w3_select('w3-text-red w3-width-auto', '', '', 'gen.attn_offset', gen.attn_offset, gen.attn_offset_s, 'gen_attn_offset_cb')
+				      //w3_div('', 'Offset attenuation by:'),
+                  //w3_select('w3-text-red w3-width-auto', '', '', 'gen.attn_offset', gen.attn_offset, gen.attn_offset_s, 'gen_attn_offset_cb')
+                  w3_input('w3-label-bold//w3-padding-small w3-width-64', 'Offset (dB)', 'gen.attn_offset_val', gen.attn_offset_val, 'gen_attn_val_cb')
                ), 55
             )
 			)
@@ -208,8 +202,7 @@ function gen_set(freq, ampl, always)
 
 function gen_run()
 {
-   var run = ((gen.mode == gen.RF)? gen.RF_TONE : ((gen.mode == gen.AF)? gen.AF_NOISE: ((gen.mode == gen.SELF_TEST)? gen.STEST :0))) |
-      (gen.cicf? gen.CICF_SW :0) | (gen.cich? gen.CICF_HF :0) | (gen.cicw? gen.CICF_FW :0);
+   var run = (gen.mode == gen.RF)? gen.RF_TONE : ((gen.mode == gen.AF)? gen.AF_NOISE: ((gen.mode == gen.SELF_TEST)? gen.STEST :0));
    ext_send('SET run='+ run);
 }
 
@@ -222,27 +215,6 @@ function gen_mode_cb(path, idx, first)
 	gen_attn_cb('gen.attn_dB', gen.attn_dB, true);     // add/remove gen.attn_offset_val depending on mode setting
 	gen_set(gen.rf_enable? gen.freq : 0, gen.attn_ampl, true);
    colormap_update();
-   gen_run();
-}
-
-function gen_cicf_cb(path, checked, first)
-{
-   if (first) return;
-   w3_bool_cb(path, checked, first);
-   gen_run();
-}
-
-function gen_cich_cb(path, checked, first)
-{
-   if (first) return;
-   w3_bool_cb(path, checked, first);
-   gen_run();
-}
-
-function gen_cicw_cb(path, checked, first)
-{
-   if (first) return;
-   w3_bool_cb(path, checked, first);
    gen_run();
 }
 
@@ -320,7 +292,8 @@ function gen_sweep_cb(path, val, first)
 function gen_attn_cb(path, val, complete)
 {
    gen.attn_dB = +val;
-	var dB = gen.attn_dB + ((gen.mode == gen.RF || gen.mode == gen.SELF_TEST)? gen.attn_offset_val : 0);
+	//var dB = gen.attn_dB + ((gen.mode == gen.RF || gen.mode == gen.SELF_TEST)? gen.attn_offset_val : 0);
+	var dB = gen.attn_dB - ((gen.mode == gen.RF || gen.mode == gen.SELF_TEST)? gen.attn_offset_val : 0);
 	if (dB < 0) dB = 0;
 	var attn_ampl = Math.pow(10, -dB/20);     // use the amplitude form since we are multipling a signal
 	gen.attn_ampl = Math.round(0x1ffff * attn_ampl);   // hardware gen_attn is 18-bit signed so max pos is 0x1ffff
@@ -336,11 +309,20 @@ function gen_attn_cb(path, val, complete)
 	}
 }
 
+/*
 function gen_attn_offset_cb(path, idx, first)
 {
    idx = +idx;
-   gen.attn_offset_val = (idx == 0)? 0 : wf.cal;
+   gen.attn_offset_val = (idx == 0)? 0 : cfg.S_meter_cal;
    gen_attn_cb('gen.attn_dB', gen.attn_dB, true);
+}
+*/
+
+function gen_attn_val_cb(path, val, first)
+{
+   gen.attn_offset_val = +val;
+   gen_attn_cb('gen.attn_dB', gen.attn_dB, true);
+   kiwi_storeSet('sig_gen_offset', gen.attn_offset_val);
 }
 
 // hook that is called when controls panel is closed

@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 633
+VERSION_MIN = 653
 
 # Caution: software update mechanism depends on format of first two lines in this file
 
@@ -149,11 +149,11 @@ TOOLS_DIR := $(BUILD_DIR)/tools
 DIR_DATA = /tmp/kiwi.data
 
 ifeq ($(OPT),0)
-	OBJ_DIR_DEFAULT = $(OBJ_DIR)
+    OBJ_DIR_DEFAULT = $(OBJ_DIR)
 else ifeq ($(OPT),1)
-	OBJ_DIR_DEFAULT = $(OBJ_DIR)
+    OBJ_DIR_DEFAULT = $(OBJ_DIR)
 else
-	OBJ_DIR_DEFAULT = $(OBJ_DIR_O3)
+    OBJ_DIR_DEFAULT = $(OBJ_DIR_O3)
 endif
 
 PKGS = 
@@ -199,28 +199,28 @@ EXTS = $(INT_EXTS) $(PVT_EXTS)
 
 ifeq ($(OTHER_DIR),)
     GPS = gps gps/ka9q-fec gps/GNSS-SDRLIB
-    RX = rx rx/CuteSDR rx/Teensy rx/wdsp rx/csdr rx/kiwi rx/CMSIS
+-include rx/Makefile
 else
     GPS =
     RX = rx
 endif
 
 ifneq ($(RPI),true)
-	_DIRS = pru $(PKGS)
+    _DIRS = pru $(PKGS)
 endif
 _DIR_PLATFORMS = $(addprefix platform/, ${PLATFORMS})
 _DIRS_O3 += . $(PKGS_O3) platform/common $(_DIR_PLATFORMS) $(EXT_DIRS) $(EXT_SUBDIRS) \
-	$(RX) $(GPS) dev ui init support net web arch/$(ARCH)
+    $(RX) $(GPS) dev ui init support net web arch/$(ARCH)
 
 ifeq ($(OPT),0)
-	DIRS = $(_DIRS) $(_DIRS_O3)
-	DIRS_O3 =
+    DIRS = $(_DIRS) $(_DIRS_O3)
+    DIRS_O3 =
 else ifeq ($(OPT),1)
-	DIRS = $(_DIRS) $(_DIRS_O3)
-	DIRS_O3 =
+    DIRS = $(_DIRS) $(_DIRS_O3)
+    DIRS_O3 =
 else
-	DIRS = $(_DIRS)
-	DIRS_O3 = $(_DIRS_O3)
+    DIRS = $(_DIRS)
+    DIRS_O3 = $(_DIRS_O3)
 endif
 
 VPATH = $(DIRS) $(DIRS_O3) $(EXT_SUBDIRS_KEEP)
@@ -264,7 +264,7 @@ else
 	LIBS += -lfftw3f -lutil
 	LIBS_DEP += /usr/lib/$(LIB_ARCH)/libfftw3f.a
 	CMD_DEPS = $(CMD_DEPS_DEBIAN) /usr/sbin/avahi-autoipd /usr/bin/upnpc /usr/bin/dig /usr/bin/pgmtoppm /sbin/ethtool /usr/bin/sshpass
-	CMD_DEPS += /usr/bin/killall /usr/bin/dtc /usr/bin/curl /usr/bin/wget /usr/bin/htop
+	CMD_DEPS += /usr/bin/killall /usr/bin/dtc /usr/bin/curl /usr/bin/wget /usr/bin/htop /usr/bin/colordiff
 	DIR_CFG = /root/kiwi.config
 	CFG_PREFIX =
 
@@ -349,6 +349,10 @@ $(INSTALL_CERTIFICATES):
 /usr/lib/$(LIB_ARCH)/libfftw3f.a:
 	apt-get -y $(APT_GET_FORCE) install libfftw3-dev
 
+/usr/bin/clang:
+	-apt-get -y $(APT_GET_FORCE) update
+	apt-get -y $(APT_GET_FORCE) install clang
+
 # NB not a typo: "clang-6.0" vs "clang-7"
 
 /usr/bin/clang-6.0:
@@ -377,6 +381,9 @@ $(INSTALL_CERTIFICATES):
 
 /usr/bin/htop:
 	-apt-get -y $(APT_GET_FORCE) install htop
+
+/usr/bin/colordiff:
+	-apt-get -y $(APT_GET_FORCE) install colordiff
 
 /usr/sbin/avahi-autoipd:
 	#-apt-get -y $(APT_GET_FORCE) install avahi-daemon avahi-utils libnss-mdns avahi-autoipd
@@ -469,6 +476,7 @@ V = -Dv$(VERSION_MAJ)_$(VERSION_MIN)
 
 INT_FLAGS += $(VERSION) -DKIWI -DKIWISDR
 INT_FLAGS += -DARCH_$(ARCH) -DCPU_$(CPU) -DARCH_CPU=$(CPU) -DARCH_CPU_S=STRINGIFY\($(CPU)\) $(addprefix -DPLATFORM_,$(PLATFORMS))
+INT_FLAGS += -DARCH_DIR=STRINGIFY\($(ARCH_DIR)\)
 INT_FLAGS += -DDIR_CFG=STRINGIFY\($(DIR_CFG)\) -DDIR_DATA=STRINGIFY\($(DIR_DATA)\) -DCFG_PREFIX=STRINGIFY\($(CFG_PREFIX)\)
 INT_FLAGS += -DBUILD_DIR=STRINGIFY\($(BUILD_DIR)\) -DREPO_NAME=STRINGIFY\($(REPO_NAME)\)  -DREPO_GIT=STRINGIFY\($(REPO_GIT)\)
 
@@ -719,6 +727,7 @@ make_vars: check_device_detect
 	@echo DEBIAN_DEVSYS = $(DEBIAN_DEVSYS)
 	@echo DEBIAN_VERSION = $(DEBIAN_VERSION)
 	@echo DEBIAN_10_AND_LATER = $(DEBIAN_10_AND_LATER)
+	@echo DEBIAN_12_AND_LATER = $(DEBIAN_12_AND_LATER)
 	@echo
 	@echo BBAI_64 = $(BBAI_64)
 	@echo BBAI = $(BBAI)
@@ -1104,7 +1113,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
         DTS = k3-j721e-beagleboneai64-bone-buses.dtsi
         DTS2 = k3-j721e-beagleboneai64.dts
         DIR_DTS = platform/beaglebone_AI64
-        DIR_DTB_BASE = /opt/source/dtb-$(SYS_MAJ).$(SYS_MIN)-ti-arm64
+        DIR_DTB_BASE = $(wildcard /opt/source/dtb-$(SYS_MAJ).$(SYS_MIN)-*)
         DIR_DTB = $(DIR_DTB_BASE)/src/arm64
 
         # re-install device tree if changes made to *.dts source file
@@ -1118,15 +1127,20 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 	        @echo $(SYS_MAJ).$(SYS_MIN) $(SYS)
 	        cp $(DTS_DEP_SRC) $(DIR_DTB)
 	        cp $(DTS2_DEP_SRC) $(DIR_DTB)
-	        (cd $(DIR_DTB_BASE); make all)
-	        (cd $(DIR_DTB_BASE); make install)
+            ifeq ($(DEBIAN_12_AND_LATER),true)
+	            (cd $(DIR_DTB_BASE); make)
+	            (cd $(DIR_DTB_BASE); make install_arm64)
+            else
+	            (cd $(DIR_DTB_BASE); make all)
+	            (cd $(DIR_DTB_BASE); make install)
+            endif
     endif
 
     ifeq ($(BBAI),true)
         DTS = am5729-beagleboneai-kiwisdr-cape.dts
         DTS2 = am5729-beagleboneai.dts
         DIR_DTS = platform/beaglebone_AI
-        DIR_DTB_BASE = /opt/source/dtb-$(SYS_MAJ).$(SYS_MIN)-ti
+        DIR_DTB_BASE = $(wildcard /opt/source/dtb-$(SYS_MAJ).$(SYS_MIN)-*)
         DIR_DTB = $(DIR_DTB_BASE)/src/arm
 
         DTB_KIWI = am5729-beagleboneai-kiwisdr-cape.dtb
@@ -1156,24 +1170,13 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
     endif
 
     ifeq ($(BBG_BBB),true)
-        DTS = cape-bone-kiwi-00A0.dts
-        DTS2 = cape-bone-kiwi-S-00A0.dts cape-bone-kiwi-P-00A0.dts
-        DIR_DTS = platform/beaglebone_black
-        DIR_DTB = /lib/firmware
-
-        # re-install device tree if changes made to *.dts source file
-        $(DTS_DEP_DST): $(DTS_DEP_SRC) $(DTS2_DEP_SRC)
-	        @echo "BBG_BBB: re-install Kiwi device tree to configure GPIO pins"
-	        make install_kiwi_device_tree
-	        touch $(FORCE_REBOOT)
-
         install_kiwi_device_tree:
-	        @echo "BBG_BBB: install Kiwi device tree to configure GPIO pins (but not SPI)"
+	        @echo "BBG_BBB: GPIO at runtime via capemgr, SPI at boottime via uEnv.txt"
 	        -cp --backup=numbered /boot/uEnv.txt /boot/uEnv.txt.save
-	        -sed -i -e 's/^#uboot_overlay_addr4=\/lib\/firmware\/<file4>.dtbo/uboot_overlay_addr4=\/lib\/firmware\/cape-bone-kiwi-00A0.dtbo/' /boot/uEnv.txt
-	        cp $(DTS_DEP_SRC) $(DIR_DTB)
-	        cp $(DTS2_DEP_SRC) $(DIR_DTB)
-#	        (cd /lib/firmware; dtc -O dtb -o cape-bone-kiwi-00A0.dtbo -b 0 -@ cape-bone-kiwi-00A0.dts);
+            # Debian 10
+	        -sed -i -e 's:^#uboot_overlay_addr4=/lib/firmware/<file4>.dtbo:uboot_overlay_addr4=/lib/firmware/cape-bone-kiwi-00A0.dtbo:' /boot/uEnv.txt
+            # Debian 11
+	        -sed -i -e 's:^#uboot_overlay_addr4=<file4>.dtbo:uboot_overlay_addr4=/lib/firmware/cape-bone-kiwi-00A0.dtbo:' /boot/uEnv.txt
     endif
 endif
 
@@ -1270,9 +1273,9 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
 
 	# remainder of "make install" only makes sense to run on target
 else
-    ifneq ($(DTS_DEP_DST),)
-	    @ls -la $(DTS_DEP_DST)
-	    @ls -la $(DTS_DEP_SRC)
+    ifneq ($(DTS_DEP_DST),/)
+	    -@ls -la $(DTS_DEP_DST)
+	    -@ls -la $(DTS_DEP_SRC)
     endif
 # don't strip symbol table while we're debugging daemon crashes
 	install -D -o root -g root $(BUILD_DIR)/kiwid.bin /usr/local/bin/kiwid
@@ -1304,7 +1307,7 @@ endif
 	install -D -o root -g root $(GEN_DIR)/noip2 /usr/local/bin/noip2
 #
 	install -D -o root -g root -m 0644 $(DIR_CFG_SRC)/frpc.template.ini $(DIR_CFG)/frpc.template.ini
-	install -D -o root -g root pkgs/frp/frpc /usr/local/bin/frpc
+	install -D -o root -g root pkgs/frp/$(ARCH_DIR)/frpc /usr/local/bin/frpc
 #
 	install -D -o root -g root -m 0644 unix_env/bashrc ~root/.bashrc
 	install -D -o root -g root -m 0644 unix_env/profile ~root/.profile
@@ -1402,6 +1405,12 @@ endif
 
 endif
 
+ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
+    restore_dx:
+	    cp unix_env/kiwi.config/dist.dx.json ../kiwi.config/dx.json
+	    cp unix_env/kiwi.config/dist.dx_config.json ../kiwi.config/dx_config.json
+endif
+
 
 ################################
 # operation
@@ -1410,6 +1419,10 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 
 enable disable start stop restart status:
 	-systemctl --full --lines=250 $@ kiwid.service || true
+
+stop_disable:
+	-systemctl --full --lines=250 stop kiwid.service || true
+	-systemctl --full --lines=250 disable kiwid.service || true
 
 avahi-enable avahi-disable avahi-start avahi-stop avahi-status:
 	-systemctl --full --lines=250 $(subst avahi-,,$@) avahi-daemon.service || true
@@ -1706,18 +1719,21 @@ copy_from_git:
 	make clean_dist
 	rsync -av --delete --exclude .git --exclude .DS_Store $(GITAPP)/$(REPO_NAME)/. .
 
-# used by gdiff alias
-gitdiff:
-	colordiff -br --exclude=.DS_Store --exclude=.git "--exclude=*.min.*" $(GITAPP)/$(REPO_NAME) . || true
-gitdiff_context:
-	colordiff -br -C 10 --exclude=.DS_Store --exclude=.git "--exclude=*.min.*" $(GITAPP)/$(REPO_NAME) . || true
-gitdiff_brief:
-	colordiff -br --brief --exclude=.DS_Store --exclude=.git $(GITAPP)/$(REPO_NAME) . || true
-gitdiff_no_big:
-	colordiff -br --exclude=.DS_Store --exclude=.git "--exclude=*.min.*" "--exclude=*.json" --exclude=EiBi.h --exclude=sked-current.csv $(GITAPP)/$(REPO_NAME) . || true
+# used by gdiff et al aliases
+GITDIFF_EXCLUDE := --exclude=.DS_Store --exclude=.git \
+    --exclude=k --exclude=d --exclude=g --exclude=n --exclude=ng
+GITDIFF_EXCLUDE2 := $(GITDIFF_EXCLUDE) --exclude="*.min.*"
 
+gitdiff:
+	colordiff -br $(GITDIFF_EXCLUDE2) $(GITAPP)/$(REPO_NAME) . || true
+gitdiff_context:
+	colordiff -br -C 10 $(GITDIFF_EXCLUDE2) $(GITAPP)/$(REPO_NAME) . || true
+gitdiff_brief:
+	colordiff -br --brief $(GITDIFF_EXCLUDE) $(GITAPP)/$(REPO_NAME) . || true
+gitdiff_no_big:
+	colordiff -br $(GITDIFF_EXCLUDE2) --exclude="*.json" --exclude=EiBi.h --exclude=sked-current.csv $(GITAPP)/$(REPO_NAME) . || true
 gitdiff2:
-	colordiff -br --exclude=.DS_Store --exclude=.git "--exclude=*.min.*" ../../../sdr/KiwiSDR/$(REPO_NAME) . || true
+	colordiff -br $(GITDIFF_EXCLUDE2) ../../../sdr/KiwiSDR/$(REPO_NAME) . || true
 
 endif
 

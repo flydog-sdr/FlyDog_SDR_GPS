@@ -58,7 +58,7 @@ var kiwi = {
 
    queued: 0,
    
-   // CAUTION: must match order in kiwi.h
+   // CAUTION: must match order in mode.h
    // CAUTION: add new entries at the end
    modes_lc: [ 'am', 'amn', 'usb', 'lsb', 'cw', 'cwn', 'nbfm', 'iq', 'drm',
               'usn', 'lsn', 'sam', 'sau', 'sal', 'sas', 'qam', 'nnfm' ],
@@ -123,6 +123,12 @@ var kiwi = {
    bands_community: null,
    
    rf_attn: 0,
+   
+   freq_memory: [],
+   freq_memory_menu_shown: 0,
+   fmem_auto_save: 1,
+   fmem_mode_save: 0,
+   fmem_arr: null,
    
    no_reopen_retry: false,
    _ver_: 1.578,
@@ -512,8 +518,8 @@ function kiwi_get_init_settings()
 ////////////////////////////////
 
 var cfg = {};
-var dxcfg = {};
-var dxcomm_cfg = {};    // read-only, doesn't appear in cfg_save_json()
+var dxcfg = null;
+var dxcomm_cfg = null;     // read-only, doesn't appear in cfg_save_json()
 var adm = {};
 
 function config_save(cfg_s, cfg)
@@ -562,6 +568,7 @@ function cfg_save_json(id, path, val)
    
 	//console.log('cfg_save_json: BEGIN from='+ id +' path='+ path + (isArg(val)? (' val='+ val) : ''));
 	//if (path.includes('kiwisdr_com_register')) kiwi_trace();
+	//if (path.includes('rev_')) kiwi_trace();
 
 	var s;
 	if (path.startsWith('adm.')) {
@@ -2973,7 +2980,6 @@ function kiwi_msg(param, ws)
             //console.log('### DELAYED load_cfg '+ ws.stream +' '+ cfg_json.length);
             cfg = kiwi_JSON_parse('load_cfg', cfg_json);
             kiwi_init_cfg(ws.stream);
-            owrx_init_cfg();
          //}, 2000);
 			break;
 
@@ -3025,6 +3031,11 @@ function kiwi_msg(param, ws)
 			var adm_json = decodeURIComponent(param[1]);
 			console.log('### load_adm '+ ws.stream +' '+ adm_json.length);
 			adm = kiwi_JSON_parse('load_adm', adm_json);
+			break;
+		
+		case "cfg_loaded":
+			console.log('### cfg_loaded');
+         owrx_init_cfg();
 			break;
 		
 		case "no_admin_conns":

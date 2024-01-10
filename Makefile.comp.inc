@@ -61,6 +61,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
         BBG_BBB := $(and $(if $(BBAI_64),,true), $(if $(BBAI),,true), $(if $(RPI),,true))
         DEBIAN_VERSION := $(shell cat $(KIWI_XC_REMOTE_FS)/etc/debian_version | sed "s/\([0-9]*\)\..*/\1/")
         DEBIAN_10_AND_LATER := $(shell [ $(DEBIAN_VERSION) -ge 10 ] && echo true)
+        DEBIAN_12_AND_LATER := $(shell [ $(DEBIAN_VERSION) -ge 12 ] && echo true)
 
         CC = clang
         CPP = clang++
@@ -84,16 +85,16 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
         OPT = 0
         CFLAGS += -DDEVSYS
         
-        # stops incorrect/pesky warnings:
-        # warning: 'sscanf' may overflow; destination buffer in argument 3 has size 8, but the corresponding specifier may require size 33 [-Wfortify-source]
-        # for sscanf("%m", (char **) &alloced_str_ptr)
-        CFLAGS += -Wno-fortify-source
-
         # platform choice when building on development machine
         BBAI_64 := 
         BBAI := 
         RPI := 
         BBG_BBB := $(and $(if $(BBAI_64),,true), $(if $(BBAI),,true), $(if $(RPI),,true))
+
+        # stops incorrect warning for GNU %Nms / %Nm[ automatic string alloc:
+        # warning: 'sscanf' may overflow; destination buffer in argument 3 has size 8, but the corresponding specifier may require size 33 [-Wfortify-source]
+        # for sscanf(s, "%32m", (char **) &alloced_str_ptr)
+        CFLAGS += -Wno-fortify-source
 
         ifeq ($(UNAME),Darwin)
             CC = clang
@@ -121,6 +122,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 
     DEBIAN_VERSION := $(shell cat /etc/debian_version | sed "s/\([0-9]*\)\..*/\1/")
     DEBIAN_10_AND_LATER := $(shell [ $(DEBIAN_VERSION) -ge 10 ] && echo true)
+    DEBIAN_12_AND_LATER := $(shell [ $(DEBIAN_VERSION) -ge 12 ] && echo true)
 
     ifeq ($(BBAI_64),true)
         ifeq ($(DEBIAN_VERSION),11)
@@ -129,8 +131,16 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
             VIS_OPT = -Ofast
             # needed for iq_display.cpp et al
             CPP_FLAGS += -std=gnu++11
-            # clang still used by other things (e_cpu etc)
             CMD_DEPS_DEBIAN := /usr/bin/clang-11
+        else
+            # Debian 12+
+            CC = clang
+            CPP = clang++
+            VIS_OPT = -Ofast
+            # needed for iq_display.cpp et al
+            CPP_FLAGS += -std=gnu++11
+            CPP_FLAGS += -Wno-fortify-source
+            CMD_DEPS_DEBIAN := /usr/bin/clang
         endif
     else ifeq ($(BBAI),true)
         ifeq ($(DEBIAN_VERSION),10)
@@ -139,7 +149,6 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
             VIS_OPT = -Ofast
             # needed for iq_display.cpp et al
             CPP_FLAGS += -std=gnu++11
-            # clang still used by other things (e_cpu etc)
             CMD_DEPS_DEBIAN := /usr/bin/clang-7
         else ifeq ($(DEBIAN_VERSION),9)
             CC = clang-7
@@ -147,8 +156,16 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
             VIS_OPT = -Ofast
             # needed for iq_display.cpp et al
             CPP_FLAGS += -std=gnu++11
-            # clang still used by other things (e_cpu etc)
             CMD_DEPS_DEBIAN := /usr/bin/clang-7
+        else
+            # Debian 12+
+            CC = clang
+            CPP = clang++
+            VIS_OPT = -Ofast
+            # needed for iq_display.cpp et al
+            CPP_FLAGS += -std=gnu++11
+            CPP_FLAGS += -Wno-fortify-source
+            CMD_DEPS_DEBIAN := /usr/bin/clang
         endif
     else ifeq ($(RPI),true)
         CMD_DEPS_DEBIAN := /usr/bin/clang-11
@@ -165,7 +182,6 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
             VIS_OPT = -Ofast
             # needed for iq_display.cpp et al
             CPP_FLAGS += -std=gnu++11
-            # clang still used by other things (e_cpu etc)
             CMD_DEPS_DEBIAN := /usr/bin/clang-11
         else ifeq ($(DEBIAN_VERSION),10)
             CC = clang-8
@@ -197,7 +213,14 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
             CPP_FLAGS += -std=gnu++0x
             APT_GET_FORCE = --force-yes
         else
-            BAD_DEV_DETECT := true
+            # Debian 12+
+            CC = clang
+            CPP = clang++
+            VIS_OPT = -Ofast
+            # needed for iq_display.cpp et al
+            CPP_FLAGS += -std=gnu++11
+            CPP_FLAGS += -Wno-fortify-source
+            CMD_DEPS_DEBIAN := /usr/bin/clang
         endif
     endif
 endif
@@ -211,7 +234,7 @@ ifeq ($(BBAI_64),true)
     FP_FLAGS += -mtune=cortex-a72 -mcpu=cortex-a72
     #FP_FLAGS += -mfpu=neon-vfpv4 -mfloat-abi=hard
     INSTALL_KIWI_DEVICE_TREE = true
-    ARM_DIR = arm64
+    ARCH_DIR = arm64
     LIB_ARCH = aarch64-linux-gnu
 else ifeq ($(BBAI),true)
     ARCH := sitara
@@ -221,7 +244,7 @@ else ifeq ($(BBAI),true)
     FP_FLAGS += -mtune=cortex-a15 -mcpu=cortex-a15
     FP_FLAGS += -mfpu=neon-vfpv4 -mfloat-abi=hard
     INSTALL_KIWI_DEVICE_TREE = true
-    ARM_DIR = arm32
+    ARCH_DIR = arm32
     LIB_ARCH = arm-linux-gnueabihf
 else ifeq ($(RPI),true)
     ARCH := omap
@@ -230,7 +253,7 @@ else ifeq ($(RPI),true)
     CFLAGS += -DMULTI_CORE
     FP_FLAGS += -mtune=cortex-a53 -mcpu=cortex-a53
     FP_FLAGS += -mfpu=neon -mfloat-abi=hard
-    ARM_DIR = arm32
+    ARCH_DIR = arm32
     LIB_ARCH = arm-linux-gnueabihf
 else ifeq ($(BBG_BBB),true)
     ARCH := sitara
@@ -245,7 +268,7 @@ else ifeq ($(BBG_BBB),true)
     ifeq ($(DEBIAN_10_AND_LATER),true)
         INSTALL_KIWI_DEVICE_TREE = true
     endif
-    ARM_DIR = arm32
+    ARCH_DIR = arm32
     LIB_ARCH = arm-linux-gnueabihf
 else
     BAD_DEV_DETECT := true
@@ -274,6 +297,9 @@ endif
 # Generally, masan/masan0 results in code that is too slow, but masan1 is not over-optimized
 # to the point gdb variable inspection becomes useless. So try masan1 for best results.
 # Use gdb "asan" alias to set breakpoint necessary to backtrace address sanitizer errors.
+#
+# The leak sanitizer cannot be used with gdb. Use alias "leaks" to enable, "qleaks" to query status.
+# Use admin server restart button to force server exit and leak post-processing to run.
 ifeq ($(ASAN),1)
     ifeq ($(OPT),0)
         VIS_OPT = -fsanitize=address

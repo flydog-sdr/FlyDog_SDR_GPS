@@ -310,6 +310,10 @@ input[type=range]::-moz-range-thumb {
 	justify-content: flex-start;
 }
 
+.w3-text-top {
+    vertical-align: top
+}
+
 
 /* overrides w3-show/hide-* above (last one wins) */
 
@@ -397,6 +401,16 @@ input[type=range]::-moz-range-thumb {
 .w3int-margin-input
 {
     margin-left: 16px
+}
+
+.w3-margin-3
+{
+    margin: 3px !important
+}
+
+.w3-margin-4
+{
+    margin: 4px !important
 }
 
 .w3-margin-8
@@ -699,6 +713,11 @@ input[type=range]::-moz-range-thumb {
     padding: 3px 6px
 }
 
+.w3-padding-0
+{
+    padding: 0
+}
+
 .w3-padding-L-16
 {
     padding-left: 16px
@@ -748,6 +767,12 @@ input[type=range]::-moz-range-thumb {
 .w3-padding-T-1
 {
     padding-top: 1px
+}
+
+.w3-padding-TB-0
+{
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
 }
 
 .w3-padding-TB-7

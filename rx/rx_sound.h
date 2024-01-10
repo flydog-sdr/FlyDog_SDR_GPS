@@ -88,7 +88,7 @@ typedef struct {
     u4_t firewall[32];
 	u4_t seq;
 	bool isSAM;
-	float norm_locut, norm_hicut;
+	float norm_locut, norm_hicut, norm_pbc;
     int window_func;
 	ima_adpcm_state_t adpcm_snd;
 
@@ -97,18 +97,16 @@ typedef struct {
 	u4_t specAF_last_ms;
     bool isChanNull;
 	
-    #ifdef OPTION_EXPERIMENT_CICF
-        bool cicf_setup;
-        bool cicf_run;
-    #endif
-
     #ifdef SND_SEQ_CHECK
         bool snd_seq_ck_init;
 	    u4_t snd_seq_ck;
     #endif
 
+	ext_receive_FFT_samps_t rsid_FFT;
+
 	double freq, gen, locut, hicut;
 	int mode, genattn, mute, test, deemp, deemp_nfm;
+	bool gen_enable;
 	u4_t mparam, SAM_mparam;
 	bool spectral_inversion;
     u4_t cmd_recv;
@@ -117,6 +115,11 @@ typedef struct {
 	int compression;
 	bool little_endian;
 	int mute_overload;      // activate the muting when overloaded
+	float rf_attn_dB;
+
+    bool   gps_init;
+	double gpssec;       // current gps timestamp
+	double last_gpssec;  // last gps timestamp
 
 	int agc, _agc, hang, _hang;
 	int thresh, _thresh, manGain, _manGain, slope, _slope, decay, _decay;
