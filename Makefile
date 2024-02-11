@@ -1129,7 +1129,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
     $(DO_ONCE):
 	    @mkdir -p $(DIR_CFG)
 	    @touch $(DO_ONCE)
-	    make install_kiwi_device_tree
+	    #make install_kiwi_device_tree
 	    @touch $(FORCE_REBOOT)
 
     ifeq ($(BBAI_64),true)
