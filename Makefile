@@ -1130,7 +1130,7 @@ ifeq ($(DEBIAN_DEVSYS),$(DEBIAN))
 	    @mkdir -p $(DIR_CFG)
 	    @touch $(DO_ONCE)
 	    #make install_kiwi_device_tree
-	    @touch $(FORCE_REBOOT)
+	    #@touch $(FORCE_REBOOT)
 
     ifeq ($(BBAI_64),true)
         DTS = k3-j721e-beagleboneai64.dts k3-j721e-beagleboneai64-bone-buses.dtsi
