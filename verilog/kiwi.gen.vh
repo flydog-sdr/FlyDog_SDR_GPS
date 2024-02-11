@@ -296,7 +296,6 @@
 	localparam CTRL_4000 = 14;    // DEFb: bit number for value: 0x4000
 	localparam CTRL_8000 = 15;    // DEFb: bit number for value: 0x8000
 	localparam CTRL_UNUSED_OUT = 9;    // DEFb: bit number for value: 0x200
-	localparam CTRL_GEN_FIR = 7;    // DEFb: bit number for value: 0x80
 
 
 // from verilog/kiwi.inline.vh

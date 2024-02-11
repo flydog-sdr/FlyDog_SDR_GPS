@@ -342,6 +342,7 @@ void update_vars_from_config(bool called_at_init)
     cfg_default_int("init.colormap", 0, &update_cfg);
     cfg_default_int("init.aperture", 1, &update_cfg);
     cfg_default_float("init.rf_attn", 0, &update_cfg);
+    cfg_default_int("rf_attn_allow", 1, &update_cfg);
     cfg_default_int("S_meter_OV_counts", 10, &update_cfg);
     cfg_default_bool("webserver_caching", true, &update_cfg);
     max_thr = (float) cfg_default_int("overload_mute", -15, &update_cfg);
@@ -560,10 +561,13 @@ void update_vars_from_config(bool called_at_init)
     admcfg_default_string("ip_address.dns1", "1.1.1.1", &update_admcfg);
     admcfg_default_string("ip_address.dns2", "8.8.8.8", &update_admcfg);
     admcfg_default_string("url_redirect", "", &update_admcfg);
+
     admcfg_default_bool("ip_blacklist_auto_download", true, &update_admcfg);
     admcfg_default_string("ip_blacklist", "47.88.219.24/24", &update_admcfg);
     admcfg_default_string("ip_blacklist_local", "", &update_admcfg);
     admcfg_default_int("ip_blacklist_mtime", 0, &update_admcfg);
+    net.ip_blacklist_port_only = admcfg_default_int("ip_blacklist_port", 0, &update_admcfg);
+
     admcfg_default_bool("no_dup_ip", false, &update_admcfg);
     admcfg_default_bool("my_kiwi", true, &update_admcfg);
     admcfg_default_bool("onetime_password_check", false, &update_admcfg);

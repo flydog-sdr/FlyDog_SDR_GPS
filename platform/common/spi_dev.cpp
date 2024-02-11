@@ -171,6 +171,14 @@ void spi_dev(SPI_SEL sel, SPI_MOSI *mosi, int tx_xfers, SPI_MISO *miso, int rx_x
     }
 }
 
+void spi_dev_mode(int spi_mode)
+{
+    u1_t mode = spi_mode | NOT(SPI_CS_HIGH) | NOT(SPI_NO_CS) | NOT(SPI_LSB_FIRST), check_mode;
+    if (ioctl(spi_fd, SPI_IOC_WR_MODE, &mode) < 0) sys_panic("SPI_IOC_WR_MODE");
+    if (ioctl(spi_fd, SPI_IOC_RD_MODE, &check_mode) < 0) sys_panic("SPI_IOC_RD_MODE");
+    lprintf("SPIDEV: spi_mode 0x%x|0x%x\n", mode, check_mode);
+}
+
 static void _spi_dev_init(int spi_clkg, int spi_speed)
 {
 	// if not overridden in command line, set SPI speed according to configuration param
@@ -225,14 +233,15 @@ static void _spi_dev_init(int spi_clkg, int spi_speed)
 		check_speed = 0;
 		if (ioctl(spi_fd, SPI_IOC_RD_MAX_SPEED_HZ, &check_speed) < 0) sys_panic("SPI_IOC_RD_MAX_SPEED_HZ");
 		check(max_speed == check_speed);
+
 		char bpw = SPI_BPW, check_bpw;
 		if (ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &bpw) < 0) sys_panic("SPI_IOC_WR_BITS_PER_WORD");
 		check_bpw = -1;
 		if (ioctl(spi_fd, SPI_IOC_RD_BITS_PER_WORD, &check_bpw) < 0) sys_panic("SPI_IOC_RD_BITS_PER_WORD");
 		check(bpw == check_bpw);
-		printf("SPIDEV: max_speed %d bpw %d\n", check_speed, check_bpw);
-		u4_t mode = SPI_MODE_0 | NOT(SPI_CS_HIGH) | NOT(SPI_NO_CS) | NOT(SPI_LSB_FIRST);
-		if (ioctl(spi_fd, SPI_IOC_WR_MODE, &mode) < 0) sys_panic("SPI_IOC_WR_MODE");
+		lprintf("SPIDEV: max_speed %d bpw %d\n", check_speed, check_bpw);
+
+        spi_dev_mode(SPI_SETUP_MODE);
 	} else {
 
 	    #ifdef CPU_AM3359
@@ -265,6 +274,27 @@ void spi_dev_init(int spi_clkg, int spi_speed)
         #endif
     #endif
 
+        _spi_dev_init(spi_clkg, spi_speed);
+
+    #ifdef CPU_AM5729
+        #if 0
+            real_printf("after spi_dev_init SPI2_CHxCONF: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+                SPIn_CONF(0), SPIn_CONF(1), SPIn_CONF(2), SPIn_CONF(3));
+            real_printf("after spi_dev_init SPI2_CHxCTRL: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+                SPIn_CTRL(0), SPIn_CTRL(1), SPIn_CTRL(2), SPIn_CTRL(3));
+            conf = SPI0_CONF;
+            conf |=  0x00060000;  // ~IS ~DPE1
+            conf &= ~0x00010000;  // DPE0
+            SPI0_CONF = conf;
+            real_printf("after force2 SPI2_CH0CONF=0x%08x\n", SPI0_CONF);
+        #endif
+    #endif
+}
+
+// NB: start of SPI async task MUST be delayed until fpga init has
+// finished with all calls to spi_dev_mode()
+void spi_dev_init2()
+{
     #ifdef SPI_SHMEM_DISABLE
         printf("SPI: CPU_%s SPI_SHMEM_DISABLE\n", ARCH_CPU_S);
     #else
@@ -283,25 +313,14 @@ void spi_dev_init(int spi_clkg, int spi_speed)
             use_spidev = 1;
             use_async = 1;
         #endif
-    #endif
 
-        _spi_dev_init(spi_clkg, spi_speed);
+        #ifdef CPU_TDA4VM
+            use_spidev = 1;
+            use_async = 1;
+        #endif
+    #endif
 
         if (use_async) {
             shmem_ipc_setup("kiwi.spi", SIG_IPC_SPI, spi_dev_func);
         }
-
-    #ifdef CPU_AM5729
-        #if 0
-            real_printf("after spi_dev_init SPI2_CHxCONF: 0x%08x 0x%08x 0x%08x 0x%08x\n",
-                SPIn_CONF(0), SPIn_CONF(1), SPIn_CONF(2), SPIn_CONF(3));
-            real_printf("after spi_dev_init SPI2_CHxCTRL: 0x%08x 0x%08x 0x%08x 0x%08x\n",
-                SPIn_CTRL(0), SPIn_CTRL(1), SPIn_CTRL(2), SPIn_CTRL(3));
-            conf = SPI0_CONF;
-            conf |=  0x00060000;  // ~IS ~DPE1
-            conf &= ~0x00010000;  // DPE0
-            SPI0_CONF = conf;
-            real_printf("after force2 SPI2_CH0CONF=0x%08x\n", SPI0_CONF);
-        #endif
-    #endif
 }

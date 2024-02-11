@@ -26,10 +26,10 @@
     #define PIN_IO_PULLUP	    (INPUT_EN | PULL_UP)
     #define PIN_IO_PULLDOWN	    (INPUT_EN | PULL_DOWN)
 
-    #define PIN_SPI_CS0         (OUTPUT_SLOW | INPUT_DISABLE | PULL_UP)     // PIN_OUT_PULLUP
-    #define PIN_SPI_CLK	        (OUTPUT_SLOW | INPUT_EN | PULL_UP)          // PIN_IO_PULLUP
-    #define PIN_SPI_MOSI        (OUTPUT_SLOW | INPUT_DISABLE | PULL_DOWN)   // PIN_OUT_PULLDOWN
-    #define PIN_SPI_MISO        (INPUT_EN | OUTPUT_DISABLE | PULL_DOWN)     // PIN_IN_PULLDOWN
+    #define PIN_SPI_CS0         (INPUT_DISABLE | PULL_UP)   // PIN_OUT_PULLUP
+    #define PIN_SPI_CLK	        (INPUT_EN | PULL_UP)        // PIN_IO_PULLUP
+    #define PIN_SPI_MOSI        (INPUT_DISABLE | PULL_UP)   // PIN_OUT_PULLUP
+    #define PIN_SPI_MISO        (INPUT_EN | OUTPUT_DISABLE | PULL_UP)  // PIN_IN_PULLUP
 #endif
 
 /********/
@@ -1364,10 +1364,10 @@ bone_i2c_1: &main_i2c6 {
 
 bone_i2c_2: &main_i2c2 {
 	pinctrl-names = "default";
-    pinctrl-0 = <
-        &P9_20_i2c_pin /* i2c2_sda */
-        &P9_19_i2c_pin /* i2c2_scl */
-    >;
+	pinctrl-0 = <
+		&P9_20_i2c_pin /* i2c2_sda */
+		&P9_19_i2c_pin /* i2c2_scl */
+	>;
 	clock-frequency = <100000>;
 
 	symlink = "bone/i2c/2";

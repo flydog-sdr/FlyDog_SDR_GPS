@@ -734,6 +734,7 @@ function canvas_log_clear()
 
 function canvas_log(s)
 {
+   if (!isString(s)) s = s.toString();
    if (isUndefined(owrx.news_acc_s)) owrx.news_acc_s = '<br>';
 
    if (s == '\f') {
@@ -1196,6 +1197,23 @@ function kiwi_host()
 function kiwi_remove_protocol(url)
 {
    return url.replace(/^http:\/\//, '').replace(/^https:\/\//, '');
+}
+
+function kiwi_reload_page(obj)   // { url, hp, path, qs, tab }
+{
+   var url = w3_opt(obj, 'url', null);
+   if (isNull(url)) {
+      var host_port = w3_opt(obj, 'hp', kiwi_host_port());
+      var pathname = w3_opt(obj, 'path', '', '/');
+      var query_string = w3_opt(obj, 'qs', '', '/?');
+      url = kiwi_SSL() + host_port + pathname + query_string;
+   }
+   console.log('kiwi_reload_page: '+ url);
+   if (w3_opt(obj, 'tab')) {
+      window.open(url, '_blank');
+   } else {
+      window.location.href = url;
+   }
 }
 
 function kiwi_add_end(s, end)
@@ -1736,8 +1754,8 @@ function kiwi_ajax_prim(method, data, url, callback, cb_param, timeout, progress
             } else {
                var firstChar = response.charAt(0);
          
-               if (firstChar != '{' && firstChar != '[' && !(firstChar >= '0' && firstChar <= '9')) {
-                  dbug("AJAX: response didn't begin with JSON '{', '[' or digit? "+ response);
+               if (firstChar != '{' && firstChar != '[' && firstChar != '"' && !(firstChar >= '0' && firstChar <= '9')) {
+                  dbug("AJAX: response didn't begin with JSON '{' '[' '\"' or digit? "+ response);
                   obj = { AJAX_error:'JSON prefix', response:response };
                } else {
                   try {
@@ -1880,12 +1898,16 @@ function page_draw_pie(which_s) {
 		which.reload_rem--;
 		kiwi_draw_pie(id_which('pie'), which.pie_size, (which.reload_secs - which.reload_rem) / which.reload_secs);
 	} else {
-	   try {
-		   window.location.reload(true);
-		} catch(ex) {
-		   console.log('RELOAD FAILED?');
-		   console.log(ex);
-		}
+	   if (kiwi.reload_url) {
+	      kiwi_reload_page({ url:kiwi.reload_url });
+	   } else {
+         try {
+            window.location.reload(true);
+         } catch(ex) {
+            console.log('RELOAD FAILED?');
+            console.log(ex);
+         }
+      }
 	}
 };
 
@@ -1934,7 +1956,7 @@ function enc(s) { return s.replace(/./gi, function(c) { return String.fromCharCo
 var sendmail = function (to, subject) {
 	var s = "mailto:"+ enc(decodeURIComponent(to)) + (isDefined(subject)? ('?subject='+subject):'');
 	//console.log(s);
-	window.location.href = s;
+   kiwi_reload_page({ url:s });
 }
 
 function line_stroke(ctx, vert, linew, color, x1,y1,x2,y2)
@@ -1984,7 +2006,7 @@ function msg_send(s)
    return -1;
 }
 
-function open_websocket(stream, open_cb, open_cb_param, msg_cb, recv_cb, error_cb, close_cb)
+function open_websocket(stream, open_cb, open_cb_param, msg_cb, recv_cb, error_cb, close_cb, opt)
 {
 	if (!("WebSocket" in window) || !("CLOSING" in WebSocket)) {
 		console.log('WEBSOCKET TEST');
@@ -1993,7 +2015,8 @@ function open_websocket(stream, open_cb, open_cb_param, msg_cb, recv_cb, error_c
 	}
 
 	// replace http:// with ws:// on the URL that includes the port number
-	var ws_url = kiwi_url_origin().split("://")[1];
+	var opt_url = w3_opt(opt, 'url');
+	var ws_url = isNonEmptyString(opt_url)? opt_url : kiwi_url_origin().split("://")[1];
 	
 	// evaluate ws protocol
 	var ws_protocol = 'ws://';
@@ -2003,7 +2026,12 @@ function open_websocket(stream, open_cb, open_cb_param, msg_cb, recv_cb, error_c
 	}
 	
 	var no_wf = (window.location.href.includes('?no_wf') || window.location.href.includes('&no_wf'));
-	ws_url = ws_protocol + ws_url +'/'+ (no_wf? 'no_wf/':'kiwi/') + kiwi.conn_tstamp +'/'+ stream;
+	var tstamp = (w3_opt(opt, 'new_ts') == true)? ((new Date()).getTime()) : kiwi.conn_tstamp;
+	ws_url = ws_protocol + ws_url +'/'+ (no_wf? 'no_wf/':'kiwi/') + tstamp +'/'+ stream;
+	var qs = w3_opt(opt, 'qs');
+	if (isString(qs))
+	   ws_url += '?'+ qs;
+	else
 	if (isNonEmptyString(window.location.search))
 	   ws_url += window.location.search;      // pass query string to support "&foff="
 	if (no_wf) wf.no_wf = true;
@@ -2017,6 +2045,7 @@ function open_websocket(stream, open_cb, open_cb_param, msg_cb, recv_cb, error_c
 	ws.open_cb = open_cb;
 	ws.open_cb_param = open_cb_param;
 	ws.msg_cb = msg_cb;
+	ws.all_msg_cb = w3_opt(opt, 'all_msg_cb', null)
 	ws.recv_cb = recv_cb;
 	ws.error_cb = error_cb;
 	ws.close_cb = close_cb;
@@ -2112,14 +2141,18 @@ function on_ws_recv(evt, ws)
 				kiwi_flush_recv_input = false;
 			}
 			
-			claimed = kiwi_msg(msg_a, ws);
-			if (claimed == false) {
-			   if (ws.msg_cb) {
-               //if (ws.stream == 'EXT')
-               //console.log('>>> '+ ws.stream + ': not kiwi_msg: msg_cb='+ typeof(ws.msg_cb) +' '+ params[i]);
-               claimed = ws.msg_cb(msg_a, ws);
+			if (ws.all_msg_cb) {
+            claimed = ws.all_msg_cb(msg_a, ws);
+			} else {
+            claimed = kiwi_msg(msg_a, ws);
+            if (claimed == false) {
+               if (ws.msg_cb) {
+                  //if (ws.stream == 'EXT')
+                  //console.log('>>> '+ ws.stream + ': not kiwi_msg: msg_cb='+ typeof(ws.msg_cb) +' '+ params[i]);
+                  claimed = ws.msg_cb(msg_a, ws);
+               }
             }
-			}
+         }
 			
          if (claimed == false)
             console.log('>>> '+ ws.stream + ': message not claimed: '+ params[i]);

@@ -3,14 +3,16 @@
 
 # NB: this distro image is a flasher
 
-VER="v1.486"
-DEBIAN_VER="10.11"
-CKSUM="676301a5ad0c52417011fd257da9ffa3106ad33af41c8b2273d49d44527e14f3"
+PLAT="BBG_BBB"
+VER="v1.661"
+DEBIAN_VER="11.8"
+CKSUM="c6e26124933ffb01f8353895af2951a1e0ad3715716c28da6c864e92e7254c2d"
 
 HOST="http://kiwisdr.com/files"
-DISTRO="KiwiSDR_${VER}_BBB_Debian_${DEBIAN_VER}.img.xz"
+DISTRO="KiwiSDR_${VER}_${PLAT}_Debian_${DEBIAN_VER}.img.xz"
+DISTRO_FILE="/root/${DISTRO}"
 
-echo "--- get KiwiSDR Debian ${DEBIAN_VER} distro image from net and create micro-SD flasher"
+echo "--- get KiwiSDR ${PLAT} Debian ${DEBIAN_VER} distro image from net and create micro-SD flasher"
 echo -n "--- hit enter to proceed: "; read not_used
 
 rv=$(which xzcat || true)
@@ -21,14 +23,14 @@ if test "x$rv" = "x" ; then
     apt-get -y install xz-utils
 fi
 
-if test ! -f ${DISTRO} ; then
+if test ! -f ${DISTRO_FILE} ; then
 	echo "--- getting distro"
-	wget ${HOST}/${DISTRO}
+	curl --output ${DISTRO_FILE} ${HOST}/${DISTRO}
 else
 	echo "--- already seem to have the distro file, verify checksum below to be sure"
 fi
 echo "--- computing checksum..."
-sha256sum ${DISTRO}
+sha256sum ${DISTRO_FILE}
 echo "--- verify above checksum against:"
 echo ${CKSUM} " correct checksum"
 echo -n "--- hit enter when ready: "; read not_used
@@ -62,7 +64,9 @@ echo "--- CHECK lsblk ABOVE THAT ${destination} IS THE CORRECT DEVICE BEFORE PRO
 echo -n "--- hit enter when ready: "; read not_used
 
 echo "--- copying to micro-SD card, will take about 10 minutes"
-xzcat -v ${DISTRO} | dd of=${destination}
+xzcat -v ${DISTRO_FILE} | dd of=${destination}
+blockdev --flushbufs ${destination}
+sleep 2
 
 echo "--- when next booted with micro-SD installed, KiwiSDR image should be copied to Beagle eMMC flash"
 echo -n "--- hit ^C to skip reboot, else enter when ready to reboot: "; read not_used

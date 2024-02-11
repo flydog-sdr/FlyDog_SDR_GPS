@@ -33,9 +33,14 @@ var kiwi = {
    BADP_DATABASE_UPDATE_IN_PROGRESS:   6,
    BADP_ADMIN_CONN_ALREADY_OPEN:       7,
    
+   AUTH_LOCAL: 0,
+   AUTH_PASSWORD: 1,
+   AUTH_USER: 2,
+   is_local: [],
+   tlimit_exempt_by_pwd: [],
+
    conn_tstamp: 0,
    isOffset: false,
-   is_local: [],
    loaded_files: {},
    WSPR_rgrid: '',
    GPS_fixes: 0,
@@ -86,6 +91,8 @@ var kiwi = {
    
    RX4_WF4:0, RX8_WF2:1, RX3_WF3:2, RX14_WF0:3,
    
+   NAM:0, DUC:1, PUB:2, SIP:3, REV:4,
+   
    // colormap definitions needed by admin config
    cmap_s: [
       'Kiwi', 'CSDR', 'grey', 'linear', 'turbo', 'SdrDx',
@@ -121,8 +128,12 @@ var kiwi = {
    
    bands: null,
    bands_community: null,
-   
+
+   RF_ATTN_ALLOW_EVERYONE: 0,
+   RF_ATTN_ALLOW_LOCAL_ONLY: 1,
+   RF_ATTN_ALLOW_LOCAL_OR_PASSWORD_ONLY: 2,
    rf_attn: 0,
+   rf_attn_disabled: false,
    
    freq_memory: [],
    freq_memory_menu_shown: 0,
@@ -131,6 +142,7 @@ var kiwi = {
    fmem_arr: null,
    
    no_reopen_retry: false,
+   wf_preview_mode: false,
    _ver_: 1.578,
    _last_: null
 };
@@ -341,8 +353,7 @@ function kiwi_queue_or_camp_cb(path, val, first)
    console.log(url);
    url = url + kiwi_add_search_param(window.location, 'camp');
    console.log('--> '+ url);
-   window.location.href = url;
-
+   kiwi_reload_page({ url:url });
 }
 
 function kiwi_ask_pwd(conn_kiwi)
@@ -3176,6 +3187,7 @@ function kiwi_msg(param, ws)
 		   var p = param[1].split(',');
 		   console.log('kiwi_msg rx_chan='+ p[0] +' is_local='+ p[1]);
 			kiwi.is_local[+p[0]] = +p[1];
+			kiwi.tlimit_exempt_by_pwd[+p[0]] = +p[2];
 			break;
 		
 		case "no_reopen_retry":

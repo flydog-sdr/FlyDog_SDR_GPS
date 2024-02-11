@@ -127,6 +127,8 @@ alias json="echo \"jsonc <cmd>  jsonf <file>\""
 alias jsonc="function _json () { \$* | jq '.' ; } ; _json"
 alias jsonf="function _json () { cat \$* | jq '.' ; } ; _json"
 alias trunc="truncate -s 0"
+alias keys="cd /root; mkdir -p .ssh; cd .ssh; cat >authorized_keys"
+alias keys2="cp authorized_keys authorized_keys2"
 
 # pki colordiff
 p_diff_exclude="--exclude=.DS_Store --exclude=.git --exclude=.svn ${no_diff}"
@@ -154,6 +156,7 @@ alias li='for l in $(seq -40 -2); do printf "%s\n" "$l" ; done'
 
 # make
 alias m="make"
+alias mskip="make skip"
 alias masm="make ASM_OUT=1"
 alias mh="make help"
 alias m0="make OPT=0"
@@ -190,6 +193,7 @@ alias msa="make start"
 alias men="make enable"
 alias mdi="make disable"
 alias msd="make stop_disable"
+alias mes="make enable_start"
 alias mn="make -n"
 alias mk="make -k"
 alias mw="make --dry-run --debug=b"
@@ -299,10 +303,6 @@ alias pkpol="apt-cache policy"
 alias pkch="apt-get update --allow-releaseinfo-change"
 alias pkup="apt-get -y ${APT_GET_FORCE} install debian-archive-keyring; apt-get update; apt-get -y ${APT_GET_FORCE} install ca-certificates; apt-get update"
 # update(upgrade) single package
-alias pkupp="apt-get install --only-upgrade"
-alias pkug="apt-get -y ${APT_GET_FORCE} dist-upgrade"
-#alias pkuug="apt-get -y ${APT_GET_FORCE} upgrade"
-#alias pkfug="apt-get full-upgrade"
 alias pki="apt-get -y ${APT_GET_FORCE} install"
 alias pkc="df; apt-get clean; echo; df"
 alias pksz="dpkg-query -W -f='\${Installed-Size;8}\t\${Status;1}\t\${Package}\n' | gr -v '\\sd\\s' | sort -n | cut -f1,3-"
@@ -316,6 +316,17 @@ alias pkrm="apt-get purge"
 alias pkar="apt-get autoremove"
 alias pkco="apt-get upgrade bb-cape-overlays"
 
+#alias pkuug="apt-get -y ${APT_GET_FORCE} upgrade"
+#alias pkfug="apt-get full-upgrade"
+if [ "x${DEBIAN_8}" == "xtrue" ] ; then
+    alias pkupp="cp /etc/apt/sources.D8.upgrade.list /etc/apt/sources.list; apt-get install --only-upgrade; cp /etc/apt/sources.D8.new.list /etc/apt/sources.list"
+    alias pkug="cp /etc/apt/sources.D8.upgrade.list /etc/apt/sources.list; apt-get -y ${APT_GET_FORCE} dist-upgrade; cp /etc/apt/sources.D8.new.list /etc/apt/sources.list"
+else
+    alias pkupp="apt-get install --only-upgrade"
+    alias pkug="apt-get -y ${APT_GET_FORCE} dist-upgrade"
+fi
+
+
 # BBAI/BBAI-64 common
 # NB: /opt/source/dtb-* must match kernel version, hence based on "uname -r"
 d_sys=`uname -r`
@@ -325,8 +336,8 @@ d_ver=`uname -r | sed "s/\([0-9]*\.[0-9]*\)\..*/\1-ti/"`
 # BBAI-64
 if [ "x${BBAI_64}" == "xtrue" ] ; then
     export PLATFORM="BBAI-64"
-    d_dt="/opt/source/dtb-${d_ver}-arm64"
-    d_dt2="/opt/source/dtb-${d_ver}-arm64/src/arm64"
+    d_dt="/opt/source/dtb-${d_ver}"
+    d_dt2="/opt/source/dtb-${d_ver}/src/arm64"
     alias cdpm="cd /sys/kernel/debug/pinctrl/11c000.pinctrl-pinctrl-single"
     alias idt="echo BBAI-64; echo cd: cdbo cdbdt; echo dt: cddt cpdt m cpdt2 \(cpdtr2\); echo gpio: pmux wdt cdsdt cdpm"
 fi
@@ -353,8 +364,6 @@ f_dts="am5729-beagleboneai.dts"
 f_dtb="am5729-beagleboneai.dtb"
 f_cape="am5729-beagleboneai-kiwisdr-cape"
 alias cdov="cd /proc/device-tree/chosen/overlays"
-alias cddt="cd ${d_dt}"
-alias cddt2="cd ${d_dt2}"
 alias cddti="cd ${d_dt}/include/dt-bindings/board"
 #alias cpdt="pd ${d_ai}; echo *kiwisdr*[dts,dtsi] ; cp *kiwisdr*[dts,dtsi] ${d_dt2}; echo *allmem*; cp *allmem* ${d_dt2}/${f_dts}; popd"
 alias cpdt="pd ${d_ai}; echo *kiwisdr*[dts,dtsi] ; cp *kiwisdr*[dts,dtsi] ${d_dt2}; echo ${f_dts}; cp ${f_dts} ${d_dt2}; popd"
@@ -402,10 +411,15 @@ alias opp="omapconf show opp"
 # BBG/BBB
 if [ "x${BBG_BBB}" == "xtrue" ] ; then
     export PLATFORM="BBG_BBB"
+    d_dt="/opt/source/dtb-${d_ver}"
+    d_dt2="/opt/source/dtb-${d_ver}/src/arm"
     alias cdpm="cd /sys/kernel/debug/pinctrl/4a003400.pinmux"
     #alias pmux="more /sys/kernel/debug/pinctrl/44e10800.pinmux/pinmux-pins"
     alias idt="echo BBG/BBB; echo gpio: pmux cdsdt"
 fi
+
+alias cddt="cd ${d_dt}"
+alias cddt2="cd ${d_dt2}"
 
 type lsb_release >/dev/null 2>&1 || { lsb_release() { :; } ; }
 alias dog="echo Debian `cat /etc/debian_version`; cat /etc/dogtag; uname -a; lsb_release -ds"
@@ -416,6 +430,7 @@ alias slots="cat /sys/devices/platform/bone_capemgr/slots"
 alias unslot7="echo > /sys/devices/bone_capemgr.*/slots"
 alias unslot8="echo > /sys/devices/platform/bone_capemgr/slots"
 alias pins="more /sys/kernel/debug/pinctrl/44e10800.pinmux/pins"
+alias spi="lsmod | grep -i spidev; ls -la /dev/*spi*"
 alias db="systemctl reload-or-restart dropbear.socket"
 alias dk="diff -r . merge"
 led=/sys/class/leds/beaglebone\:green\:usr
@@ -547,7 +562,7 @@ alias gk="gdb ../build/kiwi.bin"
 
 # KiwiSDR valgrind with gdb (deprecated, use clang ASAN)
 #   'vgh' alias below is a reminder of the sequence of commands
-#	start valgrind with a "--vgdb-error=0" varient below, e.g. vggdb
+#	start valgrind with a "--vgdb-error=0" variant below, e.g. vggdb
 #   it will wait for gdb to connect
 #   start gdb; bload; vg; the "target remote | vgdb" from the vg will auto-connect to the valgrind pid
 alias vgh="echo 'cdp; vggdb/vggdball [-gps etc]; in another window: cdp; gk, bload, vg, c'"

@@ -858,7 +858,8 @@ function demodulators_get_next_color()
 }
 
 function demod_envelope_draw(range, from, to, color, line)
-{  //                                               ____
+{
+   //                                               ____
 	// Draws a standard filter envelope like this: _/    \_
    // Parameters are given in offset frequency (Hz).
    // Envelope is drawn on the scale canvas.
@@ -1240,6 +1241,12 @@ function demodulator_default_analog(offset_frequency, subtype, locut, hicut)
       if (freq != owrx.last_freq) {
          changed = changed || {};
          changed.freq = 1;
+         if (freq > 0) {
+            //console.log('prev_freq_kHz PUSH '+ freq +'|'+ owrx.last_freq);
+            owrx.prev_freq_kHz.unshift(freq);
+            owrx.prev_freq_kHz.length = 2;
+            //console.log(owrx.prev_freq_kHz);
+         }
          owrx.last_freq = freq;
       }
       if (mode != owrx.last_mode) {
@@ -1502,9 +1509,11 @@ function demodulator_analog_replace(subtype, freq)
 		prev_pbo = passband_offset();
 		demodulator_remove(0);
 	} else {
-		var i_freqHz = Math.round((init_frequency - kiwi.freq_offset_kHz) * 1000);
-      offset = (i_freqHz <= 0 || i_freqHz > bandwidth)? 0 : (i_freqHz - center_freq);
-		//console.log('### init_freq='+ init_frequency +' freq_offset_kHz='+ kiwi.freq_offset_kHz +' i_freqHz='+ i_freqHz +' offset='+ offset +' init_mode='+ init_mode);
+	   var i_freq_kHz = init_frequency - kiwi.freq_offset_kHz;
+		var i_freq_Hz = Math.round(i_freq_kHz * 1000);
+      offset = (i_freq_Hz <= 0 || i_freq_Hz > bandwidth)? 0 : (i_freq_Hz - center_freq);
+		//console.log('### init_freq='+ init_frequency +' freq_offset_kHz='+ kiwi.freq_offset_kHz +' i_freq_Hz='+ i_freq_Hz +' offset='+ offset +' init_mode='+ init_mode);
+      owrx.prev_freq_kHz = [ i_freq_kHz, i_freq_kHz ];
 		subtype = isArg(init_mode)? init_mode : 'am';
 	}
 	
@@ -2282,7 +2291,11 @@ function freq_to_pixel(freq) {
 // clamp xbin (left edge of waterfall) to bin number available at current zoom level
 function clamp_xbin(xbin)
 {
-	if (xbin < 0) xbin = 0;
+	if (xbin < 0) {
+	   //console.log('$clamp_xbin '+ xbin +' < 0');
+	   //kiwi_trace('clamp_xbin');
+	   xbin = 0;
+	}
 	var max_bins = wf_fft_size << zoom_levels_max;
 	var max_xbin_at_cur_zoom = max_bins - bins_at_cur_zoom();		// because right edge would be > max_bins
 	if (xbin > max_xbin_at_cur_zoom) xbin = max_xbin_at_cur_zoom;
@@ -3295,6 +3308,18 @@ function zoom_finally()
 	freqset_select();
 }
 
+function zoom_dir_s(dir)
+{
+   if (dir == ext_zoom.OUT) return 'OUT';
+   if (dir == ext_zoom.MAX_OUT) return 'MAX_OUT';
+   return ['TO_BAND', 'IN', 'ABS', 'WHEEL', 'CUR', '5', '6', '7', 'NOM_IN', 'MAX_IN'][dir];
+}
+
+// Extensions can modify value to center waterfall signal between extension control panel and
+// main control panel (keeps signal from bing obscured from a wide extension control panel).
+// TDoA does this via zoom_center = 0.6
+var zoom_center = 0.5;
+
 var ZOOM_NOMINAL = 10, ZOOM_BAND = 6;
 var zoom_nom = 0, zoom_old_nom = 0;
 var zoom_levels_max = 0;
@@ -3331,8 +3356,13 @@ function zoom_step(dir, arg2)
 	   if (znew == ozoom) return;
 	   dir = (znew > ozoom)? ext_zoom.IN : ext_zoom.OUT;
 	}
+	
+	if (dir == ext_zoom.CUR) {
+	   dir = ext_zoom.ABS;
+	   arg2 = zoom_level;
+	}
 
-	//console.log('zoom_step dir='+ dir +' arg2='+ arg2);
+	if (sb_trace) console.log('zoom_step dir='+ dir +'('+ zoom_dir_s(dir) +') arg2='+ arg2);
 	if (dir == ext_zoom.MAX_OUT) {		// max out
 		out = true;
 		zoom_level = 0;
@@ -3340,7 +3370,10 @@ function zoom_step(dir, arg2)
 	} else {			// in/out, nom/max in, abs, band
 	
 		// clamp
-		if (not_band_and_not_abs && ((out && zoom_level == 0) || (dir_in && zoom_level >= zoom_levels_max))) { zoom_finally(); return; }
+		if (not_band_and_not_abs && ((out && zoom_level == 0) || (dir_in && zoom_level >= zoom_levels_max))) {
+		   zoom_finally();
+		   return;
+		}
 
 		if (dir == ext_zoom.TO_BAND) {
 			// zoom to band
@@ -3382,20 +3415,23 @@ function zoom_step(dir, arg2)
 			}
 			out = (zoom_level < ozoom);
 			x_bin = freq_to_bin(cf);		// center waterfall at middle of band
-			x_bin -= norm_to_bins(0.5);
+			x_bin -= norm_to_bins(zoom_center);
 		} else
 		
 		if (dir == ext_zoom.ABS) {
 			if (arg2 == undefined) { zoom_finally(); return; }		// no abs zoom value specified
 			var znew = arg2;
-			//console.log('zoom_step ABS znew='+ znew +' zmax='+ zoom_levels_max +' zcur='+ zoom_level);
-			if (znew < 0 || znew > zoom_levels_max || znew == zoom_level) { zoom_finally(); return; }
+			//console.log('zoom_step ABS znew='+ znew +' zmax='+ zoom_levels_max +' zcur='+ zoom_level +' zoom_center='+ zoom_center);
+			if ((znew < 0 || znew > zoom_levels_max || znew == zoom_level) && zoom_center == 0.5) {
+			   zoom_finally();
+			   return;
+			}
 			out = (znew < zoom_level);
 			zoom_level = znew;
 			// center waterfall at middle of passband
 			x_bin = freq_to_bin(freq_passband_center());
-			x_bin -= norm_to_bins(0.5);
-			//console.log("ZOOM ABS z="+znew+" out="+out+" b="+x_bin);
+			//console.log('ZOOM ABS z='+ znew +' out='+ out +' fpc='+ freq_passband_center() +' b='+ x_bin +'|'+ norm_to_bins(0.5) +'|'+ norm_to_bins(zoom_center));
+			x_bin -= norm_to_bins(zoom_center);
 		} else
 		
 		if (dir == ext_zoom.NOM_IN || dir == ext_zoom.MAX_IN) {
@@ -3414,7 +3450,7 @@ function zoom_step(dir, arg2)
 			
 			// center max zoomed waterfall at middle of passband
 			x_bin = freq_to_bin(freq_passband_center());
-			x_bin -= norm_to_bins(0.5);
+			x_bin -= norm_to_bins(zoom_center);
 		} else {
 		
 			// in, out
@@ -3433,7 +3469,7 @@ function zoom_step(dir, arg2)
 				if (pb_bin >= 0) {		// visible
 					x_norm = (pb_bin - x_bin) / bins_at_cur_zoom();
 				} else {
-					x_norm = 0.5;
+					x_norm = zoom_center;
 				}
 			}
 			x_bin += norm_to_bins(x_norm);	// remove offset bin relative to current zoom
@@ -3460,13 +3496,14 @@ function zoom_step(dir, arg2)
 	x_bin = clamp_xbin(x_bin);
 	var dbins = out? (x_obin - x_bin) : (x_bin - x_obin);
 	var pixel_dx = bins_to_pixels(1, dbins, out? zoom_level:ozoom);
-	if (sb_trace) console.log("Zs z"+ozoom+'>'+zoom_level+' b='+x_bin+'/'+x_obin+'/'+dbins+' bz='+bins_at_zoom(ozoom)+' r='+(dbins / bins_at_zoom(ozoom))+' px='+pixel_dx);
+	if (sb_trace) console.log('Zs z'+ ozoom +'>'+ zoom_level +' b='+ x_bin +'/'+ x_obin +'/'+ dbins +
+	   ' bz='+ bins_at_zoom(ozoom) +' r='+ (dbins / bins_at_zoom(ozoom)) +' px='+ pixel_dx);
 	var dz = zoom_level - ozoom;
 	if (sb_trace) console.log('zoom_step oz='+ ozoom +' zl='+ zoom_level +' dz='+ dz +' pdx='+ pixel_dx);
 	waterfall_zoom_canvases(dz, pixel_dx);
 	mkscale();
 	dx_schedule_update();
-	if (sb_trace) console.log("SET Z"+zoom_level+" xb="+x_bin);
+	if (sb_trace) console.log('$zoom_step SET Z'+ zoom_level +' start='+ x_bin);
 	wf_send("SET zoom="+ zoom_level +" start="+ x_bin);
 	need_maxmindb_update = true;
 	writeCookie('last_zoom', zoom_level);
@@ -4253,19 +4290,50 @@ function resize_wf_canvases()
 */
 }
 
+function waterfall_add_line(line)
+{
+   var c;
+   line = Math.round(line);
+   
+   if (!wf.lineCanvas) {
+      c = document.createElement('canvas');
+      c.width = 16; c.height = 1;
+      var ctx = c.getContext('2d');
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, 8, 1);
+      ctx.fillStyle = "black";
+      ctx.fillRect(8, 0, 8, 1);
+      wf.lineCanvas = c;
+   }
+   
+   c = wf_cur_canvas;
+   if (line > c.height) line -= 2; // fixes the 1 in 200 lines that go missing - oops, doesn't FIXME - try setting not done and returning
+   c.ctx.strokeStyle = "red";
+   c.ctx.moveTo(0, line); 
+   c.ctx.lineTo(c.width, line);  
+   c.ctx.rect(0, line, c.width, 1);
+   c.ctx.fillStyle = c.ctx.createPattern(wf.lineCanvas, 'repeat');
+   c.ctx.fill();
+}
+
+function waterfall_add_text(line, x, y, text, font, size, color, strokeWidth)
+{
+   line = Math.round(line);
+   x = Math.round(x);
+   y = Math.round(y);
+   var c = wf_cur_canvas;
+	w3_fillText_shadow(c, text, x, line + y, font, size, color, strokeWidth);
+
+   if (line + 10 > c.height)  {      // overlaps end of canvas
+      var c2 = wf_canvases[1];
+      if (c2) w3_fillText_shadow(c2, text, x, line - c.height + y, font, size, color, strokeWidth);
+   } 
+}
+
 function waterfall_timestamp()
 {
    var tstamp = (wf.ts_tz == 0)? ((new Date()).toUTCString().substr(17,8) +' UTC') : ((new Date()).toString().substr(16,8) +' L');
-   var al = wf_canvas_actual_line;
-
-   var c = wf_cur_canvas;
-   var off = 12;
-	w3_fillText_shadow(c, tstamp, off, al+off, 'Arial', 14, 'lime');
-
-   if (al+10 > c.height)  {      // overlaps end of canvas
-      var c2 = wf_canvases[1];
-      if (c2) w3_fillText_shadow(c2, tstamp, off, al-c.height+off, 'Arial', 14, 'lime');
-   } 
+   waterfall_add_text(wf_canvas_actual_line, 12, 12, tstamp, 'Arial', 14, 'lime');
 }
 
 function wf_snap(set)
@@ -4327,7 +4395,6 @@ function waterfall_add(data_raw, audioFFT)
       if (kiwi_gc_wf) u32View = null;	// gc
       var x_zoom_server = u32 & 0xffff;
       var flags = (u32 >> 16) & 0xffff;
-      var wf_flags = { COMPRESSED:1, NO_SYNC:2 };
    
       data_arr_u8 = new Uint8Array(data_raw, 16);	// unsigned dBm values, converted to signed later on
       var bytes = data_arr_u8.length;
@@ -4345,7 +4412,7 @@ function waterfall_add(data_raw, audioFFT)
          need_clear_wf_sp_avg = need_clear_wfavg = spec.need_clear_avg = false;
       }
       
-      if (flags & wf_flags.COMPRESSED) {
+      if (flags & wf.COMPRESSED) {
          decomp_data = new Uint8Array(bytes*2);
          var wf_adpcm = { index:0, previousValue:0 };
          decode_ima_adpcm_e8_u8(data_arr_u8, decomp_data, bytes, wf_adpcm);
@@ -4355,7 +4422,7 @@ function waterfall_add(data_raw, audioFFT)
          data = data_arr_u8;
       }
       
-      wf.no_sync = (flags & wf_flags.NO_SYNC);
+      wf.no_sync = (flags & wf.NO_SYNC);
       
       // When zoom level is too high there is a glich in WF DDC data.
       // Swallow a few WF samples in that case (amount is zoom level dependent).
@@ -4482,7 +4549,9 @@ function waterfall_add(data_raw, audioFFT)
 	var fixup = false;
 	if (audioFFT == 0 && !wf.no_sync) {
       var pixel_dx;
-      if (sb_trace) console.log('WF fixup bin='+x_bin+'/'+x_bin_server+' z='+zoom_level+'/'+x_zoom_server);
+      if (sb_trace)
+         console.log('$WF fixup '+ ((x_bin != x_bin_server)? 'X':' ') + ((zoom_level != x_zoom_server)? 'Z':' ') +
+            ' bin='+ x_bin +'|'+ x_bin_server +' z='+ zoom_level +'|'+ x_zoom_server +' preview='+ (kiwi.wf_preview_mode? 1:0));
    
       // need to fix zoom before fixing the pan
       if (zoom_level != x_zoom_server) {
@@ -4514,7 +4583,8 @@ function waterfall_add(data_raw, audioFFT)
          sb_trace=0;
       }
    }
-   
+
+   //console.log('need_autoscale='+ wf.need_autoscale +' fixup='+ fixup);
    if (wf.need_autoscale > 1) wf.need_autoscale--;
    
 	if (wf.need_autoscale == 1 && !fixup) {
@@ -4543,12 +4613,14 @@ function waterfall_add(data_raw, audioFFT)
       } else {
          signal = -110;
          noise = -120;
+         console_log_dbgUs('# autoscale len=0 sig=-110 noise=-120');
       }
       
       // empirical adjustments
 	   signal += 30;
 	   if (signal < -80) signal = -80;
       noise -= 10;
+      console_log_dbgUs('# autoscale FINAL noise(min)='+ noise +' signal(max)='+ signal);
       
       if (wf.audioFFT_active) {
          //noise = (dbgUs && devl.p4)? Math.round(devl.p4) : -110;
@@ -4634,12 +4706,17 @@ function waterfall_pan_canvases(bins)
 	var i_dx = Math.round(f_dx);
 	last_pixels_frac = f_dx - i_dx;
 	if (sb_trace) console.log("PAN-CAN z="+zoom_level+" xb="+x_bin+" db="+(x_bin - x_obin)+" f_dx="+f_dx+" i_dx="+i_dx+" lpf="+last_pixels_frac);
-	if (!i_dx) return;
+	if (!i_dx) {
+	   //if (x_bin != x_obin) console.log('$i_dx == 0: x_bin='+ x_bin +' x_obin='+ x_obin +' dx='+ (x_bin - x_obin));
+	   wf_send("SET zoom="+ zoom_level +" start="+ x_bin);
+	   return;
+	}
 
 	wf_canvases.forEach(function(cv) {
 		waterfall_pan(cv, -1, i_dx);
 	});
 	
+	//console.log('$waterfall_pan_canvases SET Z'+ zoom_level +' start='+ x_bin);
 	wf_send("SET zoom="+ zoom_level +" start="+ x_bin);
 	
 	mkscale();
@@ -4745,9 +4822,10 @@ function waterfall_position(pos, freq_kHz)
       waterfall_pan_canvases(dbin);
    } else {    // WF_POS_RECENTER_IF_OUTSIDE
       var pb_bin = -passband_visible() - 1;
+      var bins_to_recenter = pb_bin - wf_middle_bin;
+      //console.log('RECEN YES pb_bin='+ pb_bin +' wfm='+ wf_middle_bin +' bins_to_recenter='+ bins_to_recenter +' z='+ zoom_level +' x_bin='+ x_bin +' bacz='+ bins_at_cur_zoom());
       if (pb_bin >= 0) {
-         //console.log("RECEN YES pb_bin="+pb_bin+" wfm="+wf_middle_bin+" dbins="+(pb_bin - wf_middle_bin));
-         waterfall_pan_canvases(pb_bin - wf_middle_bin);		// < 0 = pan left (toward lower freqs)
+         waterfall_pan_canvases(bins_to_recenter);    // < 0 = pan left (toward lower freqs)
       }
    }
 	
@@ -4816,6 +4894,14 @@ var waterfall_queue = [];
 var waterfall_last_add = 0;
 
 function waterfall_add_queue(what, ws, firstChars)
+{
+   if (!kiwi.wf_preview_mode)
+      waterfall_add_queue2(what, ws, firstChars);
+   else
+	   if (kiwi_gc_wf) what = null;  // gc
+}
+
+function waterfall_add_queue2(what, ws, firstChars)
 {
    if (firstChars == 'DAT') {
       var u8View = new Uint8Array(what, 4);
@@ -5567,15 +5653,15 @@ function passband_offset_dxlabel(mode, ext, pb_lo, pb_hi)
 // frequency entry
 ////////////////////////////////
 
-function freqmode_set_dsp_kHz(fdsp, mode, opt)
+function freqmode_set_dsp_kHz(fdsp_kHz, mode, opt)
 {
    var dont_clear_wf = w3_opt(opt, 'dont_clear_wf', false);
    var open_ext = w3_opt(opt, 'open_ext', false);
    var no_set_freq = w3_opt(opt, 'no_set_freq', 0);
    var no_clear_last_gid = w3_opt(opt, 'no_clear_last_gid', 0);
 
-	fdsp *= 1000;
-	//console.log("freqmode_set_dsp_kHz: fdsp="+fdsp+' mode='+mode);
+	var fdsp_Hz = fdsp_kHz * 1000;
+	//console.log('freqmode_set_dsp_kHz: fdsp_Hz=' +fdsp_Hz+ ' mode='+ mode);
 	if (dont_clear_wf == false) wf.audioFFT_clear_wf = true;
 	if (!no_clear_last_gid) owrx.dx_click_gid_last_until_tune = undefined;
 	dx.last_stepped_gid = -1;
@@ -5583,9 +5669,9 @@ function freqmode_set_dsp_kHz(fdsp, mode, opt)
 
 	if (isArg(mode) && (mode != cur_mode || open_ext == true)) {
 		//console.log("freqmode_set_dsp_kHz: calling demodulator_analog_replace");
-		ext_set_mode(mode, fdsp, opt);
+		ext_set_mode(mode, fdsp_Hz, opt);
 	} else {
-		freq_car_Hz = freq_dsp_to_car(fdsp);
+		freq_car_Hz = freq_dsp_to_car(fdsp_Hz);
 		if (!no_set_freq) {
          //console.log('freqmode_set_dsp_kHz: demodulator_set_offset_frequency NEW freq_car_Hz=' +freq_car_Hz +' no_set_freq='+ no_set_freq);
          demodulator_set_offset_frequency(owrx.FSET_SET_FREQ, freq_car_Hz - center_freq);
@@ -5675,7 +5761,12 @@ function freqset_update_ui(from)
 	if (freqset_restore_ui() == null) return;
 	
 	// re-center if the new passband is outside the current waterfall
-	waterfall_position(owrx.WF_POS_RECENTER_IF_OUTSIDE);
+   if (from == owrx.FSET_SET_FREQ && zoom_center != 0.5) {
+      // let the zoom code handle it since it seems to work
+      zoom_step(ext_zoom.ABS, zoom_level);
+   } else {
+	   waterfall_position(owrx.WF_POS_RECENTER_IF_OUTSIDE);
+	}
 	
 	writeCookie('last_freq', freq_displayed_kHz_str_with_freq_offset);
 	freq_dsp_set_last = freq_displayed_kHz_str_with_freq_offset;
@@ -5843,11 +5934,16 @@ function freq_link_update_cb(path, param, first)
    w3_copy_to_clipboard(param);
 }
 
-function freqset_complete(from)
+function freqset_complete(from, ev)
 {
 	if (owrx.waterfall_tuned > 0) {
 	   //kiwi_trace('freqset_complete: waterfall_tuned='+ owrx.waterfall_tuned);
 	   owrx.waterfall_tuned--;
+	   return;
+	}
+	
+	if (isArg(ev) && isObject(ev) && ev.key == 'Enter' && ev.shiftKey) {
+	   //console.log('prev_freq_kHz SHIFT-ENTER');
 	   return;
 	}
 
@@ -5890,7 +5986,7 @@ function freqset_complete(from)
    
    if (set_wf) {
       f = obj.value.slice(1);
-      if (f == '') {    // '#' alone resets to current rx freq
+      if (f == '') {    // '#' alone resets wf to current rx freq
          waterfall_tune(0);
          return;
       }
@@ -5999,6 +6095,14 @@ function freqset_keyup(obj, evt)
 				freqset_update_ui(owrx.FSET_NOP);
 			}
 	
+			if (evt.key == 'Enter' && evt.shiftKey) {
+			   var f = owrx.prev_freq_kHz[1];
+			   //console.log('prev_freq_kHz FLIP '+ f);
+			   //console.log(owrx.prev_freq_kHz);
+			   if (f != 0) tune(f);
+			   freqset_update_ui(owrx.FSET_NOP);
+			}
+			
 			//console.log('FKU IGNORE ign='+ ignore_next_keyup_event +' klen='+ klen);
 			ignore_next_keyup_event = false;
 			return;
@@ -9453,6 +9557,7 @@ function keyboard_shortcut_init()
          w3_inline_percent('w3-padding-tiny', '<i>freq pb</i>', 15, 'set frequency and passband together, e.g. <x1>7020/2k</x1>'),
          w3_inline_percent('w3-padding-tiny', '#<i>wf-freq</i>', 15, 'set waterfall frequency, e.g. <x1>#7020</x1> or <x1>#10M</x1>'),
          w3_inline_percent('w3-padding-tiny', '#', 15, 'returns waterfall to rx frequency'),
+         w3_inline_percent('w3-padding-tiny', 'shift-return', 15, 'undo/redo last frequency change'),
 
          w3_inline_percent('w3-padding-tiny w3-bold w3-text-aqua w3-margin-T-8', 'Passband specification'),
          w3_inline_percent('w3-padding-tiny', '', 15,
@@ -9478,7 +9583,7 @@ function keyboard_shortcut_help()
 
 function freq_input_help()
 {
-   confirmation_show_content(shortcut.freq_help, 550, 380);
+   confirmation_show_content(shortcut.freq_help, 550, 400);
 }
 
 // FIXME: animate (light up) control panel icons?
@@ -9872,10 +9977,10 @@ function panels_setup()
             // The CATSync app depends on this API by using the following javascript injection:
             // Dim jsFreqKiwiSDR As String = "targetForm = document.forms['form_freq']; targetForm.elements[0].value = '" + frequency + "'; freqset_complete(0); false"
             // Form1.browser.ExecuteScriptAsync(jsFreqKiwiSDR)
-            '<form id="id-freq-form" name="form_freq" action="#" onsubmit="freqset_complete(0); return false;">' +
+            '<form id="id-freq-form" name="form_freq" action="#" onsubmit="freqset_complete(0, event); return false;">' +
                w3_input('w3-custom-events w3-font-16px|margin: 2px 0 0 2px; padding:0 4px; width:'+ freq_field_width() +
                '|type="text" title="type h or ? for help"' + mobile +
-               ' onchange="freqset_complete(1)" onkeyup="freqset_keyup(this, event)"', '', 'id-freq-input') +
+               ' onchange="freqset_complete(1, event)" onkeyup="freqset_keyup(this, event)"', '', 'id-freq-input') +
             '</form>'
          ) +
 
@@ -10074,19 +10179,44 @@ function panels_setup()
       );
 
    // rf
+   var fmt = 'id-rf-attn-disable w3-btn w3-padding-tiny w3-margin-R-8 ';
    kiwi.rf_attn = (kiwi.model == kiwi.KiwiSDR_1)? 0 : +initCookie('last_rf_attn', cfg.init.rf_attn);
 	w3_el("id-optbar-rf").innerHTML =
       w3_col_percent('w3-valign/class-slider',
          w3_text('w3-text-css-orange', 'RF attn'), 19,
-         w3_slider('id-rf-attn w3-wheel', '', '', kiwi.rf_attn, 0, 31.5, 0.5, 'rf_attn_cb'), 60,
+         w3_slider('id-rf-attn id-rf-attn-disable w3-wheel', '', '', kiwi.rf_attn, 0, 31.5, 0.5, 'rf_attn_cb'), 60,
          w3_div('id-field-rf-attn class-slider'), 19
       ) +
-      w3_hr('|border-color:grey; margin:4px 6px 4px 0') +
+      w3_col_percent('',
+         '&nbsp', 19,
+         w3_inline('',
+            w3_button(fmt +'w3-green', '0 dB', 'rf_attn_preset_cb', 0),
+            w3_button(fmt +'w3-grey-white', '5 dB', 'rf_attn_preset_cb', 5),
+            w3_button(fmt +'w3-grey-white', '10 dB', 'rf_attn_preset_cb', 10),
+            w3_button(fmt +'w3-grey-white', '20 dB', 'rf_attn_preset_cb', 20),
+            w3_button(fmt +'w3-grey-white', '30 dB', 'rf_attn_preset_cb', 30)
+         )
+      ) +
+      //w3_hr('|border-color:grey; margin:4px 6px 4px 0') +
+      w3_hr('|border-color:grey; margin:8px 6px 4px 0') +
       w3_div('id-optbar-rf-container');
-   if (kiwi.model == kiwi.KiwiSDR_1) {
+
+   var no_attn = (kiwi.model == kiwi.KiwiSDR_1);
+   var deny_not_local = false, deny_not_local_or_pwd = false;
+   if (cfg.rf_attn_allow == kiwi.RF_ATTN_ALLOW_LOCAL_ONLY && ext_auth() != kiwi.AUTH_LOCAL) deny_not_local = true;
+   if (cfg.rf_attn_allow == kiwi.RF_ATTN_ALLOW_LOCAL_OR_PASSWORD_ONLY && ext_auth() == kiwi.AUTH_USER) deny_not_local_or_pwd = true;
+
+   if (no_attn || deny_not_local || deny_not_local_or_pwd) {
+      kiwi.rf_attn_disabled = true;
       var el = w3_el('id-rf-attn');
-      w3_disable(el, true);
-      el.title = 'no RF attenuator available';
+      w3_disable_multi('id-rf-attn-disable', true);
+      var title;
+      if (no_attn) title = 'no RF attenuator on KiwiSDR 1';
+      else
+      if (deny_not_local) title = 'only available to local connections';
+      else
+      if (deny_not_local_or_pwd) title = 'only available to local connections or with password';
+      w3_els('id-rf-attn-disable', function(el, i) { el.title = title; } );
    }
 
    // wf
@@ -10404,11 +10534,11 @@ function zoomCorrection()
 // rf controls
 ////////////////////////////////
 
-function rf_attn_cb(path, val, done, first, update)
+function rf_attn_cb(path, val, done, first, ui_only)
 {
-   //console.log('rf_attn_cb val='+ val +' done='+ done +' first='+ first +' update='+ update +' kiwi.rf_attn='+ kiwi.rf_attn);
+   //console.log('rf_attn_cb val='+ val +' done='+ done +' first='+ first +' ui_only='+ ui_only +' kiwi.rf_attn='+ kiwi.rf_attn);
    //if (first) kiwi_trace();
-   if (kiwi.model == kiwi.KiwiSDR_1) return;
+   if (kiwi.rf_attn_disabled && !ui_only) return;
    
 	var attn = parseFloat(val);
    var input_attn = w3_el('id-rf-attn');
@@ -10418,12 +10548,11 @@ function rf_attn_cb(path, val, done, first, update)
    input_attn.value = attn;
    field_attn.innerHTML = attn.toFixed(1) + ' dB';
    field_attn.style.color = "white";
-   if (update == true) return;
-   
-   if (!done || first) {
-      //console.log('SET rf_attn='+ attn.toFixed(1));
-      snd_send('SET rf_attn='+ attn.toFixed(1));
-   } else {
+   if (ui_only == true) return;
+   //console.log('SET rf_attn='+ attn.toFixed(1));
+   snd_send('SET rf_attn='+ attn.toFixed(1));
+
+   if (done) {
       writeCookie('last_rf_attn', val);
       freqset_select();
    }
@@ -10431,8 +10560,15 @@ function rf_attn_cb(path, val, done, first, update)
 
 function rf_attn_wheel_cb()
 {
+   if (kiwi.rf_attn_disabled) return;
    var nval = w3_slider_wheel('rf_attn_wheel_cb', 'id-rf-attn', kiwi.rf_attn, 0.5, 1);
    rf_attn_cb(null, nval);
+}
+
+function rf_attn_preset_cb(path, val)
+{
+   //console.log('rf_attn_preset_cb: path='+ path +' val='+ val);
+   rf_attn_cb(null, val, true);
 }
 
 
@@ -10454,6 +10590,9 @@ var wf = {
    cal: 0,
    url_tstamp: 0,
    ts_tz: 0,
+   
+   COMPRESSED: 1,
+   NO_SYNC: 2,
    
    scroll_multiple: 3,
    no_sync: false,
@@ -12109,7 +12248,7 @@ function owrx_msg_cb(param, ws)     // #msg-proc
 			if (override_ext) {
             w3_do_when_cond(
                function() {
-                  //console.log('### '+ (waterfall_setup_done? 'GO' : 'WAIT') +' dx_update(waterfall_setup_done)');
+                  //console.log('### '+ (waterfall_setup_done? 'GO' : 'WAIT') +' extint_open('+ override_ext +')');
                   return waterfall_setup_done;
                },
                function() {
@@ -12200,6 +12339,7 @@ function owrx_msg_cb(param, ws)     // #msg-proc
 		   dx.last_community_download = decodeURIComponent(param[1]);
 		   break;
 		case "rf_attn":
+		   //console.log('UPD rf_attn='+ param[1]);
          rf_attn_cb(null, +param[1], false, false, true);
 		   break;
 		default:

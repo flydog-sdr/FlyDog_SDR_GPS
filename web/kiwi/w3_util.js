@@ -356,17 +356,23 @@ function w3_second_value(v)
    return rv;
 }
 
-function w3_opt(opt, elem, default_val)
+function w3_opt(opt, elem, default_val, pre, post)
 {
    //console.log('w3_opt opt:');
    //console.log(opt);
+   var s;
    if (isDefined(opt) && isDefined(opt[elem])) {
       //console.log('w3_opt elem='+ elem +' DEFINED rv='+ opt[elem]);
-      return opt[elem];
+      s = opt[elem];
    } else {
       //console.log('w3_opt elem='+ elem +' NOT DEFINED rv='+ default_val);
-      return default_val;
+      s = default_val;
    }
+   if (isNonEmptyString(s)) {
+      if (isNonEmptyString(pre)) s = pre + s;
+      if (isNonEmptyString(post)) s = s + post;
+   }
+   return s;
 }
 
 function w3_obj_num(o)
@@ -477,7 +483,7 @@ function w3_ext_param_array_match_num(arr, n, func)
 // s:       name.startsWith(s)   case-insensitive
 //          null                 wildcard
 // param:   name[:val]
-// returns: { match:true|false, full_match:true|false, has_value:true|false, num:parseFloat(val), string:val }
+// returns: { match:true|false, full_match:true|false, has_value:true|false, num:parseFloat(val), string:val, string_case:val, items:[] }
 function w3_ext_param(s, param)
 {
    var rv = { match:false, full_match:false, has_value:false };
@@ -491,15 +497,18 @@ function w3_ext_param(s, param)
          rv.num = parseFloat(param);
          rv.string = param;
          rv.string_case = param;
+         rv.items = [];
       } else
       if (pl.length > 1) {
          rv.has_value = true;
          rv.num = parseFloat(pl[1]);
          rv.string = pl[1];
          rv.string_case = pu[1];
+         rv.items = pu;
       } else {
          rv.num = 0;
          rv.string = rv.string_case = '';
+         rv.items = [];
       }
    }
    if (s && s == pl[0]) rv.full_match = true;
@@ -1130,6 +1139,30 @@ function w3_disable(el_id, disable)
    }
 	
 	return el;
+}
+
+function w3_disable_multi(el_id, disable)
+{
+   w3_els(el_id,
+      function(el, i) {
+         //console.log('w3_disable_multi disable='+ disable +' t/o(el)='+ typeof(el) +' nodeName='+ el.nodeName);
+         //console.log(el);
+         w3_set_props(el, 'w3-disabled', disable);
+   
+         // for disabling menu popup
+         if (isDefined(el.nodeName) && (el.nodeName == 'SELECT' || el.nodeName == 'INPUT')) {
+            try {
+               if (disable)
+                  el.setAttribute('disabled', '');
+               else
+                  el.removeAttribute('disabled');
+            } catch(ex) {
+               console.log('w3_disable:Attribute');
+               console.log(ex);
+            }
+         }
+      }
+   );
 }
 
 function w3_visible(el_id, visible)
